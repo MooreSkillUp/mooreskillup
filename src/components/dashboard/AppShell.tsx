@@ -14,7 +14,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push("/login");
+      router.push("/auth/login");
     }
   }, [isAuthenticated, router]);
 

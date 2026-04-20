@@ -129,6 +129,10 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     -webkit-font-smoothing: antialiased;
+    transition:
+      background-color 220ms ease,
+      color 220ms ease,
+      border-color 220ms ease;
   }
 
   h1,

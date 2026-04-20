@@ -3,7 +3,7 @@ import "@/styles.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "MooreSkillUp — Learn skills that move you forward",
+  title: "MooreSkillUp - Learn skills that move you forward",
   description:
     "MooreSkillUp is a focused online learning platform with structured courses, lessons, and progress tracking.",
   openGraph: {
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>
+      <body className="transition-colors duration-300">
         <Providers>{children}</Providers>
       </body>
     </html>
