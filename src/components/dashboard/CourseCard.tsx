@@ -1,8 +1,8 @@
-import { Link } from "@tanstack/react-router";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, BookOpen } from "lucide-react";
-import type { Course } from "@/lib/mock-data";
-import { ProgressBar } from "@/components/ui-kit/ProgressBar";
+import type { Course } from "../../lib/mock-data";
+import { ProgressBar } from "../ui-kit/ProgressBar";
 
 export function CourseCard({ course }: { course: Course }) {
   const pct = Math.round((course.completedLessons / course.totalLessons) * 100);
@@ -25,8 +25,7 @@ export function CourseCard({ course }: { course: Course }) {
         <div className="flex items-center justify-between pt-1">
           <span className="text-xs text-muted-foreground">by {course.instructor}</span>
           <Link
-            to="/course/$id"
-            params={{ id: course.id }}
+            href={`/course/${course.id}`}
             className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-colors group-hover:text-accent"
           >
             Open <ArrowRight className="h-4 w-4" />

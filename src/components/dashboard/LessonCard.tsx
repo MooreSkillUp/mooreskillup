@@ -1,8 +1,8 @@
-import { Link } from "@tanstack/react-router";
+import Link from "next/link";
 import { CheckCircle2, Lock, PlayCircle, Clock } from "lucide-react";
-import type { Lesson } from "@/lib/mock-data";
-import { Button } from "@/components/ui-kit/Button";
-import { cn } from "@/lib/utils";
+import type { Lesson } from "../../lib/mock-data";
+import { Button } from "../ui-kit/Button";
+import { cn } from "../../lib/utils";
 
 export function LessonCard({ lesson, index }: { lesson: Lesson; index: number }) {
   const locked = lesson.status === "locked";
@@ -48,7 +48,7 @@ export function LessonCard({ lesson, index }: { lesson: Lesson; index: number })
           <Lock className="h-4 w-4" /> Locked
         </Button>
       ) : (
-        <Link to="/lesson/$id" params={{ id: lesson.id }}>
+        <Link href={`/lesson/${lesson.id}`}>
           <Button variant={completed ? "outline" : "accent"} size="sm">
             {completed ? "Review" : "Start lesson"}
           </Button>

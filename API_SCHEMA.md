@@ -1,149 +1,168 @@
-# API Schema Documentation
+# API Schema
 
-Complete API reference for MooreSkillUp backend integration.
+This document defines the backend contract the current Next.js frontend should target when replacing its mock data.
 
-## Base URL
-- **Development**: `http://localhost:8000/api`
-- **Production**: `https://api.mooreskillup.com/api`
+Base URL example:
 
----
-
-## Authentication Endpoints
-
-### Register User
+```text
+http://localhost:8000/api
 ```
-POST /api/auth/register/
 
-Request Body:
-{
-  "email": "user@example.com",
-  "username": "username",
-  "password": "securepassword123",
-  "first_name": "John",
-  "last_name": "Doe"
-}
+## Authentication
 
-Response (201):
+### `POST /auth/register/`
+
+Request:
+
+```json
 {
-  "id": 1,
-  "username": "username",
-  "email": "user@example.com",
-  "first_name": "John",
-  "last_name": "Doe",
-  "avatar": null,
-  "total_points": 0
+  "username": "alex.moore",
+  "email": "alex@example.com",
+  "password": "strong-password"
 }
 ```
 
-### Login
-```
-POST /api/auth/login/
+Response:
 
-Request Body:
+```json
 {
-  "email": "user@example.com",
-  "password": "securepassword123"
-}
-
-Response (200):
-{
-  "access": "eyJ0eXAiOiJKV1QiLCJhbGc...",
-  "refresh": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+  "access": "jwt-access-token",
+  "refresh": "jwt-refresh-token",
   "user": {
-    "id": 1,
-    "username": "username",
-    "email": "user@example.com"
+    "id": "u_1",
+    "username": "alex.moore",
+    "display_name": "Alex Moore",
+    "email": "alex@example.com",
+    "avatar": "AM",
+    "joined_at": "2026-04-20"
   }
 }
 ```
 
-### Refresh Token
-```
-POST /api/auth/refresh/
+### `POST /auth/login/`
 
-Request Body:
-{
-  "refresh": "eyJ0eXAiOiJKV1QiLCJhbGc..."
-}
+Request:
 
-Response (200):
+```json
 {
-  "access": "eyJ0eXAiOiJKV1QiLCJhbGc..."
+  "email": "alex@example.com",
+  "password": "strong-password"
 }
 ```
 
-### Get Current User
-```
-GET /api/auth/user/
-Headers: Authorization: Bearer {access_token}
+Response shape matches register.
 
-Response (200):
+### `POST /auth/refresh/`
+
+```json
 {
-  "id": 1,
-  "username": "username",
-  "email": "user@example.com",
-  "first_name": "John",
-  "last_name": "Doe",
-  "avatar": "https://...",
-  "total_points": 350
+  "refresh": "jwt-refresh-token"
 }
 ```
 
----
+### `GET /auth/me/`
 
-## Courses Endpoints
-
-### List All Courses
-```
-GET /api/courses/?page=1&limit=20
-
-Response (200):
+```json
 {
-  "count": 5,
-  "next": null,
-  "previous": null,
-  "results": [
+  "id": "u_1",
+  "username": "alex.moore",
+  "display_name": "Alex Moore",
+  "email": "alex@example.com",
+  "avatar": "AM",
+  "joined_at": "2026-04-20"
+}
+```
+
+### `PATCH /auth/me/`
+
+```json
+{
+  "username": "alex.moore",
+  "display_name": "Alex Moore",
+  "email": "alex@example.com"
+}
+```
+
+## Courses
+
+### Course list item
+
+```json
+{
+  "id": "fullstack-101",
+  "title": "Fullstack Web Development",
+  "description": "From HTML fundamentals to deploying a complete React + API application.",
+  "instructor": "Dr. Lena Park",
+  "total_lessons": 16,
+  "completed_lessons": 6,
+  "cover": "from-primary to-primary-glow"
+}
+```
+
+### Module
+
+```json
+{
+  "id": "m1",
+  "title": "Foundations of the Web",
+  "week": 1,
+  "lessons": [
     {
-      "id": 1,
-      "title": "JavaScript Fundamentals",
-      "description": "Learn JS basics...",
-      "level": "beginner",
-      "duration_weeks": 4,
-      "instructor": {
-        "id": 1,
-        "username": "john_instructor"
-      },
-      "modules_count": 4,
-      "user_progress": 45
+      "id": "m1-l1",
+      "title": "How the web works",
+      "duration": "10 min",
+      "status": "completed",
+      "video_id": "dQw4w9WgXcQ",
+      "description": "Lesson description"
     }
   ]
 }
 ```
 
-### Get Course Detail
-```
-GET /api/courses/{id}/
+### `GET /courses/`
 
-Response (200):
+Response:
+
+```json
+[
+  {
+    "id": "fullstack-101",
+    "title": "Fullstack Web Development",
+    "description": "From HTML fundamentals to deploying a complete React + API application.",
+    "instructor": "Dr. Lena Park",
+    "total_lessons": 16,
+    "completed_lessons": 6,
+    "cover": "from-primary to-primary-glow"
+  }
+]
+```
+
+### `GET /courses/<course_id>/`
+
+Response:
+
+```json
 {
-  "id": 1,
-  "title": "JavaScript Fundamentals",
-  "description": "...",
-  "level": "beginner",
-  "duration_weeks": 4,
+  "id": "fullstack-101",
+  "title": "Fullstack Web Development",
+  "description": "From HTML fundamentals to deploying a complete React + API application.",
+  "instructor": "Dr. Lena Park",
+  "total_lessons": 16,
+  "completed_lessons": 6,
+  "cover": "from-primary to-primary-glow",
   "modules": [
     {
-      "id": 1,
-      "title": "Variables & Data Types",
-      "week_number": 1,
+      "id": "m1",
+      "title": "Foundations of the Web",
+      "week": 1,
       "lessons": [
         {
-          "id": 1,
-          "title": "Introduction to Variables",
-          "video_url": "https://youtube.com/...",
-          "duration_minutes": 15,
-          "status": "unlocked",
-          "completed": false
+          "id": "m1-l1",
+          "title": "How the web works",
+          "duration": "10 min",
+          "status": "completed",
+          "video_id": "dQw4w9WgXcQ",
+          "description": "Lesson description"
         }
       ]
     }
@@ -151,430 +170,234 @@ Response (200):
 }
 ```
 
-### Get Course Modules
-```
-GET /api/courses/{id}/modules/
+## Lessons
 
-Response (200):
-[
-  {
-    "id": 1,
-    "title": "Variables & Data Types",
-    "week_number": 1,
-    "lessons_count": 3,
-    "completed_lessons": 1
-  }
-]
-```
+### `GET /lessons/<lesson_id>/`
 
-### Get Lesson Detail
-```
-GET /api/lessons/{id}/
-Headers: Authorization: Bearer {access_token}
-
-Response (200):
+```json
 {
-  "id": 1,
-  "title": "Introduction to Variables",
-  "description": "Learn about variables...",
-  "video_url": "https://youtube.com/...",
-  "content": "## Lesson Content\n\n...",
-  "duration_minutes": 15,
-  "status": "unlocked",
-  "completed": false,
-  "quiz": {
-    "id": 1,
-    "title": "Variables Quiz"
+  "id": "m1-l1",
+  "title": "How the web works",
+  "duration": "10 min",
+  "status": "completed",
+  "video_id": "dQw4w9WgXcQ",
+  "description": "Lesson description",
+  "course": {
+    "id": "fullstack-101",
+    "title": "Fullstack Web Development"
+  },
+  "module": {
+    "id": "m1",
+    "title": "Foundations of the Web",
+    "week": 1
   }
 }
 ```
 
-### Mark Lesson Complete
-```
-POST /api/lessons/{id}/complete/
-Headers: Authorization: Bearer {access_token}
+### `POST /lessons/<lesson_id>/complete/`
 
-Response (200):
+```json
 {
-  "message": "Lesson marked as complete",
-  "completed_at": "2024-04-18T10:30:00Z",
-  "course_progress": 45
+  "completed": true,
+  "completed_at": "2026-04-20T12:00:00Z"
 }
 ```
 
----
+### `PUT /lessons/<lesson_id>/notes/`
 
-## Quiz Endpoints
-
-### Get Quiz with Questions
-```
-GET /api/quizzes/{id}/
-Headers: Authorization: Bearer {access_token}
-
-Response (200):
+```json
 {
-  "id": 1,
-  "title": "Variables Quiz",
+  "notes": "Short user note saved from the lesson page."
+}
+```
+
+## Dashboard
+
+### `GET /dashboard/`
+
+```json
+{
+  "user": {
+    "id": "u_1",
+    "display_name": "Alex Moore",
+    "email": "alex@example.com",
+    "avatar": "AM"
+  },
+  "main_course": {
+    "id": "fullstack-101",
+    "title": "Fullstack Web Development",
+    "total_lessons": 16,
+    "completed_lessons": 6
+  },
+  "today_lesson": {
+    "id": "m2-l3",
+    "title": "DOM manipulation",
+    "duration": "24 min",
+    "module_week": 2
+  },
+  "announcements": [
+    {
+      "id": "a1",
+      "title": "New module released",
+      "body": "Week 3 lessons are now available.",
+      "date": "2026-04-20T11:00:00Z",
+      "tag": "release"
+    }
+  ],
+  "stats": {
+    "streak": 6,
+    "points": 1840,
+    "rank": 4
+  }
+}
+```
+
+## Quizzes
+
+### `GET /quizzes/<quiz_id>/`
+
+```json
+{
+  "id": "quiz-fullstack-foundations",
+  "course_id": "fullstack-101",
+  "title": "Foundations of the Web Quiz",
+  "description": "Test your knowledge of HTML, CSS, and how the web works.",
   "passing_score": 70,
-  "points_reward": 100,
+  "points_reward": 200,
   "questions": [
     {
-      "id": 1,
-      "question_text": "What is a variable?",
-      "question_type": "multiple_choice",
-      "answers": [
-        {
-          "id": 1,
-          "answer_text": "A container for storing data",
-          "order": 1
-        },
-        {
-          "id": 2,
-          "answer_text": "A function",
-          "order": 2
-        }
+      "id": "q1",
+      "question": "What does HTML stand for?",
+      "options": [
+        "HyperText Markup Language",
+        "HighText Machine Language",
+        "HyperTool Multi Language",
+        "Home Tool Markup Language"
       ]
     }
   ]
 }
 ```
 
-### Submit Quiz
-```
-POST /api/quizzes/{id}/submit/
-Headers: Authorization: Bearer {access_token}
+### `POST /quizzes/<quiz_id>/submit/`
 
-Request Body:
+Request:
+
+```json
 {
-  "answers": {
-    "1": "1",  // question_id: answer_id
-    "2": "4"
-  }
-}
-
-Response (200):
-{
-  "score": 85,
-  "passed": true,
-  "points_earned": 100,
-  "feedback": "Great job! You passed the quiz.",
-  "correct_answers": {
-    "1": "1",
-    "2": "4"
-  }
-}
-```
-
-### Get Quiz Results
-```
-GET /api/quizzes/{id}/results/
-Headers: Authorization: Bearer {access_token}
-
-Response (200):
-{
-  "quiz_id": 1,
-  "user_score": 85,
-  "passed": true,
-  "attempts": 2,
-  "submissions": [
+  "answers": [
     {
-      "id": 1,
-      "score": 75,
-      "submitted_at": "2024-04-18T09:00:00Z"
-    },
-    {
-      "id": 2,
-      "score": 85,
-      "submitted_at": "2024-04-18T10:00:00Z"
+      "question_id": "q1",
+      "selected_index": 0
     }
   ]
 }
 ```
 
----
+Response:
 
-## User Progress Endpoints
-
-### Get User Course Progress
-```
-GET /api/user/progress/
-Headers: Authorization: Bearer {access_token}
-
-Response (200):
-[
-  {
-    "course_id": 1,
-    "course_title": "JavaScript Fundamentals",
-    "progress_percentage": 45,
-    "lessons_completed": 9,
-    "lessons_total": 20,
-    "completed_at": null
-  }
-]
-```
-
-### Get User Certificates
-```
-GET /api/user/certificates/
-Headers: Authorization: Bearer {access_token}
-
-Response (200):
-[
-  {
-    "id": 1,
-    "course_title": "JavaScript Fundamentals",
-    "issued_at": "2024-04-18T10:00:00Z",
-    "pdf_url": "https://api.mooreskillup.com/media/certificates/cert_1.pdf"
-  }
-]
-```
-
-### Download Certificate
-```
-GET /api/user/certificates/{id}/download/
-Headers: Authorization: Bearer {access_token}
-
-Response: PDF file binary
-```
-
-### Get User Achievements
-```
-GET /api/user/achievements/
-Headers: Authorization: Bearer {access_token}
-
-Response (200):
+```json
 {
-  "earned_badges": [
+  "score": 4,
+  "total": 5,
+  "score_pct": 80,
+  "passed": true,
+  "points_awarded": 200,
+  "results": [
     {
-      "id": 1,
-      "title": "First Steps",
+      "question_id": "q1",
+      "correct_index": 0,
+      "selected_index": 0,
+      "is_correct": true,
+      "explanation": "HTML stands for HyperText Markup Language."
+    }
+  ]
+}
+```
+
+## Leaderboard and achievements
+
+### `GET /leaderboard/`
+
+```json
+{
+  "current_user_rank": 4,
+  "entries": [
+    {
+      "rank": 1,
+      "user_id": "u_99",
+      "name": "Sade Adeyemi",
+      "avatar": "SA",
+      "points": 3420,
+      "streak": 22,
+      "is_current_user": false
+    }
+  ]
+}
+```
+
+### `GET /achievements/`
+
+```json
+{
+  "stats": {
+    "points": 1840,
+    "streak": 6,
+    "longest_streak": 14,
+    "lessons_completed": 8,
+    "quizzes_passed": 3,
+    "certificates_earned": 1,
+    "rank": 4
+  },
+  "badges": [
+    {
+      "id": "b1",
+      "name": "First Steps",
       "description": "Complete your first lesson",
-      "icon_url": "https://api.mooreskillup.com/media/badges/first_steps.png",
-      "earned_at": "2024-04-18T10:00:00Z"
-    }
-  ],
-  "locked_badges": [
-    {
-      "id": 2,
-      "title": "Course Master",
-      "description": "Complete all lessons in a course",
-      "icon_url": "https://..."
+      "icon": "rocket",
+      "earned": true,
+      "earned_at": "2026-01-15"
     }
   ]
 }
 ```
 
-### Get User Streak
-```
-GET /api/user/streak/
-Headers: Authorization: Bearer {access_token}
+## Certificates
 
-Response (200):
-{
-  "current_streak": 7,
-  "longest_streak": 15,
-  "last_activity_date": "2024-04-18",
-  "activity_log": [
-    {
-      "date": "2024-04-18",
-      "activities": 2
-    },
-    {
-      "date": "2024-04-17",
-      "activities": 1
-    }
-  ]
-}
-```
+### `GET /certificates/`
 
----
-
-## Leaderboard Endpoints
-
-### Get Top 100 Users
-```
-GET /api/leaderboard/?page=1&limit=100
-Headers: Authorization: Bearer {access_token}
-
-Response (200):
-{
-  "count": 100,
-  "results": [
-    {
-      "rank": 1,
-      "user_id": 5,
-      "username": "top_learner",
-      "avatar_url": "https://...",
-      "total_points": 2500,
-      "courses_completed": 5
-    }
-  ],
-  "user_rank": {
-    "rank": 25,
-    "total_points": 1200
+```json
+[
+  {
+    "id": "cert_1",
+    "course_id": "fullstack-101",
+    "course_title": "Fullstack Web Development",
+    "instructor": "Dr. Lena Park",
+    "issued_at": "2026-04-20T12:00:00Z",
+    "certificate_code": "MSU-FULLST-0001",
+    "download_url": "http://localhost:8000/media/certificates/cert_1.pdf"
   }
-}
+]
 ```
 
-### Get Top 3 Users
-```
-GET /api/leaderboard/top3/
-Headers: Authorization: Bearer {access_token}
+### `POST /certificates/<course_id>/generate/`
 
-Response (200):
-{
-  "podium": [
-    {
-      "rank": 1,
-      "username": "top_learner",
-      "points": 2500
-    },
-    {
-      "rank": 2,
-      "username": "second_place",
-      "points": 2300
-    },
-    {
-      "rank": 3,
-      "username": "third_place",
-      "points": 2100
-    }
-  ]
-}
-```
+Use this only if you want the backend to own PDF generation and certificate storage.
 
----
+## Error format
 
-## Contact Endpoints
+Recommended DRF error format:
 
-### Submit Contact Form
-```
-POST /api/contact/submit/
-
-Request Body:
-{
-  "name": "John Doe",
-  "email": "john@example.com",
-  "phone": "+1234567890",
-  "subject": "general",
-  "message": "I have a question about..."
-}
-
-Response (201):
-{
-  "id": 1,
-  "message": "Thank you for your message. We'll get back to you soon!",
-  "status": "new"
-}
-```
-
-### List Contact Messages (Admin Only)
-```
-GET /api/contact/messages/?status=new
-Headers: Authorization: Bearer {admin_token}
-
-Response (200):
-{
-  "count": 5,
-  "results": [
-    {
-      "id": 1,
-      "name": "John Doe",
-      "email": "john@example.com",
-      "subject": "general",
-      "message": "...",
-      "status": "new",
-      "created_at": "2024-04-18T10:00:00Z"
-    }
-  ]
-}
-```
-
----
-
-## Error Responses
-
-### 400 Bad Request
 ```json
 {
-  "error": "Invalid data",
-  "details": {
-    "email": ["This field may not be blank."]
-  }
+  "detail": "Human readable message"
 }
 ```
 
-### 401 Unauthorized
+Validation example:
+
 ```json
 {
-  "detail": "Authentication credentials were not provided."
+  "email": ["This field is required."]
 }
 ```
-
-### 403 Forbidden
-```json
-{
-  "detail": "You do not have permission to perform this action."
-}
-```
-
-### 404 Not Found
-```json
-{
-  "detail": "Not found."
-}
-```
-
-### 500 Server Error
-```json
-{
-  "error": "Internal server error",
-  "message": "Please try again later"
-}
-```
-
----
-
-## Pagination
-
-All list endpoints support pagination:
-
-```
-GET /api/courses/?page=1&limit=20
-
-Response includes:
-{
-  "count": 50,           // Total items
-  "next": "...?page=2",  // Next page URL
-  "previous": null,      // Previous page URL
-  "results": [...]       // Array of items
-}
-```
-
----
-
-## Rate Limiting
-
-- **Authenticated users**: 1000 requests/hour
-- **Unauthenticated users**: 100 requests/hour
-- **Contact submissions**: 5 per hour
-
----
-
-## Deployment Checklist
-
-Before deploying to production:
-
-- [ ] Update all hardcoded API URLs to production domain
-- [ ] Enable HTTPS/SSL
-- [ ] Configure CORS for production domain only
-- [ ] Set `DEBUG = False` in Django settings
-- [ ] Enable database backups
-- [ ] Set up error logging (Sentry)
-- [ ] Configure email service for cert generation
-- [ ] Load test the API
-- [ ] Document any custom endpoints
-
----
-
-**Last Updated**: April 2026

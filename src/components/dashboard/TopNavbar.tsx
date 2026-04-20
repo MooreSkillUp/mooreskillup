@@ -17,7 +17,7 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
           <Menu className="h-5 w-5" />
         </button>
         <h1 className="hidden font-display text-lg font-semibold sm:block">
-          Hello, {user?.displayName.split(" ")[0]} 👋
+          Hello, {user?.displayName.split(" ")[0]}
         </h1>
       </div>
 
@@ -27,7 +27,11 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
           className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Toggle theme"
         >
-          {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          {theme === "dark" ? (
+            <Sun className="h-5 w-5" />
+          ) : (
+            <Moon className="h-5 w-5" />
+          )}
         </button>
         <button
           className="relative rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"

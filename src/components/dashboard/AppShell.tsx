@@ -1,15 +1,24 @@
-import { Navigate } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Sidebar } from "./Sidebar";
 import { TopNavbar } from "./TopNavbar";
-import { useAuth } from "@/lib/auth";
+import { useAuth } from "../../lib/auth";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  if (!isAuthenticated) return <Navigate to="/login" />;
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push("/login");
+    }
+  }, [isAuthenticated, router]);
+
+  if (!isAuthenticated) return null;
 
   return (
     <div className="flex min-h-screen w-full bg-background">

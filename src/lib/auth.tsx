@@ -71,10 +71,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => persist(null), []);
-  const updateUser = useCallback(
-    (patch: Partial<AuthUser>) => setUser((u) => (u ? { ...u, ...patch } : u)),
-    [],
-  );
+  const updateUser = useCallback((patch: Partial<AuthUser>) => {
+    setUser((u) => {
+      if (!u) return u;
+      const nextUser = { ...u, ...patch };
+      if (typeof window !== "undefined") {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(nextUser));
+      }
+      return nextUser;
+    });
+  }, []);
 
   // Avoid SSR/hydration mismatch flash
   if (!hydrated) {

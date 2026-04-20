@@ -1,19 +1,22 @@
-import { Link, useLocation } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { LayoutDashboard, BookOpen, Settings, LogOut, GraduationCap, X, Trophy, Award, Medal } from "lucide-react";
-import { useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
+import { useAuth } from "../../lib/auth";
+import { cn } from "../../lib/utils";
 
 const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/courses", label: "Courses", icon: BookOpen },
-  { to: "/leaderboard", label: "Leaderboard", icon: Trophy },
-  { to: "/achievements", label: "Achievements", icon: Medal },
-  { to: "/certificates", label: "Certificates", icon: Award },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/courses", label: "Courses", icon: BookOpen },
+  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+  { href: "/achievements", label: "Achievements", icon: Medal },
+  { href: "/certificates", label: "Certificates", icon: Award },
+  { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const location = useLocation();
+  const pathname = usePathname();
   const { logout } = useAuth();
 
   return (
@@ -32,7 +35,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         )}
       >
         <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-5">
-          <Link to="/dashboard" className="flex items-center gap-2">
+          <Link href="/dashboard" className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <GraduationCap className="h-5 w-5" />
             </div>
@@ -48,14 +51,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-5">
-          {navItems.map(({ to, label, icon: Icon }) => {
+          {navItems.map(({ href, label, icon: Icon }) => {
             const active =
-              location.pathname === to ||
-              (to === "/courses" && location.pathname.startsWith("/course"));
+              pathname === href ||
+              (href === "/courses" && pathname?.startsWith("/course"));
             return (
               <Link
-                key={to}
-                to={to}
+                key={href}
+                href={href}
                 onClick={onClose}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
