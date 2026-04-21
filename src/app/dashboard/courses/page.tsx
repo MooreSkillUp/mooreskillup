@@ -10,7 +10,7 @@ import { getLearnerDashboardCourses } from "@/lib/mock-data";
 
 export default function DashboardCoursesPage() {
   const { user } = useAuth();
-  const collections = getLearnerDashboardCourses(user?.interests ?? [], user?.plan ?? "free");
+  const collections = getLearnerDashboardCourses(user?.interests ?? [], user);
 
   return (
     <AppShell>
@@ -28,7 +28,7 @@ export default function DashboardCoursesPage() {
               </p>
             </div>
             <Link href="/pricing">
-              <Button variant="outline">Compare plans</Button>
+              <Button variant="outline">See pricing</Button>
             </Link>
           </div>
         </section>
@@ -36,7 +36,7 @@ export default function DashboardCoursesPage() {
         <section>
           <div className="mb-4 flex items-center gap-2">
             <Compass className="h-5 w-5 text-primary" />
-            <h2 className="font-display text-2xl font-bold">Courses you are currently working on</h2>
+            <h2 className="font-display text-2xl font-bold">Courses you have purchased or started</h2>
           </div>
           <div className="grid gap-5 lg:grid-cols-2">
             {collections.current.map((course) => (
@@ -61,11 +61,11 @@ export default function DashboardCoursesPage() {
           <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
             <div className="flex items-center gap-2">
               <Lock className="h-5 w-5 text-accent" />
-              <h2 className="font-display text-2xl font-bold">Courses waiting for your plan</h2>
+              <h2 className="font-display text-2xl font-bold">Courses in preview mode</h2>
             </div>
             <p className="mt-2 max-w-2xl text-muted-foreground">
-              Free learners can still browse locked tracks here, but access depends on release-day
-              rules or a plan upgrade.
+              Students can preview free sections for any course here. Buying a course unlocks all
+              remaining sections, lessons, tasks, resources, and certification flow for that course.
             </p>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               {collections.locked.slice(0, 4).map((course) => (

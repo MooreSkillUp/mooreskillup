@@ -3,25 +3,24 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useMemo, useState } from "react";
-import { Bell, Heart, Menu, Moon, Search, Sun } from "lucide-react";
+import { Bell, Heart, Menu, Moon, Sun } from "lucide-react";
 import { getHomeRouteForUser, useAuth } from "@/lib/auth";
-import { notifications } from "@/lib/mock-data";
+import { getNotificationsForRole } from "@/lib/mock-data";
 import { useTheme } from "@/lib/theme";
 
 export function TopNavbar({ onMenu }: { onMenu: () => void }) {
   const { user } = useAuth();
   const { theme, toggle } = useTheme();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const unreadCount = notifications.filter((item) => !item.read).length;
   const role = user?.role ?? "student";
   const wishlistCount = user?.wishlist.length ?? 0;
-  const dashboardLabel = role === "student" ? "Search your courses, roadmap, or rewards" : "Search your workspace";
   const quickHref = role === "student" ? "/dashboard/courses?view=saved" : getHomeRouteForUser(user);
   const quickLabel = role === "student" ? "Wishlist" : "Workspace";
   const visibleNotifications = useMemo(
-    () => notifications.slice(0, 3),
-    [],
+    () => getNotificationsForRole(role).slice(0, 3),
+    [role],
   );
+  const unreadCount = visibleNotifications.filter((item) => !item.read).length;
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-xl">
@@ -34,9 +33,12 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm text-muted-foreground md:flex">
-            <Search className="h-4 w-4" />
-            {dashboardLabel}
+          <div className="hidden rounded-full border border-border bg-card px-4 py-2 text-sm text-muted-foreground md:block">
+            {role === "admin"
+              ? "Admin workspace"
+              : role === "teacher"
+                ? "Teacher workspace"
+                : "Student workspace"}
           </div>
         </div>
 
@@ -115,7 +117,7 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
             <div className="hidden leading-tight sm:block">
               <div className="text-sm font-medium">{user?.displayName}</div>
               <div className="text-xs text-muted-foreground">
-                {user?.plan ?? "free"} | {user?.role ?? "student"}
+                {user?.role ?? "student"} | {user?.status ?? "active"}
               </div>
             </div>
           </div>

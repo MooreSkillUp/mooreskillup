@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { CheckCircle2, Lock, PlayCircle, Clock } from "lucide-react";
-import type { Lesson } from "../../lib/mock-data";
 import { Button } from "../ui-kit/Button";
 import { cn } from "../../lib/utils";
 
-export function LessonCard({ lesson, index }: { lesson: Lesson; index: number }) {
+export function LessonCard({
+  lesson,
+  index,
+}: {
+  lesson: { id: string; title: string; duration: string; status: "completed" | "unlocked" | "locked" };
+  index: number;
+}) {
   const locked = lesson.status === "locked";
   const completed = lesson.status === "completed";
 

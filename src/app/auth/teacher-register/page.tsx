@@ -67,14 +67,14 @@ export default function TeacherRegisterPage() {
 
         <div>
           <div className="inline-flex rounded-full border border-border bg-card/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Teacher route
+            Admin provisioning route
           </div>
           <h1 className="mt-6 max-w-xl font-display text-5xl font-bold leading-tight">
-            Create teacher access for content uploads and cohort management.
+            Create teacher access for course uploads and tutor workspace ownership.
           </h1>
           <p className="mt-5 max-w-md text-lg text-muted-foreground">
-            This frontend route maps the instructor workflow before the backend permissions
-            model is connected.
+            This frontend route represents the admin-only teacher creation flow before backend
+            permissions are connected.
           </p>
         </div>
 
@@ -97,7 +97,7 @@ export default function TeacherRegisterPage() {
 
           <h2 className="font-display text-3xl font-bold tracking-tight">Create teacher account</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            This mock flow is for frontend mapping and route setup only.
+            Use this as the admin-facing onboarding form for new teachers.
           </p>
 
           <form onSubmit={onSubmit} className="mt-8 space-y-4">

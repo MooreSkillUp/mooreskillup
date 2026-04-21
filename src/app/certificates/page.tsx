@@ -7,10 +7,11 @@ import { AppShell } from "../../components/dashboard/AppShell";
 import { Button } from "../../components/ui-kit/Button";
 import { useAuth } from "../../lib/auth";
 import { generateCertificatePdf } from "../../lib/certificate";
-import { courses } from "../../lib/mock-data";
+import { courses, isCourseCompleted, isCoursePurchased } from "../../lib/mock-data";
 
 export default function CertificatesPage() {
   const { user } = useAuth();
+  const certificateCourses = courses.filter((course) => isCoursePurchased(course, user));
 
   return (
     <AppShell>
@@ -36,8 +37,8 @@ export default function CertificatesPage() {
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
-          {courses.map((course, i) => {
-            const eligible = course.completedLessons === course.totalLessons;
+          {certificateCourses.map((course, i) => {
+            const eligible = isCourseCompleted(course);
             const certId = `MSU-${course.id.toUpperCase().slice(0, 6)}-${(
               user?.id ?? "00000"
             ).slice(-4)}`;
@@ -127,8 +128,8 @@ export default function CertificatesPage() {
         </div>
 
         <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
-          Tip: certificates also unlock automatically when you finish all the
-          lessons for a course.{" "}
+          Tip: certificates unlock only for purchased courses after you finish all the lessons in
+          that course.{" "}
           <Link href="/dashboard/courses" className="font-semibold text-primary hover:text-accent">
             See your courses -&gt;
           </Link>

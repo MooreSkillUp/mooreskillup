@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, BookOpen, Settings, Upload, Users } from "lucide-react";
+import { BookOpen, Settings, Upload, Users } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { teacherUploads } from "@/lib/mock-data";
 
 export default function TeacherDashboardPage() {
+  const publishedCourses = teacherUploads.filter((item) => item.status === "Published").length;
+  const totalUploads = teacherUploads.length;
+  const learnerReach = teacherUploads.reduce((sum, item) => sum + item.learners, 0);
+
   return (
     <AppShell allowedRoles={["teacher", "admin"]}>
       <div className="space-y-8">
@@ -37,9 +41,9 @@ export default function TeacherDashboardPage() {
 
         <div className="grid gap-5 md:grid-cols-3">
           {[
-            { icon: BookOpen, label: "Published lessons", value: "36" },
-            { icon: Users, label: "Learners reached", value: "1,842" },
-            { icon: Activity, label: "Avg completion", value: "67%" },
+            { icon: BookOpen, label: "Published courses", value: `${publishedCourses}` },
+            { icon: Upload, label: "Total uploads", value: `${totalUploads}` },
+            { icon: Users, label: "Learners reached", value: `${learnerReach}` },
           ].map((item) => (
             <div key={item.label} className="rounded-3xl border border-border bg-card p-6 shadow-sm">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -64,7 +68,7 @@ export default function TeacherDashboardPage() {
                         {item.program} | {item.track} | {item.status}
                       </div>
                       <div className="mt-1 text-sm text-muted-foreground">
-                        {item.learners} learners | {item.completionRate}% completion | {item.modules.length} modules
+                        {item.learners} learners | {item.completionRate}% completion | {item.modules.length} sections
                       </div>
                     </div>
                     <button className="rounded-xl border border-border px-4 py-2 text-sm font-medium">
@@ -80,13 +84,13 @@ export default function TeacherDashboardPage() {
             <h2 className="font-display text-2xl font-bold">Panel map</h2>
             <div className="mt-5 space-y-4 text-sm text-muted-foreground">
               <div className="rounded-2xl bg-muted/40 p-4">
-                `/teacher/dashboard` for analytics, active uploads, and cohort monitoring.
+                `/teacher/dashboard` for published courses, total uploads, and learner reach.
               </div>
               <div className="rounded-2xl bg-muted/40 p-4">
-                `/teacher/upload` for roadmap creation, module breakdown, weekly assessments, and resource structure.
+                `/teacher/upload` for course setup, section access toggles, lessons, tasks, and preview.
               </div>
               <div className="rounded-2xl bg-muted/40 p-4">
-                `/teacher/settings` for profile configuration, teaching focus, and upload defaults.
+                `/teacher/settings` for display profile, locked primary program, track, and bio.
               </div>
             </div>
           </div>

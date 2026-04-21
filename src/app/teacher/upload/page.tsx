@@ -10,9 +10,10 @@ import { teacherUploads, trackOptionsByInterest, type Interest, type TrackName }
 
 const initialModules = [
   {
-    id: "module-1",
-    title: "Week 1 - Foundations",
-    assessment: "Week 1 assessment",
+    id: "section-1",
+    title: "Section 1 - Foundations",
+    isFree: true,
+    assessment: "Section task and weekly project",
     project: "Build and submit the first guided task",
     lessons: [
       { id: "lesson-1", title: "Introduction lesson", format: "video", resource: "https://youtube.com/watch?v=lesson-1" },
@@ -40,8 +41,8 @@ export default function TeacherUploadPage() {
                 Build a course the same way learners will study it
               </h1>
               <p className="mt-2 max-w-3xl text-muted-foreground">
-                Structure each course from program and track down to roadmap, modules, lesson
-                resources, weekly assessments, and project submission requirements.
+                Structure each course from category and track down to roadmap, sections, lessons,
+                and tasks with clear submission instructions.
               </p>
             </div>
             <div className="flex gap-3">
@@ -119,7 +120,7 @@ export default function TeacherUploadPage() {
               <label className="text-sm font-medium text-foreground">Course overview</label>
               <Textarea
                 className="min-h-28 bg-background"
-                placeholder="Explain what the learner will achieve, how the course is structured, and what the final capstone covers."
+                placeholder="Explain what the learner will achieve, how the course is structured, and what they unlock after paying for the full course."
               />
             </div>
 
@@ -134,9 +135,9 @@ export default function TeacherUploadPage() {
             <div className="space-y-4 rounded-[1.5rem] border border-border bg-background p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-display text-2xl font-bold">Modules and weekly delivery</div>
+                  <div className="font-display text-2xl font-bold">Sections, lessons, and tasks</div>
                   <div className="text-sm text-muted-foreground">
-                    Add as many weeks or modules as the course requires.
+                    Add as many sections as the course requires. Mark the beginner section as free if needed.
                   </div>
                 </div>
                 <Button
@@ -145,10 +146,11 @@ export default function TeacherUploadPage() {
                     setModules((current) => [
                       ...current,
                       {
-                        id: `module-${current.length + 1}`,
-                        title: `Week ${current.length + 1} - New module`,
-                        assessment: `Week ${current.length + 1} assessment`,
-                        project: "Define the weekly project submission",
+                        id: `section-${current.length + 1}`,
+                        title: `Section ${current.length + 1} - New section`,
+                        isFree: false,
+                        assessment: `Section ${current.length + 1} task`,
+                        project: "Define the task submission instructions",
                         lessons: [
                           {
                             id: `lesson-${current.length + 1}-1`,
@@ -161,7 +163,7 @@ export default function TeacherUploadPage() {
                     ])
                   }
                 >
-                  <PlusCircle className="h-4 w-4" /> Add module
+                  <PlusCircle className="h-4 w-4" /> Add section
                 </Button>
               </div>
 
@@ -169,11 +171,16 @@ export default function TeacherUploadPage() {
                 {modules.map((module, index) => (
                   <div key={module.id} className="rounded-3xl border border-border bg-card p-5">
                     <div className="grid gap-4 md:grid-cols-2">
-                      <Input label="Module / week title" defaultValue={module.title} />
-                      <Input label="Assessment title" defaultValue={module.assessment} />
+                      <Input label="Section title" defaultValue={module.title} />
+                      <Input label="Task title" defaultValue={module.assessment} />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button variant={module.isFree ? "accent" : "outline"} size="sm" type="button">
+                        {module.isFree ? "Free section" : "Paid section"}
+                      </Button>
                     </div>
                     <div className="mt-4 space-y-2">
-                      <label className="text-sm font-medium text-foreground">Weekly project brief</label>
+                      <label className="text-sm font-medium text-foreground">Task submission instructions</label>
                       <Textarea className="min-h-24 bg-background" defaultValue={module.project} />
                     </div>
                     <div className="mt-4 space-y-3">
@@ -192,8 +199,8 @@ export default function TeacherUploadPage() {
                       ))}
                     </div>
                     <div className="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                      Module {index + 1} will become one learner-facing study week by default, but
-                      you can keep adding modules for longer courses.
+                      Section {index + 1} can be free or paid, and each section should include its
+                      own lesson flow plus one clear task.
                     </div>
                   </div>
                 ))}
@@ -214,11 +221,10 @@ export default function TeacherUploadPage() {
                   2. Add a roadmap or scheme of work so learners know the prerequisite path.
                 </div>
                 <div className="rounded-2xl bg-muted/40 p-4">
-                  3. Build the course module by module. Each module can represent a week or a major
-                  study phase.
+                  3. Build the course section by section. The first section can be free while the rest stay locked until payment.
                 </div>
                 <div className="rounded-2xl bg-muted/40 p-4">
-                  4. Each module should have lessons, an assessment, and a project submission goal.
+                  4. Each section should have lessons and one task with proper submission instructions.
                 </div>
               </div>
             </div>
@@ -232,7 +238,7 @@ export default function TeacherUploadPage() {
                     Roadmap
                   </div>
                   <div className="mt-2 text-sm text-muted-foreground">
-                    Learners see roadmap and prerequisites before the first week starts.
+                    Learners see roadmap and prerequisites before the first section starts.
                   </div>
                 </div>
                 <div className="rounded-2xl border border-border bg-background p-4">
@@ -247,10 +253,10 @@ export default function TeacherUploadPage() {
                 <div className="rounded-2xl border border-border bg-background p-4">
                   <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                     <FileText className="h-4 w-4 text-primary" />
-                    Weekly assessments and projects
+                    Section tasks
                   </div>
                   <div className="mt-2 text-sm text-muted-foreground">
-                    Every module ends with an assessment and a project submission expectation.
+                    Every section ends with a task and a clear submission expectation.
                   </div>
                 </div>
               </div>

@@ -32,8 +32,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/courses", label: "Courses", icon: BookOpen },
     { href: "/quiz-shop", label: "Quiz Shop", icon: ShoppingBag },
-    { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-    { href: "/achievements", label: "Achievements", icon: Medal },
+    { href: "/coming-soon", label: "Leaderboard", icon: Trophy, disabled: true },
+    { href: "/coming-soon", label: "Achievements", icon: Medal, disabled: true },
     { href: "/certificates", label: "Certificates", icon: Award },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
@@ -91,21 +91,39 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 {group.title}
               </div>
               <nav className="mt-2 space-y-1">
-                {group.items.map(({ href, label, icon: Icon }) => {
+                {group.items.map(({ href, label, icon: Icon, disabled }) => {
                   const active =
                     pathname === href ||
                     (href === "/dashboard/courses" && pathname?.startsWith("/course"));
+                  const className = cn(
+                    "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-colors",
+                    active
+                      ? "bg-accent text-accent-foreground"
+                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                    disabled && "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-sidebar-foreground/80",
+                  );
+
+                  if (disabled) {
+                    return (
+                      <button
+                        key={`${href}-${label}`}
+                        type="button"
+                        disabled
+                        className={className}
+                      >
+                        <Icon className="h-4.5 w-4.5" />
+                        {label}
+                        <span className="ml-auto text-[10px] uppercase tracking-[0.2em]">Soon</span>
+                      </button>
+                    );
+                  }
+
                   return (
                     <Link
                       key={href}
                       href={href}
                       onClick={onClose}
-                      className={cn(
-                        "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-colors",
-                        active
-                          ? "bg-accent text-accent-foreground"
-                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                      )}
+                      className={className}
                     >
                       <Icon className="h-4.5 w-4.5" />
                       {label}

@@ -6,13 +6,12 @@ import { AppShell } from "@/components/dashboard/AppShell";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
-import { teacherProfileOptions, teacherUploads, trackOptionsByInterest, type Interest, type TrackName } from "@/lib/mock-data";
+import { teacherProfileOptions, teacherUploads, trackOptionsByInterest, type TrackName } from "@/lib/mock-data";
 
 export default function TeacherSettingsPage() {
-  const defaultProfile = teacherProfileOptions[0];
-  const [program, setProgram] = useState<Interest>(defaultProfile.program);
+  const defaultProfile = teacherProfileOptions[1] ?? teacherProfileOptions[0];
   const [track, setTrack] = useState<TrackName>(defaultProfile.track);
-  const trackOptions = trackOptionsByInterest[program];
+  const trackOptions = trackOptionsByInterest[defaultProfile.program];
 
   return (
     <AppShell allowedRoles={["teacher", "admin"]}>
@@ -23,8 +22,8 @@ export default function TeacherSettingsPage() {
           </div>
           <h1 className="mt-2 font-display text-4xl font-bold">Configure your teaching profile</h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            Define what you teach, how your profile appears to learners, and the defaults used in
-            your course upload workflow.
+            Keep your public profile aligned with the program you teach and the track your courses
+            belong to.
           </p>
         </div>
 
@@ -32,34 +31,16 @@ export default function TeacherSettingsPage() {
           <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <Input label="Teacher name" defaultValue={defaultProfile.name} />
-                <Input label="Public email" defaultValue="teacher@mooreskillup.com" />
+                <Input label="Display name" defaultValue={defaultProfile.name} />
+                <Input label="Public email" defaultValue={defaultProfile.email} />
               </div>
-              <div>
+              <div className="rounded-3xl border border-border bg-muted/30 p-5">
                 <div className="text-sm font-medium text-foreground">Primary program</div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {Object.keys(trackOptionsByInterest).map((item) => {
-                    const interest = item as Interest;
-                    const active = interest === program;
-                    return (
-                      <button
-                        key={interest}
-                        type="button"
-                        onClick={() => {
-                          setProgram(interest);
-                          setTrack(trackOptionsByInterest[interest][0]);
-                        }}
-                        className={`rounded-full border px-4 py-2 text-sm transition ${
-                          active
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground"
-                        }`}
-                      >
-                        {interest}
-                      </button>
-                    );
-                  })}
-                </div>
+                <div className="mt-2 font-display text-2xl font-bold">{defaultProfile.program}</div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Locked after teacher registration to keep course ownership and backend relations
+                  consistent.
+                </p>
               </div>
               <div>
                 <div className="text-sm font-medium text-foreground">Track specialization</div>
@@ -77,7 +58,7 @@ export default function TeacherSettingsPage() {
                     >
                       <div className="font-display text-lg font-bold">{item}</div>
                       <div className="mt-1 text-sm text-muted-foreground">
-                        Learners will see this as your teaching focus.
+                        Learners will see this as your teaching specialization.
                       </div>
                     </button>
                   ))}
@@ -86,7 +67,7 @@ export default function TeacherSettingsPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Teacher bio</label>
                 <Textarea
-                  defaultValue={`${defaultProfile.focus}. I guide learners from roadmap to project delivery with weekly assessments and clear review checkpoints.`}
+                  defaultValue={defaultProfile.bio}
                   className="min-h-32 bg-background"
                 />
               </div>
@@ -101,15 +82,15 @@ export default function TeacherSettingsPage() {
               </div>
               <div className="mt-4 font-display text-2xl font-bold">{track}</div>
               <div className="mt-2 text-sm text-muted-foreground">
-                New uploads will start from this program and track unless you change them per
-                course.
+                New uploads inherit your locked program and current track so course creation stays
+                aligned with tutor ownership.
               </div>
               <div className="mt-5 space-y-3">
                 {teacherUploads.map((upload) => (
                   <div key={upload.id} className="rounded-2xl border border-border p-4">
                     <div className="font-medium">{upload.title}</div>
                     <div className="mt-1 text-sm text-muted-foreground">
-                      {upload.program} · {upload.track}
+                      {upload.program} • {upload.track}
                     </div>
                   </div>
                 ))}

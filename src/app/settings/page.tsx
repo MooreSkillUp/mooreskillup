@@ -8,11 +8,9 @@ import { Input } from "../../components/ui-kit/Input";
 import { toDisplayName, useAuth } from "../../lib/auth";
 import {
   interests,
-  pricingPlans,
   trackOptionsByInterest,
   type Interest,
   type TrackName,
-  type UserPlan,
 } from "../../lib/mock-data";
 
 export default function SettingsPage() {
@@ -21,7 +19,6 @@ export default function SettingsPage() {
   const [form, setForm] = useState({
     username: user?.username ?? "",
     email: user?.email ?? "",
-    plan: user?.plan ?? "free",
     avatarUrl: user?.avatarUrl ?? "",
   });
   const [selectedInterest, setSelectedInterest] = useState<Interest>(initialInterest);
@@ -42,7 +39,6 @@ export default function SettingsPage() {
       username: form.username,
       email: form.email,
       displayName: toDisplayName(form.username),
-      plan: form.plan as UserPlan,
       avatarUrl: form.avatarUrl || undefined,
       interests: [selectedInterest],
       selectedInterest,
@@ -58,7 +54,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="font-display text-3xl font-bold">Settings</h1>
           <p className="mt-1 text-muted-foreground">
-            Manage your plan, interests, and personalized dashboard preferences.
+            Manage your profile, interests, and personalized dashboard preferences.
           </p>
         </div>
 
@@ -89,24 +85,9 @@ export default function SettingsPage() {
               onChange={(event) => setForm({ ...form, avatarUrl: event.target.value })}
             />
 
-            <div>
-              <div className="text-sm font-medium text-foreground">Current plan</div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {pricingPlans.map((plan) => (
-                  <button
-                    key={plan.id}
-                    type="button"
-                    onClick={() => setForm({ ...form, plan: plan.id })}
-                    className={`rounded-full border px-4 py-2 text-sm transition ${
-                      form.plan === plan.id
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground"
-                    }`}
-                  >
-                    {plan.title}
-                  </button>
-                ))}
-              </div>
+            <div className="rounded-3xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
+              Course access is handled per course purchase. Free sections stay open for preview,
+              and paid sections unlock only after you buy that course.
             </div>
 
             <div>

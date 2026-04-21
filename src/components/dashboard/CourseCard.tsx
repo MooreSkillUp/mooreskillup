@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, BookOpen, Heart, Lock, Star } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { canAccessCourse, type Course } from "@/lib/mock-data";
+import { getCoursePrice, getCourseSections, isCoursePurchased, type Course } from "@/lib/mock-data";
 import { ProgressBar } from "../ui-kit/ProgressBar";
 import { Button } from "../ui-kit/Button";
 
@@ -17,8 +17,12 @@ export function CourseCard({
 }) {
   const { user, toggleWishlist } = useAuth();
   const pct = Math.round((course.completedLessons / course.totalLessons) * 100);
-  const access = canAccessCourse(course, user?.plan ?? "free");
+  const sections = getCourseSections(course, user);
+  const freeSections = sections.filter((section) => section.isFree).length;
+  const lockedSections = sections.filter((section) => section.isLocked).length;
   const wished = user?.wishlist?.includes(course.id) ?? false;
+  const purchased = isCoursePurchased(course, user);
+  const price = getCoursePrice(course);
 
   return (
     <motion.div
@@ -58,22 +62,23 @@ export function CourseCard({
           </div>
         )}
         <div className="rounded-2xl bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
-          {access.allowed
-            ? `${course.access === "free" ? "Free access available." : "Included in your current plan."}`
-            : access.reason}
+          {lockedSections > 0
+            ? `${freeSections} free section${freeSections > 1 ? "s" : ""} available now. Unlock the rest after payment.`
+            : "All sections are open in your current access level."}
         </div>
         <div className="flex items-center justify-between pt-1">
-          <span className="text-xs text-muted-foreground">by {course.instructor}</span>
-          {access.allowed ? (
-            <Link
-              href={`/course/${course.id}`}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-colors group-hover:text-accent"
-            >
-              Open <ArrowRight className="h-4 w-4" />
-            </Link>
-          ) : (
+          <span className="text-xs text-muted-foreground">
+            by {course.teacherName ?? course.instructor} • ${price}
+          </span>
+          <Link
+            href={`/course/${course.id}`}
+            className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-colors group-hover:text-accent"
+          >
+            Open <ArrowRight className="h-4 w-4" />
+          </Link>
+          {lockedSections > 0 && (
             <Button variant="outline" size="sm">
-              <Lock className="h-4 w-4" /> Locked
+              <Lock className="h-4 w-4" /> {purchased ? "Unlocked" : "Preview"}
             </Button>
           )}
         </div>

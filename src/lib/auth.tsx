@@ -28,6 +28,8 @@ export interface AuthUser {
   wishlist: string[];
   selectedInterest: Interest;
   selectedTrack: TrackName;
+  purchasedCourseIds: string[];
+  status?: "active" | "disabled";
 }
 
 interface RegisterPayload {
@@ -128,6 +130,8 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
     wishlist: Array.isArray(raw.wishlist) ? raw.wishlist : [],
     selectedInterest,
     selectedTrack: raw.selectedTrack ?? fallbackTrack,
+    purchasedCourseIds: Array.isArray(raw.purchasedCourseIds) ? raw.purchasedCourseIds : mockUser.purchasedCourseIds,
+    status: raw.status ?? "active",
   };
 }
 
@@ -180,6 +184,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       wishlist: mockUser.wishlist,
       selectedInterest: focus.selectedInterest,
       selectedTrack: focus.selectedTrack,
+      purchasedCourseIds: inferRoleFromEmail(email) === "student" ? mockUser.purchasedCourseIds : [],
+      status: "active",
     })!;
   }, []);
 
@@ -198,6 +204,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       wishlist: [],
       selectedInterest: payload.selectedInterest,
       selectedTrack: payload.selectedTrack,
+      purchasedCourseIds: payload.role === "student" || !payload.role ? [] : [],
+      status: "active",
     })!;
   }, []);
 

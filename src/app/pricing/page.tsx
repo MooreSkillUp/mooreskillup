@@ -14,14 +14,14 @@ export default function PricingPage() {
         <div className="mx-auto max-w-3xl text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground">
             <Sparkles className="h-3.5 w-3.5 text-accent" />
-            Pricing built for momentum
+            Course access explained simply
           </div>
           <h1 className="mt-6 font-display text-5xl font-bold tracking-tight">
-            Pick the plan that matches how fast you want to grow
+            Start with free sections, then pay per course to unlock everything
           </h1>
           <p className="mt-4 text-lg text-muted-foreground">
-            Start free, move to Pro when you want full access, or choose Premium
-            when you want mentorship and deeper accountability.
+            This is not a subscription-first model. Learners can explore free sections,
+            then unlock a course when they are ready to access the full content and certificate.
           </p>
         </div>
 
@@ -78,23 +78,23 @@ export default function PricingPage() {
         <div className="mt-12 rounded-[2rem] border border-border bg-card p-8 shadow-sm">
           <div className="max-w-3xl">
             <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-              Plan logic
+              Access logic
             </div>
             <h2 className="mt-3 font-display text-3xl font-bold">
-              How free, Pro, and Premium should behave across the platform
+              How free access and paid course access should work across the platform
             </h2>
             <div className="mt-5 space-y-3 text-sm leading-6 text-muted-foreground">
               <p>
-                Free should focus on discovery: roadmap previews, selected unlock days, and enough
-                product depth to help a learner confidently choose a path.
+                Free access should focus on discovery: roadmap previews, beginner sections, and
+                enough course depth to help a learner decide what to buy.
               </p>
               <p>
-                Pro should be the real studying plan: complete courses, weekly submissions,
-                assessments, project delivery, and certificate eligibility.
+                Paid course access should be the real studying mode: unlock the remaining sections,
+                complete lessons and tasks, and become eligible for certification.
               </p>
               <p>
-                Premium should add human support: review loops, mentor-style guidance, and stronger
-                capstone accountability rather than just more static content.
+                Premium stays as an optional support layer for mentorship, review loops, and deeper
+                accountability, not as a requirement to access the base course content.
               </p>
             </div>
           </div>

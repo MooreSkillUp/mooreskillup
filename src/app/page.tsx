@@ -34,7 +34,7 @@ export default function HomePage() {
                 className="inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm"
               >
                 <Sparkles className="h-3.5 w-3.5 text-accent" />
-                Premium learning experience, ready for scale
+                Structured course platform, ready for scale
               </motion.div>
               <motion.h1
                 initial={{ opacity: 0, y: 18 }}
@@ -42,8 +42,8 @@ export default function HomePage() {
                 transition={{ delay: 0.08 }}
                 className="mt-6 font-display text-5xl font-bold leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl"
               >
-                Build in-demand skills with a learning academy that feels like a
-                premium tech product.
+                Explore free lessons, then unlock the full course when you are ready
+                to go deeper.
               </motion.h1>
               <motion.p
                 initial={{ opacity: 0, y: 18 }}
@@ -51,9 +51,9 @@ export default function HomePage() {
                 transition={{ delay: 0.16 }}
                 className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground"
               >
-                MooreSkillUp blends structured tracks, gamified quizzes,
-                interest-based recommendations, and polished dashboards so
-                learners stay engaged and actually finish.
+                Mooro Skill Up is built around categories, courses, sections, lessons,
+                and tasks so learners can preview beginner content first and pay per
+                course for full access later.
               </motion.p>
 
               <motion.div
@@ -119,8 +119,8 @@ export default function HomePage() {
                   },
                   {
                     icon: Zap,
-                    title: "Quiz Shop",
-                    body: "Turn points into rewards with a more addictive loop.",
+                    title: "Free-to-paid structure",
+                    body: "Let learners preview free sections first, then unlock the remaining sections per course.",
                   },
                   {
                     icon: MessageCircleMore,
@@ -151,18 +151,18 @@ export default function HomePage() {
             {[
               {
                 icon: ShieldCheck,
-                title: "Curated learning tracks",
-                body: "Courses grouped by real learner interests, not generic categories.",
+                title: "Clear course hierarchy",
+                body: "Categories, courses, sections, lessons, and tasks are structured for scale.",
               },
               {
                 icon: Stars,
-                title: "Premium visual polish",
-                body: "Micro-interactions, gradients, motion, and better hierarchy throughout.",
+                title: "Preview before payment",
+                body: "Free sections let learners test the teaching style before unlocking a full course.",
               },
               {
                 icon: Trophy,
-                title: "Gamified progress",
-                body: "Leaderboards, quiz rewards, unlock logic, and achievement states.",
+                title: "Certificate-ready completion",
+                body: "Course completion can lead into certification once all lessons and tasks are done.",
               },
             ].map((feature) => (
               <div key={feature.title} className="rounded-3xl border border-border bg-card p-6 shadow-sm">
@@ -194,6 +194,35 @@ export default function HomePage() {
             {academyPrograms.slice(0, 3).map((program) => (
               <ProgramCard key={program.id} program={program} compact />
             ))}
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="rounded-[2rem] border border-border bg-card p-8 shadow-sm">
+              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
+                Explore Free Lessons
+              </div>
+              <h2 className="mt-3 font-display text-3xl font-bold">
+                Start with the beginner sections before spending money
+              </h2>
+              <p className="mt-4 text-muted-foreground">
+                Learners can preview the early sections in a course, read the roadmap,
+                understand the task flow, and decide whether the full course is right for them.
+              </p>
+            </div>
+            <div className="rounded-[2rem] border border-border bg-card p-8 shadow-sm">
+              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-accent">
+                Unlock Full Course Access
+              </div>
+              <h2 className="mt-3 font-display text-3xl font-bold">
+                Pay per course to unlock all sections, tasks, and certification
+              </h2>
+              <p className="mt-4 text-muted-foreground">
+                Once a learner pays for a course, the locked sections open up and the full
+                learning path becomes available from the dashboard.
+              </p>
+            </div>
           </div>
         </section>
 
