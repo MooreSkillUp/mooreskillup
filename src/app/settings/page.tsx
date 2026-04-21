@@ -1,31 +1,39 @@
 "use client";
 
 import { useState } from "react";
-import { Save } from "lucide-react";
+import { ImagePlus, Save } from "lucide-react";
 import { AppShell } from "../../components/dashboard/AppShell";
 import { Button } from "../../components/ui-kit/Button";
 import { Input } from "../../components/ui-kit/Input";
-import { useAuth } from "../../lib/auth";
-import { interests, pricingPlans, type Interest, type UserPlan } from "../../lib/mock-data";
+import { toDisplayName, useAuth } from "../../lib/auth";
+import {
+  interests,
+  pricingPlans,
+  trackOptionsByInterest,
+  type Interest,
+  type TrackName,
+  type UserPlan,
+} from "../../lib/mock-data";
 
 export default function SettingsPage() {
   const { user, updateUser } = useAuth();
+  const initialInterest = user?.selectedInterest ?? "Backend Development";
   const [form, setForm] = useState({
     username: user?.username ?? "",
     email: user?.email ?? "",
     plan: user?.plan ?? "free",
+    avatarUrl: user?.avatarUrl ?? "",
   });
-  const [selectedInterests, setSelectedInterests] = useState<Interest[]>(
-    user?.interests ?? ["Frontend"],
+  const [selectedInterest, setSelectedInterest] = useState<Interest>(initialInterest);
+  const [selectedTrack, setSelectedTrack] = useState<TrackName>(
+    user?.selectedTrack ?? trackOptionsByInterest[initialInterest][0],
   );
   const [saved, setSaved] = useState(false);
+  const trackOptions = trackOptionsByInterest[selectedInterest];
 
-  const toggleInterest = (interest: Interest) => {
-    setSelectedInterests((current) =>
-      current.includes(interest)
-        ? current.filter((item) => item !== interest)
-        : [...current, interest],
-    );
+  const chooseInterest = (interest: Interest) => {
+    setSelectedInterest(interest);
+    setSelectedTrack(trackOptionsByInterest[interest][0]);
   };
 
   const onProfile = (event: React.FormEvent) => {
@@ -33,9 +41,12 @@ export default function SettingsPage() {
     updateUser({
       username: form.username,
       email: form.email,
-      displayName: form.username,
+      displayName: toDisplayName(form.username),
       plan: form.plan as UserPlan,
-      interests: selectedInterests,
+      avatarUrl: form.avatarUrl || undefined,
+      interests: [selectedInterest],
+      selectedInterest,
+      selectedTrack,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -71,6 +82,12 @@ export default function SettingsPage() {
                 onChange={(event) => setForm({ ...form, email: event.target.value })}
               />
             </div>
+            <Input
+              label="Profile image URL"
+              value={form.avatarUrl}
+              placeholder="https://example.com/avatar.jpg"
+              onChange={(event) => setForm({ ...form, avatarUrl: event.target.value })}
+            />
 
             <div>
               <div className="text-sm font-medium text-foreground">Current plan</div>
@@ -93,15 +110,15 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <div className="text-sm font-medium text-foreground">Interests</div>
+              <div className="text-sm font-medium text-foreground">Main academy path</div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {interests.map((interest) => {
-                  const active = selectedInterests.includes(interest);
+                  const active = selectedInterest === interest;
                   return (
                     <button
                       key={interest}
                       type="button"
-                      onClick={() => toggleInterest(interest)}
+                      onClick={() => chooseInterest(interest)}
                       className={`rounded-full border px-4 py-2 text-sm transition ${
                         active
                           ? "border-primary bg-primary text-primary-foreground"
@@ -109,6 +126,35 @@ export default function SettingsPage() {
                       }`}
                     >
                       {interest}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-border bg-muted/30 p-5">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <ImagePlus className="h-4 w-4 text-primary" />
+                Preferred track
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {trackOptions.map((track) => {
+                  const active = selectedTrack === track;
+                  return (
+                    <button
+                      key={track}
+                      type="button"
+                      onClick={() => setSelectedTrack(track)}
+                      className={`rounded-2xl border px-4 py-4 text-left transition ${
+                        active
+                          ? "border-accent bg-accent/10 shadow-sm"
+                          : "border-border bg-card hover:border-primary/30"
+                      }`}
+                    >
+                      <div className="font-display text-lg font-bold">{track}</div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        This is the track the dashboard will prioritize first.
+                      </div>
                     </button>
                   );
                 })}

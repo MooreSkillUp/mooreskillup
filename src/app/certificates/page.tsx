@@ -129,7 +129,7 @@ export default function CertificatesPage() {
         <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
           Tip: certificates also unlock automatically when you finish all the
           lessons for a course.{" "}
-          <Link href="/courses" className="font-semibold text-primary hover:text-accent">
+          <Link href="/dashboard/courses" className="font-semibold text-primary hover:text-accent">
             See your courses -&gt;
           </Link>
         </div>

@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { GraduationCap, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { useState } from "react";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { Button } from "@/components/ui-kit/Button";
+import { getHomeRouteForUser, useAuth } from "@/lib/auth";
+import { publicEnv } from "@/lib/public-env";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -25,24 +28,14 @@ export function PublicShell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { isAuthenticated, user } = useAuth();
+  const dashboardHref = getHomeRouteForUser(user);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/75 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary-glow to-accent text-primary-foreground shadow-lg shadow-primary/20">
-              <GraduationCap className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="font-display text-lg font-bold tracking-tight">
-                MooreSkillUp
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Learning Academy
-              </div>
-            </div>
-          </Link>
+          <BrandLogo href="/" />
 
           <nav className="hidden items-center gap-1 lg:flex">
             {links.map((link) => {
@@ -66,16 +59,26 @@ export function PublicShell({
 
           <div className="hidden items-center gap-3 lg:flex">
             <ThemeToggle />
-            <Link href="/auth/login">
-              <Button variant="ghost" size="sm">
-                Login
-              </Button>
-            </Link>
-            <Link href="/auth/register">
-              <Button variant="accent" size="sm">
-                Get started
-              </Button>
-            </Link>
+            {isAuthenticated ? (
+              <Link href={dashboardHref}>
+                <Button variant="accent" size="sm">
+                  Open dashboard
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link href="/auth/login">
+                  <Button variant="ghost" size="sm">
+                    Login
+                  </Button>
+                </Link>
+                <Link href="/auth/register">
+                  <Button variant="accent" size="sm">
+                    Get started
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
           <button
@@ -102,16 +105,26 @@ export function PublicShell({
               ))}
               <div className="mt-2 flex items-center gap-2">
                 <ThemeToggle className="flex-1 justify-center" />
-                <Link href="/auth/login" className="flex-1" onClick={() => setOpen(false)}>
-                  <Button variant="ghost" className="w-full">
-                    Login
-                  </Button>
-                </Link>
-                <Link href="/auth/register" className="flex-1" onClick={() => setOpen(false)}>
-                  <Button variant="accent" className="w-full">
-                    Sign up
-                  </Button>
-                </Link>
+                {isAuthenticated ? (
+                  <Link href={dashboardHref} className="flex-1" onClick={() => setOpen(false)}>
+                    <Button variant="accent" className="w-full">
+                      Open dashboard
+                    </Button>
+                  </Link>
+                ) : (
+                  <>
+                    <Link href="/auth/login" className="flex-1" onClick={() => setOpen(false)}>
+                      <Button variant="ghost" className="w-full">
+                        Login
+                      </Button>
+                    </Link>
+                    <Link href="/auth/register" className="flex-1" onClick={() => setOpen(false)}>
+                      <Button variant="accent" className="w-full">
+                        Sign up
+                      </Button>
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -127,6 +140,17 @@ export function PublicShell({
               <div className="font-display text-lg font-bold">MooreSkillUp</div>
               <p className="mt-1 max-w-md text-sm text-muted-foreground">
                 Premium learning experiences for builders, designers, and modern product teams.
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Produced by{" "}
+                <a
+                  href={publicEnv.moretechUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-primary hover:text-accent"
+                >
+                  MooreTech
+                </a>
               </p>
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">

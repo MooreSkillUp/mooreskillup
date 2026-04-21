@@ -126,6 +126,10 @@ export interface PricingPlan {
   features: string[];
   cta: string;
   highlight?: boolean;
+  audience?: string;
+  accessSummary?: string;
+  supportSummary?: string;
+  certificateSummary?: string;
 }
 
 export interface QuizShopItem {
@@ -160,6 +164,39 @@ export interface AcademyProgram {
   cover: string;
   iconLabel: string;
   branches: LearningBranch[];
+}
+
+export interface TeacherUploadBlueprint {
+  id: string;
+  title: string;
+  status: "Draft" | "Review" | "Published";
+  learners: number;
+  completionRate: number;
+  program: Interest;
+  track: TrackName;
+  tags: string[];
+  roadmap: string[];
+  modules: Array<{
+    id: string;
+    title: string;
+    weekLabel: string;
+    lessons: Array<{
+      id: string;
+      title: string;
+      format: "video" | "text";
+      resource: string;
+    }>;
+    assessment: string;
+    project: string;
+  }>;
+}
+
+export interface TeacherProfileOption {
+  id: string;
+  name: string;
+  program: Interest;
+  track: TrackName;
+  focus: string;
 }
 
 export const interests: Interest[] = [
@@ -1206,43 +1243,61 @@ export const pricingPlans: PricingPlan[] = [
     id: "free",
     title: "Free",
     price: "$0",
-    tagline: "Explore the academy",
-    description: "Great for trying selected public and weekly-unlocked courses before committing.",
+    tagline: "Explore before you commit",
+    description:
+      "Ideal for new learners who want to test the learning experience, preview roadmaps, and join selected weekly unlocks before upgrading.",
     cta: "Start free",
+    audience: "Best for new learners comparing paths",
+    accessSummary: "Access public programs, roadmap previews, and selected free weekly lessons only.",
+    supportSummary: "Basic dashboard, notifications, and standard support.",
+    certificateSummary: "Certificate previews are visible, but full course certificates unlock when you upgrade and complete the path.",
     features: [
-      "Public course catalog access",
+      "Public catalog and track roadmap preview",
       "Selected free weekly course unlocks",
-      "Basic dashboard and notifications",
-      "Limited quiz attempts",
+      "Student dashboard with progress overview",
+      "Limited quiz attempts and standard notifications",
+      "Wishlist and explore-more course recommendations",
     ],
   },
   {
     id: "pro",
     title: "Pro",
     price: "$29/mo",
-    tagline: "Build momentum faster",
-    description: "Unlock student content, quizzes, and project-based learning with strong progression support.",
+    tagline: "Full learning access",
+    description:
+      "Built for active learners who want all lessons, all weekly assessments, structured project work, and a fully personalized dashboard experience.",
     cta: "Go Pro",
     highlight: true,
+    audience: "Best for learners ready to commit to one or more tracks",
+    accessSummary: "Unlock all student courses, full modules, roadmap resources, and submissions.",
+    supportSummary: "Priority support, richer notifications, and stronger study guidance.",
+    certificateSummary: "Generate certificates after completing the full course and weekly project requirements.",
     features: [
-      "Full learner course access",
-      "All weekly lessons and assessments",
-      "Quiz Shop rewards and certificates",
-      "Priority support and curated paths",
+      "Full learner course access across all programs",
+      "All weekly lessons, roadmap resources, and assessments",
+      "Weekly project submissions and certificate eligibility",
+      "Quiz Shop rewards and curated track recommendations",
+      "Priority support and improved progress analytics",
     ],
   },
   {
     id: "premium",
     title: "Premium",
     price: "$79/mo",
-    tagline: "Career acceleration",
-    description: "Designed for serious learners who want mentorship, deeper accountability, and elite project review.",
+    tagline: "Career acceleration and mentorship",
+    description:
+      "Designed for serious learners who want mentor-style reviews, capstone accountability, premium support, and stronger proof-of-skill outputs.",
     cta: "Join Premium",
+    audience: "Best for professionals building portfolio-ready outcomes",
+    accessSummary: "Everything in Pro plus deeper feedback loops, premium cohorts, and advanced pathway access.",
+    supportSummary: "Mentor-style office hours, portfolio reviews, and premium learner support.",
+    certificateSummary: "Premium certificate experience with capstone review support and advanced completion recognition.",
     features: [
       "Everything in Pro",
       "Mentor-style office-hour support",
-      "Portfolio and capstone review",
+      "Portfolio, capstone, and project review",
       "Advanced learning paths and leadership tracks",
+      "Priority cohort events and premium accountability",
     ],
   },
 ];
@@ -1324,28 +1379,118 @@ export const notifications: NotificationItem[] = [
   },
 ];
 
-export const teacherUploads = [
+export const teacherUploads: TeacherUploadBlueprint[] = [
   {
     id: "tu-1",
-    title: "Design critique workflow",
+    title: "Backend with Python API Builder",
     status: "Draft",
-    learners: 0,
-    completionRate: 0,
+    learners: 42,
+    completionRate: 38,
+    program: "Backend Development",
+    track: "Backend with Python",
+    tags: ["python", "django", "api", "backend"],
+    roadmap: [
+      "Python foundations and backend thinking",
+      "REST API design and route structure",
+      "Django REST workflow and authentication",
+      "Weekly submission flow and capstone delivery",
+    ],
+    modules: [
+      {
+        id: "tu-1-m1",
+        title: "Python backend foundations",
+        weekLabel: "Week 1",
+        lessons: [
+          { id: "tu-1-m1-l1", title: "Python service setup", format: "video", resource: "https://youtube.com/watch?v=python-setup" },
+          { id: "tu-1-m1-l2", title: "Request-response primer", format: "text", resource: "Guided reading notes for backend request flow." },
+        ],
+        assessment: "Short quiz on backend concepts",
+        project: "Submit a Python utility service.",
+      },
+      {
+        id: "tu-1-m2",
+        title: "Django REST workflow",
+        weekLabel: "Week 2",
+        lessons: [
+          { id: "tu-1-m2-l1", title: "Django models and serializers", format: "video", resource: "https://youtube.com/watch?v=django-models" },
+          { id: "tu-1-m2-l2", title: "Permissions and auth notes", format: "text", resource: "Reference sheet for JWT and permissions." },
+        ],
+        assessment: "API endpoint assessment",
+        project: "Build and submit a learner profile API.",
+      },
+    ],
   },
   {
     id: "tu-2",
-    title: "Advanced API versioning",
+    title: "Frontend React Studio",
     status: "Published",
     learners: 182,
     completionRate: 67,
+    program: "Web Development",
+    track: "React and Modern UI",
+    tags: ["react", "nextjs", "frontend", "ui"],
+    roadmap: [
+      "UI foundations and component architecture",
+      "State, props, and modern rendering patterns",
+      "Responsive product interfaces",
+      "Capstone portfolio build",
+    ],
+    modules: [
+      {
+        id: "tu-2-m1",
+        title: "React foundations",
+        weekLabel: "Week 1",
+        lessons: [
+          { id: "tu-2-m1-l1", title: "Component anatomy", format: "video", resource: "https://youtube.com/watch?v=react-components" },
+          { id: "tu-2-m1-l2", title: "Props and state cheatsheet", format: "text", resource: "Reference content for props, state, and events." },
+        ],
+        assessment: "React fundamentals quiz",
+        project: "Build a profile card interface.",
+      },
+      {
+        id: "tu-2-m2",
+        title: "Modern UI delivery",
+        weekLabel: "Week 2",
+        lessons: [
+          { id: "tu-2-m2-l1", title: "Layout systems and responsiveness", format: "video", resource: "https://youtube.com/watch?v=responsive-ui" },
+          { id: "tu-2-m2-l2", title: "UI review checklist", format: "text", resource: "Design QA and frontend review checklist." },
+        ],
+        assessment: "Responsive dashboard check",
+        project: "Ship a responsive dashboard section.",
+      },
+    ],
+  },
+];
+
+export const teacherProfileOptions: TeacherProfileOption[] = [
+  {
+    id: "tp-1",
+    name: "Mina Duarte",
+    program: "Graphics and Design",
+    track: "UI/UX Design",
+    focus: "Product design systems and critique workflows",
+  },
+  {
+    id: "tp-2",
+    name: "Ada Morgan",
+    program: "Backend Development",
+    track: "Backend with Python",
+    focus: "Django APIs and learner backend architecture",
+  },
+  {
+    id: "tp-3",
+    name: "Tomi Bello",
+    program: "Engineering",
+    track: "SolidWorks",
+    focus: "Engineering documentation and 3D modeling workflows",
   },
 ];
 
 export const adminUsers = [
-  { id: "u-11", name: "Zainab Okon", plan: "Free", role: "Student", courses: 2 },
-  { id: "u-12", name: "Chinedu Grey", plan: "Pro", role: "Student", courses: 5 },
-  { id: "u-13", name: "Mina Duarte", plan: "Premium", role: "Teacher", courses: 3 },
-  { id: "u-14", name: "Ada Morgan", plan: "Premium", role: "Admin", courses: 6 },
+  { id: "u-11", name: "Zainab Okon", plan: "Free", role: "Student", courses: 2, program: "Web Development", track: "Frontend Development" },
+  { id: "u-12", name: "Chinedu Grey", plan: "Pro", role: "Student", courses: 5, program: "Backend Development", track: "Backend with Python" },
+  { id: "u-13", name: "Mina Duarte", plan: "Premium", role: "Teacher", courses: 3, program: "Graphics and Design", track: "UI/UX Design" },
+  { id: "u-14", name: "Ada Morgan", plan: "Premium", role: "Admin", courses: 6, program: "Backend Development", track: "Backend with Python" },
 ];
 
 export function findLesson(lessonId: string): { lesson: Lesson; course: Course; module: Module } | null {
@@ -1402,4 +1547,37 @@ export function canAccessCourse(course: Course, plan: UserPlan, day = getTodayNa
   }
 
   return { allowed: true, reason: null as string | null };
+}
+
+export function getLearnerDashboardCourses(selectedInterests: Interest[], plan: UserPlan) {
+  const ordered = getCoursesByInterest(selectedInterests);
+  const current = ordered.filter((course) => course.completedLessons > 0);
+  const recommended = ordered.filter((course) => course.completedLessons === 0).slice(0, 4);
+  const unlocked = ordered.filter((course) => canAccessCourse(course, plan).allowed);
+  const locked = ordered.filter((course) => !canAccessCourse(course, plan).allowed);
+
+  return {
+    current: current.length ? current : ordered.slice(0, 2),
+    recommended,
+    unlocked,
+    locked,
+  };
+}
+
+export function getPlanComparisonNotes(plan: PricingPlan) {
+  return [plan.accessSummary, plan.supportSummary, plan.certificateSummary].filter(Boolean) as string[];
+}
+
+export function getCourseRoadmap(course: Course) {
+  return course.modules.map(
+    (module) => `Week ${module.week}: ${module.title} - ${module.assessment.type === "project" ? "project delivery" : "assessment checkpoint"}`,
+  );
+}
+
+export function getCoursePrerequisites(course: Course) {
+  return [
+    `Commit to the ${course.track} pathway and weekly study schedule.`,
+    `Be ready to work with ${course.tags.slice(0, 3).join(", ")} across guided lessons and practice.`,
+    "Submit the weekly assessment or project before moving into the capstone phase.",
+  ];
 }

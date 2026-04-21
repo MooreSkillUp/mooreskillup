@@ -5,20 +5,33 @@ import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Sidebar } from "./Sidebar";
 import { TopNavbar } from "./TopNavbar";
-import { useAuth } from "../../lib/auth";
+import { getHomeRouteForUser, useAuth } from "../../lib/auth";
+import type { UserRole } from "../../lib/mock-data";
 
-export function AppShell({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
+export function AppShell({
+  children,
+  allowedRoles,
+}: {
+  children: ReactNode;
+  allowedRoles?: UserRole[];
+}) {
+  const { isAuthenticated, user } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push("/auth/login");
+      return;
     }
-  }, [isAuthenticated, router]);
+
+    if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+      router.push(getHomeRouteForUser(user));
+    }
+  }, [allowedRoles, isAuthenticated, router, user]);
 
   if (!isAuthenticated) return null;
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) return null;
 
   return (
     <div className="flex min-h-screen w-full bg-background">

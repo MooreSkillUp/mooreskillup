@@ -5,7 +5,7 @@ import Link from "next/link";
 import { CheckCircle2, Sparkles } from "lucide-react";
 import { PublicShell } from "@/components/marketing/PublicShell";
 import { Button } from "@/components/ui-kit/Button";
-import { pricingPlans } from "@/lib/mock-data";
+import { getPlanComparisonNotes, pricingPlans } from "@/lib/mock-data";
 
 export default function PricingPage() {
   return (
@@ -46,6 +46,10 @@ export default function PricingPage() {
               <p className="mt-4 text-sm leading-6 text-muted-foreground">
                 {plan.description}
               </p>
+              <div className="mt-5 rounded-2xl bg-muted/40 p-4 text-sm text-muted-foreground">
+                <div className="font-medium text-foreground">{plan.audience}</div>
+                <div className="mt-2">{plan.accessSummary}</div>
+              </div>
 
               <Link href="/auth/register" className="mt-8 block">
                 <Button variant={plan.highlight ? "accent" : "outline"} className="w-full">
@@ -61,8 +65,39 @@ export default function PricingPage() {
                   </div>
                 ))}
               </div>
+
+              <div className="mt-6 space-y-2 rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+                {getPlanComparisonNotes(plan).map((note) => (
+                  <div key={note}>{note}</div>
+                ))}
+              </div>
             </motion.div>
           ))}
+        </div>
+
+        <div className="mt-12 rounded-[2rem] border border-border bg-card p-8 shadow-sm">
+          <div className="max-w-3xl">
+            <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
+              Plan logic
+            </div>
+            <h2 className="mt-3 font-display text-3xl font-bold">
+              How free, Pro, and Premium should behave across the platform
+            </h2>
+            <div className="mt-5 space-y-3 text-sm leading-6 text-muted-foreground">
+              <p>
+                Free should focus on discovery: roadmap previews, selected unlock days, and enough
+                product depth to help a learner confidently choose a path.
+              </p>
+              <p>
+                Pro should be the real studying plan: complete courses, weekly submissions,
+                assessments, project delivery, and certificate eligibility.
+              </p>
+              <p>
+                Premium should add human support: review loops, mentor-style guidance, and stronger
+                capstone accountability rather than just more static content.
+              </p>
+            </div>
+          </div>
         </div>
       </main>
     </PublicShell>

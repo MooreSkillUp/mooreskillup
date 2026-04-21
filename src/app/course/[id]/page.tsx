@@ -3,30 +3,35 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, BookOpen, FileQuestion, ArrowRight } from "lucide-react";
+import { ChevronDown, BookOpen, FileQuestion, ArrowRight, Lock } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "../../../components/dashboard/AppShell";
 import { LessonCard } from "../../../components/dashboard/LessonCard";
 import { Button } from "../../../components/ui-kit/Button";
 import { ProgressBar } from "../../../components/ui-kit/ProgressBar";
-import { courses } from "../../../lib/mock-data";
+import { useAuth } from "../../../lib/auth";
+import {
+  canAccessCourse,
+  courses,
+  getCoursePrerequisites,
+  getCourseRoadmap,
+} from "../../../lib/mock-data";
 import { quizzesForCourse } from "../../../lib/quiz-data";
 import { cn } from "../../../lib/utils";
 
 export default function CoursePage() {
   const params = useParams();
+  const { user } = useAuth();
   const courseId = params.id as string;
   const course = courses.find((item) => item.id === courseId);
-  const [openModule, setOpenModule] = useState<string | null>(
-    course?.modules[0]?.id ?? null,
-  );
+  const [openModule, setOpenModule] = useState<string | null>(course?.modules[0]?.id ?? null);
 
   if (!course) {
     return (
       <AppShell>
-        <div className="mx-auto max-w-md text-center">
+          <div className="mx-auto max-w-md text-center">
           <h1 className="font-display text-2xl font-bold">Course not found</h1>
-          <Link href="/courses">
+          <Link href="/dashboard/courses">
             <Button variant="outline" className="mt-4">
               Back to courses
             </Button>
@@ -36,8 +41,47 @@ export default function CoursePage() {
     );
   }
 
+  const access = canAccessCourse(course, user?.plan ?? "free");
+
+  if (!access.allowed) {
+    return (
+      <AppShell>
+        <div className="space-y-6">
+          <div
+            className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${course.cover} p-6 text-white shadow-lg sm:p-8`}
+          >
+            <BookOpen className="absolute right-6 top-6 h-20 w-20 text-white/15" />
+            <div className="text-xs font-medium uppercase tracking-wider text-white/80">
+              {course.interest} | {course.track}
+            </div>
+            <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">{course.title}</h1>
+            <p className="mt-2 max-w-2xl text-white/85">{course.description}</p>
+          </div>
+
+          <div className="mx-auto max-w-2xl rounded-[2rem] border border-border bg-card p-8 text-center shadow-sm">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+              <Lock className="h-6 w-6" />
+            </div>
+            <h2 className="mt-5 font-display text-3xl font-bold">This course is not unlocked yet</h2>
+            <p className="mt-3 text-muted-foreground">{access.reason}</p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <Link href="/settings">
+                <Button variant="accent">Update plan</Button>
+              </Link>
+              <Link href="/dashboard/courses">
+                <Button variant="outline">Browse more courses</Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   const pct = Math.round((course.completedLessons / course.totalLessons) * 100);
   const courseQuizzes = quizzesForCourse(course.id);
+  const roadmap = getCourseRoadmap(course);
+  const prerequisites = getCoursePrerequisites(course);
 
   return (
     <AppShell>
@@ -47,11 +91,9 @@ export default function CoursePage() {
         >
           <BookOpen className="absolute right-6 top-6 h-20 w-20 text-white/15" />
           <div className="text-xs font-medium uppercase tracking-wider text-white/80">
-            Course
+            {course.interest} | {course.track}
           </div>
-          <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">
-            {course.title}
-          </h1>
+          <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">{course.title}</h1>
           <p className="mt-2 max-w-2xl text-white/85">{course.description}</p>
           <div className="mt-5 max-w-md">
             <ProgressBar
@@ -64,9 +106,7 @@ export default function CoursePage() {
         <div className="space-y-3">
           {course.modules.map((module) => {
             const isOpen = openModule === module.id;
-            const done = module.lessons.filter(
-              (lesson) => lesson.status === "completed",
-            ).length;
+            const done = module.lessons.filter((lesson) => lesson.status === "completed").length;
 
             return (
               <div
@@ -81,9 +121,7 @@ export default function CoursePage() {
                     <div className="text-xs font-semibold uppercase tracking-wider text-accent">
                       Week {module.week}
                     </div>
-                    <div className="mt-0.5 font-display text-lg font-semibold">
-                      {module.title}
-                    </div>
+                    <div className="mt-0.5 font-display text-lg font-semibold">{module.title}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {done}/{module.lessons.length} lessons completed
                     </div>
@@ -117,6 +155,50 @@ export default function CoursePage() {
           })}
         </div>
 
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="font-display text-2xl font-bold">Roadmap and prerequisites</h2>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-border bg-background p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                Before you start
+              </div>
+              <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                {prerequisites.map((item) => (
+                  <div key={item}>{item}</div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-border bg-background p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                Course roadmap
+              </div>
+              <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                {roadmap.map((item) => (
+                  <div key={item}>{item}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="font-display text-2xl font-bold">Weekly assessment flow</h2>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {course.modules.map((module) => (
+              <div key={module.id} className="rounded-2xl border border-border bg-background p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                  Week {module.week}
+                </div>
+                <div className="mt-2 font-display text-xl font-bold">{module.title}</div>
+                <p className="mt-2 text-sm text-muted-foreground">{module.assessment.description}</p>
+                <div className="mt-3 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                  {module.assessment.type === "project" ? "Capstone project" : "Weekly assessment"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {courseQuizzes.length > 0 && (
           <div>
             <div className="mb-3 flex items-center gap-2">
@@ -131,11 +213,9 @@ export default function CoursePage() {
                   className="group flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-accent hover:shadow-md"
                 >
                   <div className="min-w-0">
-                    <div className="font-display text-base font-semibold">
-                      {quiz.title}
-                    </div>
+                    <div className="font-display text-base font-semibold">{quiz.title}</div>
                     <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {quiz.questions.length} questions · +{quiz.pointsReward} pts
+                      {quiz.questions.length} questions | +{quiz.pointsReward} pts
                     </div>
                   </div>
                   <ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-accent" />

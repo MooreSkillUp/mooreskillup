@@ -4,8 +4,8 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import {
   ArrowRight,
+  Award,
   BarChart3,
-  BookOpen,
   CheckCircle2,
   MessageCircleMore,
   ShieldCheck,
@@ -14,9 +14,11 @@ import {
   Trophy,
   Zap,
 } from "lucide-react";
+import { ProgramCard } from "@/components/marketing/ProgramCard";
 import { PublicShell } from "@/components/marketing/PublicShell";
 import { Button } from "@/components/ui-kit/Button";
-import { courses, faqItems, pricingPlans, quizShopItems } from "@/lib/mock-data";
+import { academyPrograms, faqItems, pricingPlans, quizShopItems } from "@/lib/mock-data";
+import { publicEnv } from "@/lib/public-env";
 
 export default function HomePage() {
   return (
@@ -76,7 +78,7 @@ export default function HomePage() {
                 {[
                   { label: "Learners", value: "4.2k+" },
                   { label: "Completion boost", value: "68%" },
-                  { label: "Live tracks", value: "12" },
+                  { label: "Academy programs", value: `${academyPrograms.length}` },
                 ].map((item) => (
                   <div key={item.label}>
                     <div className="font-display text-3xl font-bold">{item.value}</div>
@@ -148,7 +150,7 @@ export default function HomePage() {
           <div className="grid gap-5 md:grid-cols-3">
             {[
               {
-                icon: BookOpen,
+                icon: ShieldCheck,
                 title: "Curated learning tracks",
                 body: "Courses grouped by real learner interests, not generic categories.",
               },
@@ -181,7 +183,7 @@ export default function HomePage() {
                 Course preview
               </div>
               <h2 className="mt-3 font-display text-4xl font-bold tracking-tight">
-                High-signal programs built around modern product roles
+                Public programs that show exactly what the academy offers
               </h2>
             </div>
             <Link href="/courses" className="hidden text-sm font-semibold text-primary md:inline-flex">
@@ -189,35 +191,8 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="grid gap-6 lg:grid-cols-3">
-            {courses.slice(0, 3).map((course) => (
-              <div key={course.id} className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
-                <div className={`bg-gradient-to-br ${course.cover} p-6 text-white`}>
-                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.25em] text-white/80">
-                    <span>{course.interest}</span>
-                    <span>{course.level}</span>
-                  </div>
-                  <h3 className="mt-8 font-display text-2xl font-bold">{course.title}</h3>
-                  <p className="mt-3 text-sm text-white/80">{course.description}</p>
-                </div>
-                <div className="space-y-4 p-6">
-                  <div className="flex flex-wrap gap-2">
-                    {course.tags.map((tag) => (
-                      <span key={tag} className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{course.learners} learners</span>
-                    <span className="font-semibold text-primary">{course.rating} / 5</span>
-                  </div>
-                  <Link href="/auth/register">
-                    <Button variant="outline" className="w-full">
-                      Join this track
-                    </Button>
-                  </Link>
-                </div>
-              </div>
+            {academyPrograms.slice(0, 3).map((program) => (
+              <ProgramCard key={program.id} program={program} compact />
             ))}
           </div>
         </section>
@@ -294,6 +269,64 @@ export default function HomePage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="grid gap-6 lg:grid-cols-[1fr_0.95fr]">
+            <div className="rounded-[2rem] border border-border bg-card p-8 shadow-sm">
+              <div className="inline-flex items-center gap-2 rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+                <Award className="h-3.5 w-3.5" />
+                Certification
+              </div>
+              <h2 className="mt-5 font-display text-4xl font-bold tracking-tight">
+                Finish strong and earn a certificate learners can actually show off
+              </h2>
+              <p className="mt-4 max-w-2xl text-muted-foreground">
+                Certificates are positioned as proof of completing lessons, weekly projects, and
+                the final capstone flow. Premium learners also get stronger review support before
+                claiming completion.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link href="/pricing">
+                  <Button variant="accent">Compare plan access</Button>
+                </Link>
+                <Link href="/auth/register">
+                  <Button variant="outline">Start learning</Button>
+                </Link>
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-border bg-gradient-to-br from-card to-accent-soft p-6 shadow-sm">
+              <div className="rounded-[1.5rem] border-[8px] border-primary/90 bg-white p-6">
+                <div className="rounded-[1.2rem] border border-accent px-6 py-8 text-center">
+                  <div className="text-xs font-semibold uppercase tracking-[0.35em] text-primary">
+                    MooreSkillUp x MooreTech
+                  </div>
+                  <div className="mt-4 font-display text-3xl font-bold text-primary">
+                    Certificate of Completion
+                  </div>
+                  <div className="mt-4 text-xs uppercase tracking-[0.25em] text-muted-foreground">
+                    Awarded to
+                  </div>
+                  <div className="mt-2 font-display text-2xl font-bold">Your learner profile</div>
+                  <div className="mt-4 text-sm text-muted-foreground">
+                    For completing a roadmap, weekly assessments, project delivery, and capstone review.
+                  </div>
+                  <div className="mt-6 text-sm font-semibold text-accent">
+                    Produced with certification support from MooreTech
+                  </div>
+                </div>
+              </div>
+              <a
+                href={publicEnv.moretechUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex text-sm font-semibold text-primary"
+              >
+                Visit MooreTech
+              </a>
             </div>
           </div>
         </section>

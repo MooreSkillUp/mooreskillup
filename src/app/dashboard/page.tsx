@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Flame, ShoppingBag, Sparkles, Trophy } from "lucide-react";
+import { Compass, Flame, ShoppingBag, Sparkles, Trophy } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "../../components/dashboard/AppShell";
 import { CourseCard } from "../../components/dashboard/CourseCard";
@@ -9,8 +9,10 @@ import { Button } from "../../components/ui-kit/Button";
 import { ProgressBar } from "../../components/ui-kit/ProgressBar";
 import { useAuth } from "../../lib/auth";
 import {
+  academyPrograms,
   announcements,
-  getCoursesByInterest,
+  getLearnerDashboardCourses,
+  getPlanComparisonNotes,
   notifications,
   pricingPlans,
   quizShopItems,
@@ -20,12 +22,15 @@ import {
 export default function DashboardPage() {
   const { user } = useAuth();
   const today = todaysLesson();
-  const personalized = getCoursesByInterest(user?.interests ?? []);
-  const featuredCourses = personalized.slice(0, 3);
-  const main = personalized[0];
+  const personalized = getLearnerDashboardCourses(user?.interests ?? [], user?.plan ?? "free");
+  const featuredCourses = personalized.recommended.slice(0, 2);
+  const main = personalized.current[0];
   const pct = Math.round((main.completedLessons / main.totalLessons) * 100);
   const currentPlan = pricingPlans.find((plan) => plan.id === user?.plan);
+  const currentPlanNotes = currentPlan ? getPlanComparisonNotes(currentPlan) : [];
   const unreadNotifications = notifications.filter((item) => !item.read);
+  const activeProgram = academyPrograms.find((program) => program.title === user?.selectedInterest);
+  const activeBranch = activeProgram?.branches.find((branch) => branch.title === user?.selectedTrack);
 
   return (
     <AppShell>
@@ -44,8 +49,8 @@ export default function DashboardPage() {
                 {user?.displayName}, your next best learning move is ready.
               </h1>
               <p className="mt-4 max-w-2xl text-white/85">
-                Built around your interests in {user?.interests.join(", ")} and
-                your {user?.plan} plan.
+                Built around your {user?.selectedInterest} path, your {user?.selectedTrack}
+                track, and your {user?.plan} plan.
               </p>
 
               <div className="mt-8 flex flex-wrap gap-3">
@@ -70,8 +75,8 @@ export default function DashboardPage() {
                     Open track
                   </Button>
                 </Link>
-                <Link href="/quiz-shop">
-                  <Button variant="accent">Quiz Shop</Button>
+                <Link href="/dashboard/courses">
+                  <Button variant="accent">My courses</Button>
                 </Link>
               </div>
             </div>
@@ -93,22 +98,51 @@ export default function DashboardPage() {
                 </Link>
               </div>
               <p className="mt-3 text-sm text-muted-foreground">
-                Week {today.module.week} · {today.lesson.duration} · from {today.course.title}
+                Week {today.module.week} | {today.lesson.duration} | from {today.course.title}
               </p>
             </div>
+
+            {activeProgram && (
+              <div className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <Compass className="h-5 w-5 text-primary" />
+                  <h2 className="font-display text-xl font-bold">Your academy path</h2>
+                </div>
+                <div className="mt-4 rounded-2xl bg-muted/50 p-4">
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Selected program
+                  </div>
+                  <div className="mt-2 font-display text-2xl font-bold">{activeProgram.title}</div>
+                  <p className="mt-2 text-sm text-muted-foreground">{activeProgram.description}</p>
+                </div>
+                {activeBranch && (
+                  <div className="mt-4 rounded-2xl border border-border bg-background p-4">
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      Active track
+                    </div>
+                    <div className="mt-2 font-display text-xl font-bold">{activeBranch.title}</div>
+                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                      {activeBranch.weeklyFocus.slice(0, 4).map((item) => (
+                        <div key={item}>{item}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div>
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-                    Interest-based picks
+                    Continue learning
                   </div>
                   <h2 className="mt-2 font-display text-2xl font-bold">
-                    Courses matched to your selected interests
+                    Recommended next inside your dashboard
                   </h2>
                 </div>
-                <Link href="/courses" className="text-sm font-semibold text-primary hover:text-accent">
-                  Browse all
+                <Link href="/dashboard/courses" className="text-sm font-semibold text-primary hover:text-accent">
+                  Open my courses
                 </Link>
               </div>
               <div className="grid gap-5 lg:grid-cols-2">
@@ -131,6 +165,11 @@ export default function DashboardPage() {
                 </div>
                 <div className="mt-2 font-display text-3xl font-bold">{currentPlan?.title}</div>
                 <p className="mt-2 text-sm text-muted-foreground">{currentPlan?.description}</p>
+                <div className="mt-4 space-y-2 text-sm text-muted-foreground">
+                  {currentPlanNotes.map((note) => (
+                    <div key={note}>{note}</div>
+                  ))}
+                </div>
               </div>
             </div>
 

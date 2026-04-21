@@ -21,6 +21,7 @@ export interface AuthUser {
   displayName: string;
   email: string;
   avatar: string;
+  avatarUrl?: string;
   plan: UserPlan;
   role: UserRole;
   interests: Interest[];
@@ -42,8 +43,8 @@ interface RegisterPayload {
 interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
-  login: (email: string) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  login: (email: string) => Promise<AuthUser>;
+  register: (payload: RegisterPayload) => Promise<AuthUser>;
   logout: () => void;
   updateUser: (patch: Partial<AuthUser>) => void;
   toggleWishlist: (courseId: string) => void;
@@ -52,11 +53,21 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const STORAGE_KEY = "mooreskillup.user";
 
-function toDisplayName(username: string) {
+export function toDisplayName(username: string) {
   return username
     .split(/[._]/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+export function getHomeRouteForRole(role: UserRole = "student") {
+  if (role === "admin") return "/admin/dashboard";
+  if (role === "teacher") return "/teacher/dashboard";
+  return "/dashboard";
+}
+
+export function getHomeRouteForUser(user?: Pick<AuthUser, "role"> | null) {
+  return getHomeRouteForRole(user?.role ?? "student");
 }
 
 function inferRoleFromEmail(email: string): UserRole {
@@ -107,6 +118,7 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
     displayName: raw.displayName ?? mockUser.displayName,
     email: raw.email ?? mockUser.email,
     avatar: raw.avatar ?? mockUser.avatar,
+    avatarUrl: raw.avatarUrl,
     plan: raw.plan ?? mockUser.plan,
     role: raw.role ?? mockUser.role,
     interests:
@@ -146,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(STORAGE_KEY);
       }
     }
+    return normalized;
   };
 
   const login = useCallback(async (email: string) => {
@@ -153,12 +166,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const username = email.split("@")[0] || mockUser.username;
     const focus = inferLearningFocus(email);
 
-    persist({
+    return persist({
       id: mockUser.id,
       username,
       displayName: toDisplayName(username),
       email,
       avatar: username.slice(0, 2).toUpperCase(),
+      avatarUrl: undefined,
       plan:
         email.includes("premium") ? "premium" : email.includes("pro") ? "pro" : mockUser.plan,
       role: inferRoleFromEmail(email),
@@ -166,24 +180,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       wishlist: mockUser.wishlist,
       selectedInterest: focus.selectedInterest,
       selectedTrack: focus.selectedTrack,
-    });
+    })!;
   }, []);
 
   const register = useCallback(async (payload: RegisterPayload) => {
     await new Promise((resolve) => setTimeout(resolve, 400));
-    persist({
+    return persist({
       id: mockUser.id,
       username: payload.username,
       displayName: toDisplayName(payload.username),
       email: payload.email,
       avatar: payload.username.slice(0, 2).toUpperCase(),
+      avatarUrl: undefined,
       plan: payload.plan ?? "free",
       role: payload.role ?? "student",
       interests: payload.interests.length ? payload.interests : [payload.selectedInterest],
       wishlist: [],
       selectedInterest: payload.selectedInterest,
       selectedTrack: payload.selectedTrack,
-    });
+    })!;
   }, []);
 
   const logout = useCallback(() => persist(null), []);

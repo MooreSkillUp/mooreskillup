@@ -33,7 +33,7 @@ export default function QuizPage() {
       <AppShell>
         <div className="mx-auto max-w-md text-center">
           <h1 className="font-display text-2xl font-bold">Quiz not found</h1>
-          <Link href="/courses">
+          <Link href="/dashboard/courses">
             <Button variant="outline" className="mt-4">
               Back to courses
             </Button>

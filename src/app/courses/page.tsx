@@ -27,7 +27,7 @@ export default function CoursesPage() {
           </h1>
           <p className="mt-4 max-w-3xl text-lg text-muted-foreground">
             Explore the public catalog first. Progress belongs inside a learner account,
-            but this page shows the programs, tracks, tools, and week-by-week structure
+            but this page shows the programs, tracks, tools, roadmap direction, and module structure
             available on the platform.
           </p>
 
