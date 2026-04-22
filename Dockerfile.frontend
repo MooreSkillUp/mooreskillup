@@ -1,0 +1,17 @@
+FROM oven/bun:1-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json bun.lockb ./
+RUN bun install
+
+# Copy app files
+COPY src ./src
+COPY public ./public
+COPY next.config.mjs tsconfig.json components.json ./
+COPY postcss.config.js tailwind.config.js ./
+
+EXPOSE 3000
+
+CMD ["bun", "run", "dev"]
