@@ -93,7 +93,7 @@ export function generateCertificatePdf({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(120, 120, 120);
-  doc.text("Instructor", 190, footerY + 34, { align: "center" });
+  doc.text("Platform", 190, footerY + 34, { align: "center" });
   doc.text("Date Issued", w - 190, footerY + 34, { align: "center" });
 
   // Certificate ID

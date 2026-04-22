@@ -16,11 +16,10 @@ export default function TeacherRegisterPage() {
   const { register } = useAuth();
   const router = useRouter();
   const [form, setForm] = useState({
-    username: "",
+    displayName: "",
     email: "",
     password: "",
     confirm: "",
-    teachingFocus: "",
   });
   const [selectedInterest, setSelectedInterest] = useState<Interest>("Web Development");
   const [selectedTrack, setSelectedTrack] = useState<TrackName>("React and Modern UI");
@@ -45,8 +44,13 @@ export default function TeacherRegisterPage() {
       return;
     }
     setLoading(true);
+    const username = form.displayName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ".")
+      .replace(/^\.+|\.+$/g, "");
     const nextUser = await register({
-      username: form.username,
+      username,
       email: form.email,
       interests: [selectedInterest],
       selectedInterest,
@@ -97,28 +101,28 @@ export default function TeacherRegisterPage() {
 
           <h2 className="font-display text-3xl font-bold tracking-tight">Create teacher account</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Use this as the admin-facing onboarding form for new teachers.
+            Use the same polished registration structure as student onboarding, but for admin-led
+            teacher creation and ownership assignment.
           </p>
 
           <form onSubmit={onSubmit} className="mt-8 space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Input label="Username" value={form.username} onChange={setField("username")} required />
+              <Input
+                label="Teacher display name"
+                value={form.displayName}
+                onChange={setField("displayName")}
+                placeholder="Amina Yusuf"
+                required
+              />
               <Input label="Email" type="email" value={form.email} onChange={setField("email")} required />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Input label="Password" type="password" value={form.password} onChange={setField("password")} required />
               <Input label="Confirm password" type="password" value={form.confirm} onChange={setField("confirm")} required />
             </div>
-            <Input
-              label="Teaching focus"
-              value={form.teachingFocus}
-              onChange={setField("teachingFocus")}
-              placeholder="e.g. Python APIs, UI/UX critique, SolidWorks modeling"
-              required
-            />
 
             <div>
-              <div className="text-sm font-medium text-foreground">Program you teach under</div>
+              <div className="text-sm font-medium text-foreground">Assigned category</div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {interests.map((interest) => {
                   const active = interest === selectedInterest;
@@ -143,7 +147,7 @@ export default function TeacherRegisterPage() {
             <div className="rounded-3xl border border-border bg-muted/30 p-5">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <ArrowRight className="h-4 w-4 text-primary" />
-                Choose your teaching track inside {selectedInterest}
+                Choose the assigned track inside {selectedInterest}
               </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {trackOptions.map((track) => {

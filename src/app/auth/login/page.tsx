@@ -102,6 +102,11 @@ export default function AuthLoginPage() {
               placeholder="Enter your password"
               required
             />
+            <div className="text-right text-sm">
+              <Link href="/auth/forgot-password" className="font-semibold text-primary hover:text-accent">
+                Forgot password?
+              </Link>
+            </div>
             <Button type="submit" variant="accent" size="lg" className="w-full" disabled={loading}>
               {loading ? "Signing in..." : "Login"}
             </Button>

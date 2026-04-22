@@ -1,48 +1,58 @@
 "use client";
 
-import { useState } from "react";
-import { ImagePlus, Save } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CheckCircle2, Save } from "lucide-react";
 import { AppShell } from "../../components/dashboard/AppShell";
 import { Button } from "../../components/ui-kit/Button";
 import { Input } from "../../components/ui-kit/Input";
 import { toDisplayName, useAuth } from "../../lib/auth";
-import {
-  interests,
-  trackOptionsByInterest,
-  type Interest,
-  type TrackName,
-} from "../../lib/mock-data";
+import { trackOptionsByInterest } from "../../lib/mock-data";
+import { useTeacherWorkspace } from "../../lib/teacher-workspace";
 
 export default function SettingsPage() {
   const { user, updateUser } = useAuth();
-  const initialInterest = user?.selectedInterest ?? "Backend Development";
-  const [form, setForm] = useState({
-    username: user?.username ?? "",
-    email: user?.email ?? "",
-    avatarUrl: user?.avatarUrl ?? "",
-  });
-  const [selectedInterest, setSelectedInterest] = useState<Interest>(initialInterest);
-  const [selectedTrack, setSelectedTrack] = useState<TrackName>(
-    user?.selectedTrack ?? trackOptionsByInterest[initialInterest][0],
-  );
+  const { categories } = useTeacherWorkspace();
+  const academicPath = user?.selectedInterest ?? "Backend Development";
+  const [username, setUsername] = useState(user?.username ?? "");
   const [saved, setSaved] = useState(false);
-  const trackOptions = trackOptionsByInterest[selectedInterest];
 
-  const chooseInterest = (interest: Interest) => {
-    setSelectedInterest(interest);
-    setSelectedTrack(trackOptionsByInterest[interest][0]);
+  const availableTracks = useMemo(() => {
+    const categoryTracks = categories
+      .filter((category) => category.name === academicPath || category.program === academicPath)
+      .flatMap((category) => category.subcategories.map((subcategory) => subcategory.name));
+
+    const fallbackTracks =
+      trackOptionsByInterest[academicPath as keyof typeof trackOptionsByInterest] ?? [];
+
+    return Array.from(new Set(categoryTracks.length ? categoryTracks : fallbackTracks));
+  }, [academicPath, categories]);
+
+  const [selectedTracks, setSelectedTracks] = useState<string[]>(
+    user?.selectedTracks?.length
+      ? user.selectedTracks
+      : user?.selectedTrack
+        ? [user.selectedTrack]
+        : availableTracks.slice(0, 1),
+  );
+
+  const toggleTrack = (track: string) => {
+    setSelectedTracks((current) =>
+      current.includes(track) ? current.filter((item) => item !== track) : [...current, track],
+    );
   };
 
   const onProfile = (event: React.FormEvent) => {
     event.preventDefault();
+    const nextTracks = selectedTracks.length ? selectedTracks : availableTracks.slice(0, 1);
+
     updateUser({
-      username: form.username,
-      email: form.email,
-      displayName: toDisplayName(form.username),
-      avatarUrl: form.avatarUrl || undefined,
-      interests: [selectedInterest],
-      selectedInterest,
-      selectedTrack,
+      username,
+      displayName: toDisplayName(username),
+      email: user?.email,
+      interests: [academicPath],
+      selectedInterest: academicPath,
+      selectedTrack: nextTracks[0] ?? user?.selectedTrack,
+      selectedTracks: nextTracks,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -54,78 +64,52 @@ export default function SettingsPage() {
         <div>
           <h1 className="font-display text-3xl font-bold">Settings</h1>
           <p className="mt-1 text-muted-foreground">
-            Manage your profile, interests, and personalized dashboard preferences.
+            Keep only the essentials: your username, fixed academic path, and the tracks you want prioritized.
           </p>
         </div>
 
         <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-          <h2 className="font-display text-xl font-semibold">Profile and preferences</h2>
+          <h2 className="font-display text-xl font-semibold">Student profile</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Update your identity and the interests used to personalize your learning path.
+            Email and academic path stay locked after registration. You can still refine the tracks inside your path.
           </p>
 
           <form onSubmit={onProfile} className="mt-5 space-y-5">
             <div className="grid gap-4 md:grid-cols-2">
               <Input
                 label="Username"
-                value={form.username}
-                onChange={(event) => setForm({ ...form, username: event.target.value })}
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
               />
-              <Input
-                label="Email"
-                type="email"
-                value={form.email}
-                onChange={(event) => setForm({ ...form, email: event.target.value })}
-              />
-            </div>
-            <Input
-              label="Profile image URL"
-              value={form.avatarUrl}
-              placeholder="https://example.com/avatar.jpg"
-              onChange={(event) => setForm({ ...form, avatarUrl: event.target.value })}
-            />
-
-            <div className="rounded-3xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
-              Course access is handled per course purchase. Free sections stay open for preview,
-              and paid sections unlock only after you buy that course.
+              <Input label="Email" type="email" value={user?.email ?? ""} readOnly />
             </div>
 
-            <div>
-              <div className="text-sm font-medium text-foreground">Main academy path</div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {interests.map((interest) => {
-                  const active = selectedInterest === interest;
-                  return (
-                    <button
-                      key={interest}
-                      type="button"
-                      onClick={() => chooseInterest(interest)}
-                      className={`rounded-full border px-4 py-2 text-sm transition ${
-                        active
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground"
-                      }`}
-                    >
-                      {interest}
-                    </button>
-                  );
-                })}
+            <div className="rounded-3xl border border-border bg-muted/30 p-5">
+              <div className="text-sm font-medium text-foreground">Academic path</div>
+              <div className="mt-3 rounded-2xl border border-border bg-background px-4 py-3">
+                <div className="font-display text-lg font-bold">{academicPath}</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Assigned at registration and read-only from here.
+                </div>
               </div>
             </div>
 
             <div className="rounded-3xl border border-border bg-muted/30 p-5">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <ImagePlus className="h-4 w-4 text-primary" />
-                Preferred track
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                Selected tracks
               </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                {trackOptions.map((track) => {
-                  const active = selectedTrack === track;
+              <div className="mt-2 text-sm text-muted-foreground">
+                Choose multiple tracks under your academic path so course exploration and recommendations stay relevant.
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {availableTracks.map((track) => {
+                  const active = selectedTracks.includes(track);
                   return (
                     <button
                       key={track}
                       type="button"
-                      onClick={() => setSelectedTrack(track)}
+                      onClick={() => toggleTrack(track)}
                       className={`rounded-2xl border px-4 py-4 text-left transition ${
                         active
                           ? "border-accent bg-accent/10 shadow-sm"
@@ -134,12 +118,16 @@ export default function SettingsPage() {
                     >
                       <div className="font-display text-lg font-bold">{track}</div>
                       <div className="mt-1 text-sm text-muted-foreground">
-                        This is the track the dashboard will prioritize first.
+                        {active ? "Included in your learning flow." : "Tap to add this track."}
                       </div>
                     </button>
                   );
                 })}
               </div>
+            </div>
+
+            <div className="rounded-3xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
+              Course pricing and access stay synchronized automatically. Free courses open fully, while paid courses unlock after one successful payment.
             </div>
 
             <div className="flex items-center gap-3">

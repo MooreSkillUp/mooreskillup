@@ -1,17 +1,25 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Download, Award, Lock } from "lucide-react";
+import { Award, Download, Lock } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "../../components/dashboard/AppShell";
 import { Button } from "../../components/ui-kit/Button";
 import { useAuth } from "../../lib/auth";
 import { generateCertificatePdf } from "../../lib/certificate";
-import { courses, isCourseCompleted, isCoursePurchased } from "../../lib/mock-data";
+import { useTeacherWorkspace } from "../../lib/teacher-workspace";
 
 export default function CertificatesPage() {
   const { user } = useAuth();
-  const certificateCourses = courses.filter((course) => isCoursePurchased(course, user));
+  const {
+    brandLabel,
+    getCategoryName,
+    getMyLearningCourses,
+    getStudentCourseProgress,
+    getSubcategoryName,
+  } = useTeacherWorkspace();
+
+  const certificateCourses = getMyLearningCourses();
 
   return (
     <AppShell>
@@ -25,23 +33,23 @@ export default function CertificatesPage() {
               <div className="text-xs font-medium uppercase tracking-wider text-white/80">
                 Certificates
               </div>
-              <h1 className="font-display text-3xl font-bold sm:text-4xl">
-                Your accomplishments
-              </h1>
+              <h1 className="font-display text-3xl font-bold sm:text-4xl">Your accomplishments</h1>
             </div>
           </div>
           <p className="mt-3 max-w-2xl text-white/85">
-            Download official certificates for the courses you&apos;ve completed.
-            Share them on LinkedIn, your resume, or your portfolio.
+            Certificates now reflect the actual courses you complete, including the category and specialization you finished.
           </p>
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
           {certificateCourses.map((course, i) => {
-            const eligible = isCourseCompleted(course);
-            const certId = `MSU-${course.id.toUpperCase().slice(0, 6)}-${(
-              user?.id ?? "00000"
-            ).slice(-4)}`;
+            const progress = getStudentCourseProgress(course.id);
+            const eligible = progress === 100;
+            const specialization = `${getCategoryName(course.categoryId)} - ${getSubcategoryName(
+              course.categoryId,
+              course.subcategoryId,
+            )}`;
+            const certId = `MSU-${course.id.toUpperCase().slice(0, 6)}-${(user?.id ?? "00000").slice(-4)}`;
             const date = new Date().toLocaleDateString("en-US", {
               year: "numeric",
               month: "long",
@@ -62,7 +70,7 @@ export default function CertificatesPage() {
                   </div>
                   <div className="relative flex h-full flex-col items-center justify-center text-center text-foreground">
                     <div className="font-display text-[10px] font-bold uppercase tracking-[0.25em] text-primary">
-                      MooreSkillUp
+                      More SkillUp
                     </div>
                     <div className="mt-2 font-display text-base font-bold text-primary sm:text-lg">
                       Certificate of Completion
@@ -73,12 +81,9 @@ export default function CertificatesPage() {
                     <div className="mt-1 font-display text-lg font-bold sm:text-xl">
                       {user?.displayName ?? "Your name"}
                     </div>
-                    <div className="mt-3 text-[10px] text-muted-foreground">
-                      for completing
-                    </div>
-                    <div className="mt-0.5 text-sm font-semibold text-primary">
-                      "{course.title}"
-                    </div>
+                    <div className="mt-3 text-[10px] text-muted-foreground">for completing</div>
+                    <div className="mt-0.5 text-sm font-semibold text-primary">{course.title}</div>
+                    <div className="mt-2 text-[11px] text-muted-foreground">{specialization}</div>
                   </div>
                   {!eligible && (
                     <div className="absolute inset-0 flex items-center justify-center bg-card/80 backdrop-blur-sm">
@@ -87,10 +92,7 @@ export default function CertificatesPage() {
                         <div className="text-sm font-semibold text-foreground">
                           Complete the course to unlock
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          {course.completedLessons}/{course.totalLessons} lessons
-                          done
-                        </div>
+                        <div className="text-xs text-muted-foreground">{progress}% complete</div>
                       </div>
                     </div>
                   )}
@@ -98,12 +100,9 @@ export default function CertificatesPage() {
 
                 <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <div className="font-display text-base font-bold">
-                      {course.title}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      by {course.instructor}
-                    </div>
+                    <div className="font-display text-base font-bold">{course.title}</div>
+                    <div className="text-xs text-muted-foreground">{brandLabel}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{specialization}</div>
                   </div>
                   <Button
                     variant={eligible ? "accent" : "outline"}
@@ -111,8 +110,8 @@ export default function CertificatesPage() {
                     onClick={() =>
                       generateCertificatePdf({
                         recipientName: user?.displayName ?? "Learner",
-                        courseTitle: course.title,
-                        instructor: course.instructor,
+                        courseTitle: `${course.title} (${specialization})`,
+                        instructor: "More SkillUp",
                         date,
                         certId,
                       })
@@ -128,10 +127,9 @@ export default function CertificatesPage() {
         </div>
 
         <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
-          Tip: certificates unlock only for purchased courses after you finish all the lessons in
-          that course.{" "}
+          Certificates unlock when course progress reaches 100%.{" "}
           <Link href="/dashboard/courses" className="font-semibold text-primary hover:text-accent">
-            See your courses -&gt;
+            Open your courses
           </Link>
         </div>
       </div>

@@ -1,32 +1,38 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { BellRing, BookOpen, Compass, Sparkles } from "lucide-react";
+import { BellRing, BookOpen, Compass, CreditCard, PlayCircle, Sparkles, Star } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "../../components/dashboard/AppShell";
 import { CourseCard } from "../../components/dashboard/CourseCard";
 import { Button } from "../../components/ui-kit/Button";
-import { ProgressBar } from "../../components/ui-kit/ProgressBar";
+import { getCourseActionLabel } from "../../lib/commerce";
 import { useAuth } from "../../lib/auth";
-import {
-  academyPrograms,
-  announcements,
-  getLearnerDashboardCourses,
-  getNotificationsForRole,
-  todaysLesson,
-} from "../../lib/mock-data";
+import { useTeacherWorkspace } from "../../lib/teacher-workspace";
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const today = todaysLesson(user, user?.interests ?? []);
-  const personalized = getLearnerDashboardCourses(user?.interests ?? [], user);
-  const enrolledCourses = personalized.current.slice(0, 2);
-  const previewCourses = personalized.recommended.slice(0, 2);
-  const main = enrolledCourses[0] ?? personalized.current[0];
-  const pct = Math.round((main.completedLessons / main.totalLessons) * 100);
-  const dashboardNotifications = getNotificationsForRole(user?.role ?? "student").slice(0, 3);
-  const activeProgram = academyPrograms.find((program) => program.title === user?.selectedInterest);
-  const activeBranch = activeProgram?.branches.find((branch) => branch.title === user?.selectedTrack);
+  const {
+    notifications,
+    getMyLearningCourses,
+    getStartedLearningCourses,
+    getRecommendedCourses,
+    getRecentLearningCourses,
+    getContinueLearningCourse,
+    getContinueLearningLessonId,
+    getLastAccessedLessonTitle,
+    getStudentCourseProgress,
+    brandLabel,
+  } = useTeacherWorkspace();
+
+  const myCourses = getMyLearningCourses();
+  const startedCourses = getStartedLearningCourses();
+  const recommended = getRecommendedCourses();
+  const recentCourses = getRecentLearningCourses().slice(0, 3);
+  const continueCourse = getContinueLearningCourse();
+  const continueLessonId = continueCourse ? getContinueLearningLessonId(continueCourse.id) : null;
+  const selectedTracks =
+    user?.selectedTracks?.length ? user.selectedTracks.join(", ") : user?.selectedTrack ?? "Learning";
 
   return (
     <AppShell>
@@ -42,111 +48,171 @@ export default function DashboardPage() {
                 Student dashboard
               </p>
               <h1 className="mt-2 font-display text-4xl font-bold sm:text-5xl">
-                {user?.displayName}, your courses stay organized here.
+                {user?.displayName}, keep learning and unlock more.
               </h1>
               <p className="mt-4 max-w-2xl text-white/85">
-                Keep learning inside the dashboard with enrolled courses first, preview courses
-                underneath, and notifications from the platform in one place.
+                Discover courses inside your academic path, pay once to unlock full access, and resume exactly where you stopped.
               </p>
 
               <div className="mt-8 flex flex-wrap gap-3">
-                <Stat icon={BookOpen} label="Purchased courses" value={`${user?.purchasedCourseIds.length ?? 0}`} />
+                <Stat icon={BookOpen} label="My courses" value={`${myCourses.length}`} />
                 <Stat icon={Compass} label="Program" value={user?.selectedInterest ?? "Student"} />
-                <Stat icon={Sparkles} label="Track" value={user?.selectedTrack ?? "Learning"} />
+                <Stat icon={Sparkles} label="Tracks" value={selectedTracks} />
               </div>
             </div>
 
             <div className="rounded-[1.75rem] bg-black/15 p-5 backdrop-blur">
               <div className="text-xs uppercase tracking-[0.2em] text-white/70">
-                Continue from here
+                Continue learning
               </div>
-              <div className="mt-3 font-display text-2xl font-bold">{main.title}</div>
-              <p className="mt-3 text-sm text-white/80">{main.description}</p>
-              <div className="mt-5">
-                <ProgressBar value={pct} label="Current course progress" />
+              <div className="mt-3 font-display text-2xl font-bold">
+                {continueCourse?.title ?? "Choose a course to begin"}
               </div>
+              <p className="mt-3 text-sm text-white/80">
+                {continueCourse
+                  ? `${getStudentCourseProgress(continueCourse.id)}% complete.`
+                  : "Your next lesson will appear here once you start a course."}
+              </p>
               <div className="mt-5 flex gap-3">
-                <Link href={`/course/${main.id}`}>
-                  <Button variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20">
-                    Open course
-                  </Button>
-                </Link>
+                {continueCourse && continueLessonId ? (
+                  <Link href={`/lesson/${continueLessonId}`}>
+                    <Button variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20">
+                      Continue Learning
+                    </Button>
+                  </Link>
+                ) : (
+                  <Link href="/dashboard/courses">
+                    <Button variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20">
+                      Browse Courses
+                    </Button>
+                  </Link>
+                )}
                 <Link href="/dashboard/courses">
-                  <Button variant="accent">All courses</Button>
+                  <Button variant="accent">My Courses</Button>
                 </Link>
               </div>
             </div>
           </div>
         </motion.section>
 
+        <section className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <PlayCircle className="h-5 w-5 text-primary" />
+              <h2 className="font-display text-xl font-bold">Continue Learning</h2>
+            </div>
+            <Link href="/dashboard/courses" className="text-sm font-semibold text-primary hover:text-accent">
+              Open My Courses
+            </Link>
+          </div>
+          {startedCourses.length ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {startedCourses.slice(0, 4).map((course) => {
+                const continueId = getContinueLearningLessonId(course.id);
+                return (
+                  <div key={course.id} className="rounded-[1.5rem] border border-border bg-background p-5">
+                    <div className="font-display text-xl font-bold">{course.title}</div>
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      Last lesson accessed: {getLastAccessedLessonTitle(course.id) ?? "Start the first lesson"}
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Progress: {getStudentCourseProgress(course.id)}%
+                    </div>
+                    <div className="mt-4">
+                      {continueId ? (
+                        <Link href={`/lesson/${continueId}`}>
+                          <Button variant="accent">Continue</Button>
+                        </Link>
+                      ) : (
+                        <Link href={`/course/${course.id}`}>
+                          <Button variant="accent">Continue</Button>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+              Start a course and your learning continuity will appear here automatically.
+            </div>
+          )}
+        </section>
+
+        {recentCourses.length > 0 && (
+          <section className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              <h2 className="font-display text-xl font-bold">Recently accessed</h2>
+            </div>
+            <div className="grid gap-5 lg:grid-cols-3">
+              {recentCourses.map((course) => (
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  label="Recently accessed"
+                  ctaLabel={getCourseActionLabel(course.price, true)}
+                  ctaHref={`/course/${course.id}`}
+                  progress={getStudentCourseProgress(course.id)}
+                  continueHref={getContinueLearningLessonId(course.id) ? `/lesson/${getContinueLearningLessonId(course.id)}` : null}
+                  brandLabel={brandLabel}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6">
-            <div className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-                    Today&apos;s lesson
-                  </div>
-                  <h2 className="mt-2 font-display text-2xl font-bold">{today.lesson.title}</h2>
-                </div>
-                <Link href={`/lesson/${today.lesson.id}`}>
-                  <Button variant="accent">Continue</Button>
-                </Link>
-              </div>
-              <p className="mt-3 text-sm text-muted-foreground">
-                Week {today.module.week} | {today.lesson.duration} | from {today.course.title}
-              </p>
-            </div>
-
-            {activeProgram && (
-              <div className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <Compass className="h-5 w-5 text-primary" />
-                  <h2 className="font-display text-xl font-bold">Your academy path</h2>
-                </div>
-                <div className="mt-4 rounded-2xl bg-muted/50 p-4">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    Selected program
-                  </div>
-                  <div className="mt-2 font-display text-2xl font-bold">{activeProgram.title}</div>
-                  <p className="mt-2 text-sm text-muted-foreground">{activeProgram.description}</p>
-                </div>
-                {activeBranch && (
-                  <div className="mt-4 rounded-2xl border border-border bg-background p-4">
-                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                      Active track
-                    </div>
-                    <div className="mt-2 font-display text-xl font-bold">{activeBranch.title}</div>
-                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                      {activeBranch.weeklyFocus.slice(0, 4).map((item) => (
-                        <div key={item}>{item}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div>
+            <section>
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-                    Enrolled courses
+                    My Courses
                   </div>
                   <h2 className="mt-2 font-display text-2xl font-bold">
-                    Your purchased and in-progress learning paths
+                    Purchased and started courses
                   </h2>
                 </div>
                 <Link href="/dashboard/courses" className="text-sm font-semibold text-primary hover:text-accent">
-                  Open my courses
+                  Open courses tab
                 </Link>
               </div>
               <div className="grid gap-5 lg:grid-cols-2">
-                {enrolledCourses.map((course) => (
-                  <CourseCard key={course.id} course={course} />
+                {myCourses.slice(0, 2).map((course) => (
+                  <CourseCard
+                    key={course.id}
+                    course={course}
+                    label="Open Course"
+                    ctaLabel={getCourseActionLabel(course.price, true)}
+                    ctaHref={`/course/${course.id}`}
+                    progress={getStudentCourseProgress(course.id)}
+                    continueHref={getContinueLearningLessonId(course.id) ? `/lesson/${getContinueLearningLessonId(course.id)}` : null}
+                    brandLabel={brandLabel}
+                  />
                 ))}
               </div>
-            </div>
+            </section>
+
+            <section>
+              <div className="mb-4 flex items-center gap-2">
+                <Star className="h-5 w-5 text-accent" />
+                <h2 className="font-display text-2xl font-bold">Smart recommendations</h2>
+              </div>
+              <div className="grid gap-5 lg:grid-cols-2">
+                {recommended.slice(0, 2).map((course) => (
+                  <CourseCard
+                    key={course.id}
+                    course={course}
+                    label="Discoverable in your path"
+                    ctaLabel={getCourseActionLabel(course.price, false)}
+                    ctaHref={course.price === 0 ? `/course/${course.id}` : `/payment/${course.id}`}
+                    brandLabel={brandLabel}
+                  />
+                ))}
+              </div>
+            </section>
           </div>
 
           <div className="space-y-6">
@@ -156,11 +222,10 @@ export default function DashboardPage() {
                 <h2 className="font-display text-xl font-bold">Notifications</h2>
               </div>
               <div className="mt-4 space-y-3">
-                {dashboardNotifications.map((item) => (
+                {notifications.slice(0, 3).map((item) => (
                   <div key={item.id} className="rounded-2xl border border-border bg-background p-4">
                     <div className="font-medium">{item.title}</div>
                     <div className="mt-1 text-sm text-muted-foreground">{item.body}</div>
-                    <div className="mt-2 text-xs uppercase tracking-[0.2em] text-primary">{item.time}</div>
                   </div>
                 ))}
               </div>
@@ -168,36 +233,19 @@ export default function DashboardPage() {
 
             <div className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
-                <h2 className="font-display text-xl font-bold">Explore more courses</h2>
+                <CreditCard className="h-5 w-5 text-primary" />
+                <h2 className="font-display text-xl font-bold">Monetization flow</h2>
               </div>
-              <p className="mt-3 text-sm text-muted-foreground">
-                Preview free sections first, then unlock the full course when you are ready.
-              </p>
-              <div className="mt-4 space-y-3">
-                {previewCourses.map((course) => (
-                  <div key={course.id} className="rounded-2xl border border-border bg-background p-4">
-                    <div className="font-medium">{course.title}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {course.interest} • {course.track}
-                    </div>
-                    <Link href={`/course/${course.id}`} className="mt-3 inline-flex text-sm font-semibold text-primary">
-                      Preview course
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
-              <h2 className="font-display text-xl font-bold">What&apos;s new</h2>
-              <div className="mt-4 space-y-3">
-                {announcements.map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-border bg-background p-4">
-                    <div className="font-medium">{item.title}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">{item.body}</div>
-                  </div>
-                ))}
+              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                <div className="rounded-2xl bg-muted/40 p-4">
+                  Preview free sections before purchase.
+                </div>
+                <div className="rounded-2xl bg-muted/40 p-4">
+                  Pay once to unlock the full course.
+                </div>
+                <div className="rounded-2xl bg-muted/40 p-4">
+                  Purchased courses move instantly into My Courses.
+                </div>
               </div>
             </div>
           </div>

@@ -28,6 +28,7 @@ export interface AuthUser {
   wishlist: string[];
   selectedInterest: Interest;
   selectedTrack: TrackName;
+  selectedTracks: TrackName[];
   purchasedCourseIds: string[];
   status?: "active" | "disabled";
 }
@@ -38,6 +39,7 @@ interface RegisterPayload {
   interests: Interest[];
   selectedInterest: Interest;
   selectedTrack: TrackName;
+  selectedTracks?: TrackName[];
   plan?: UserPlan;
   role?: UserRole;
 }
@@ -47,6 +49,8 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (email: string) => Promise<AuthUser>;
   register: (payload: RegisterPayload) => Promise<AuthUser>;
+  requestPasswordReset: (email: string) => Promise<{ ok: boolean; token: string }>;
+  resetPassword: (token: string, nextPassword: string) => Promise<{ ok: boolean; message: string }>;
   logout: () => void;
   updateUser: (patch: Partial<AuthUser>) => void;
   toggleWishlist: (courseId: string) => void;
@@ -54,6 +58,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const STORAGE_KEY = "mooreskillup.user";
+const PASSWORD_RESET_KEY = "mooreskillup.password-reset";
 
 export function toDisplayName(username: string) {
   return username
@@ -113,6 +118,10 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
 
   const selectedInterest = raw.selectedInterest ?? mockUser.selectedInterest;
   const fallbackTrack = trackOptionsByInterest[selectedInterest][0];
+  const selectedTracks =
+    Array.isArray(raw.selectedTracks) && raw.selectedTracks.length
+      ? raw.selectedTracks
+      : [raw.selectedTrack ?? fallbackTrack];
 
   return {
     id: raw.id ?? mockUser.id,
@@ -129,7 +138,8 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
         : [selectedInterest],
     wishlist: Array.isArray(raw.wishlist) ? raw.wishlist : [],
     selectedInterest,
-    selectedTrack: raw.selectedTrack ?? fallbackTrack,
+    selectedTrack: raw.selectedTrack ?? selectedTracks[0] ?? fallbackTrack,
+    selectedTracks,
     purchasedCourseIds: Array.isArray(raw.purchasedCourseIds) ? raw.purchasedCourseIds : mockUser.purchasedCourseIds,
     status: raw.status ?? "active",
   };
@@ -184,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       wishlist: mockUser.wishlist,
       selectedInterest: focus.selectedInterest,
       selectedTrack: focus.selectedTrack,
+      selectedTracks: [focus.selectedTrack],
       purchasedCourseIds: inferRoleFromEmail(email) === "student" ? mockUser.purchasedCourseIds : [],
       status: "active",
     })!;
@@ -204,9 +215,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       wishlist: [],
       selectedInterest: payload.selectedInterest,
       selectedTrack: payload.selectedTrack,
+      selectedTracks:
+        payload.selectedTracks && payload.selectedTracks.length
+          ? payload.selectedTracks
+          : [payload.selectedTrack],
       purchasedCourseIds: payload.role === "student" || !payload.role ? [] : [],
       status: "active",
     })!;
+  }, []);
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const token = Math.random().toString(36).slice(2, 10);
+    const currentRequests =
+      typeof window !== "undefined"
+        ? ((JSON.parse(localStorage.getItem(PASSWORD_RESET_KEY) ?? "[]") as Array<{
+            email: string;
+            token: string;
+            expiresAt: string;
+          }>) ?? [])
+        : [];
+
+    currentRequests.push({
+      email,
+      token,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(PASSWORD_RESET_KEY, JSON.stringify(currentRequests));
+    }
+
+    return { ok: true, token };
+  }, []);
+
+  const resetPassword = useCallback(async (token: string, nextPassword: string) => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (!nextPassword.trim()) {
+      return { ok: false, message: "Enter a new password." };
+    }
+
+    if (typeof window === "undefined") {
+      return { ok: false, message: "Password reset is unavailable right now." };
+    }
+
+    const currentRequests = JSON.parse(localStorage.getItem(PASSWORD_RESET_KEY) ?? "[]") as Array<{
+      email: string;
+      token: string;
+      expiresAt: string;
+    }>;
+
+    const match = currentRequests.find(
+      (item) => item.token === token && new Date(item.expiresAt).getTime() > Date.now(),
+    );
+
+    if (!match) {
+      return { ok: false, message: "This reset token is invalid or has expired." };
+    }
+
+    localStorage.setItem(
+      PASSWORD_RESET_KEY,
+      JSON.stringify(currentRequests.filter((item) => item.token !== token)),
+    );
+
+    return { ok: true, message: `Password reset completed for ${match.email}.` };
   }, []);
 
   const logout = useCallback(() => persist(null), []);
@@ -244,6 +316,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!user,
     login,
     register,
+    requestPasswordReset,
+    resetPassword,
     logout,
     updateUser,
     toggleWishlist,

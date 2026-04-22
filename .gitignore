@@ -31,3 +31,9 @@ dist-ssr
 *.sln
 *.sw?
 .next/
+backend/.venv/
+backend/__pycache__/
+backend/**/*.pyc
+backend/staticfiles/
+backend/media/
+backend/.env

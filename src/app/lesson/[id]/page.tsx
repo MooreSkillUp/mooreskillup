@@ -2,25 +2,36 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, FileText, ListChecks, Lock } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
-import {
-  canAccessLessonInCourse,
-  findLesson,
-  getCourseSections,
-  getLessonNavigation,
-} from "@/lib/mock-data";
-import { useAuth } from "@/lib/auth";
+import { formatNaira } from "@/lib/commerce";
+import { useTeacherWorkspace } from "@/lib/teacher-workspace";
 
 export default function LessonPage() {
   const params = useParams();
-  const { user } = useAuth();
   const lessonId = params.id as string;
-  const found = findLesson(lessonId);
-  const [completed, setCompleted] = useState(found?.lesson.status === "completed");
+  const {
+    findStudentLesson,
+    getStudentCourseSections,
+    isCourseOwnedByStudent,
+    recordLessonAccess,
+    markLessonComplete,
+  } = useTeacherWorkspace();
   const [notes, setNotes] = useState("");
+  const found = findStudentLesson(lessonId);
+
+  useEffect(() => {
+    if (found) {
+      recordLessonAccess(found.course.id, lessonId);
+    }
+  }, [found, lessonId, recordLessonAccess]);
+
+  const courseSections = useMemo(
+    () => (found ? getStudentCourseSections(found.course.id) : []),
+    [found, getStudentCourseSections],
+  );
 
   if (!found) {
     return (
@@ -37,12 +48,21 @@ export default function LessonPage() {
     );
   }
 
-  const { lesson, course, module } = found;
-  const sections = getCourseSections(course, user);
-  const currentSection = sections.find((section) => section.id === module.id);
-  const accessible = canAccessLessonInCourse(course, lesson.id, user);
-  const navigation = getLessonNavigation(course, lesson.id, user);
-  const sectionTask = currentSection?.tasks[0];
+  const { lesson, course, section, sectionIndex, lessonIndex } = found;
+  const sectionView = courseSections[sectionIndex];
+  const lessonView = sectionView?.lessons[lessonIndex];
+  const owned = isCourseOwnedByStudent(course.id);
+  const accessible = lessonView && lessonView.status !== "locked";
+  const flatLessons = courseSections.flatMap((item) =>
+    item.lessons.filter((lessonItem) => lessonItem.status !== "locked"),
+  );
+  const currentFlatIndex = flatLessons.findIndex((item) => item.id === lesson.id);
+  const previous = currentFlatIndex > 0 ? flatLessons[currentFlatIndex - 1] : null;
+  const next =
+    currentFlatIndex >= 0 && currentFlatIndex < flatLessons.length - 1
+      ? flatLessons[currentFlatIndex + 1]
+      : null;
+  const sectionTask = sectionView?.tasks[0];
 
   if (!accessible) {
     return (
@@ -53,16 +73,20 @@ export default function LessonPage() {
           </div>
           <h1 className="mt-5 font-display text-3xl font-bold">This lesson is locked</h1>
           <p className="mt-3 text-muted-foreground">
-            Free learners can only access the open sections in this course. Unlock the full course
-            to continue.
+            Pay once to unlock the full course and access every section, lesson, and task.
           </p>
+          <div className="mt-4 text-sm font-medium text-foreground">
+            Full Course Access: {formatNaira(course.price)}
+          </div>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link href={`/course/${course.id}`}>
               <Button variant="outline">Back to course</Button>
             </Link>
-            <Link href="/pricing">
-              <Button variant="accent">Unlock Full Course</Button>
-            </Link>
+            {!owned && (
+              <Link href={`/payment/${course.id}`}>
+                <Button variant="accent">Unlock Full Course</Button>
+              </Link>
+            )}
           </div>
         </div>
       </AppShell>
@@ -81,23 +105,36 @@ export default function LessonPage() {
 
         <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
           <div className="text-xs font-semibold uppercase tracking-[0.25em] text-accent">
-            Section · {currentSection?.title ?? module.title}
+            Section · {section.title}
           </div>
           <h1 className="mt-2 font-display text-3xl font-bold sm:text-4xl">{lesson.title}</h1>
-          <p className="mt-3 max-w-3xl text-muted-foreground">{lesson.description}</p>
+          <p className="mt-3 max-w-3xl text-muted-foreground">
+            {lesson.contentType === "video"
+              ? "Watch the lesson video, then complete the section task."
+              : "Read through the lesson text, then continue to the section task."}
+          </p>
         </section>
 
-        <div className="overflow-hidden rounded-[2rem] border border-border bg-black shadow-sm">
-          <div className="aspect-video w-full">
-            <iframe
-              src={`https://www.youtube.com/embed/${lesson.videoId}`}
-              title={lesson.title}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="h-full w-full"
+        {lesson.contentType === "video" ? (
+          <div className="overflow-hidden rounded-[2rem] border border-border bg-black shadow-sm">
+            <div className="aspect-video w-full">
+              <iframe
+                src={lesson.videoUrl.replace("watch?v=", "embed/")}
+                title={lesson.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="h-full w-full"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+            <div
+              className="prose prose-sm max-w-none text-muted-foreground dark:prose-invert"
+              dangerouslySetInnerHTML={{ __html: lesson.textContent || "<p>No text content yet.</p>" }}
             />
           </div>
-        </div>
+        )}
 
         <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
           <section className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
@@ -105,13 +142,10 @@ export default function LessonPage() {
               <FileText className="h-5 w-5 text-primary" />
               <h2 className="font-display text-lg font-semibold">Temporary notes</h2>
             </div>
-            <p className="mb-3 text-sm text-muted-foreground">
-              These notes stay only while you are here. They are not stored yet.
-            </p>
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="Write down key ideas, code tips, or reminders from this lesson..."
+              placeholder="Write down key ideas, action items, or reminders from this lesson..."
               className="h-48 w-full resize-none rounded-lg border border-input bg-background p-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
           </section>
@@ -124,69 +158,77 @@ export default function LessonPage() {
             {sectionTask ? (
               <div className="space-y-3 text-sm">
                 <div className="font-medium text-foreground">{sectionTask.title}</div>
-                <div className="text-muted-foreground">{sectionTask.description}</div>
-                <div className="text-muted-foreground">{sectionTask.submissionInstructions}</div>
-                {sectionTask.helpVideoLink && (
+                <div className="text-muted-foreground">{sectionTask.instructions}</div>
+                <div className="text-muted-foreground">{sectionTask.submissionGuide}</div>
+                <a
+                  href={sectionTask.watchGuideUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex font-semibold text-primary"
+                >
+                  Watch Section Guide
+                </a>
+                <div className="flex flex-wrap gap-3">
                   <a
-                    href={sectionTask.helpVideoLink}
+                    href={sectionTask.sectionChannelUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex font-semibold text-primary"
+                    className="font-semibold text-primary"
                   >
-                    Watch submission guide
+                    Open Section Channel
                   </a>
-                )}
+                  <a
+                    href={sectionTask.submissionChannelUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-primary"
+                  >
+                    Open Submission Channel
+                  </a>
+                </div>
               </div>
             ) : (
-              <div className="text-sm text-muted-foreground">
-                No task is attached to this section yet.
-              </div>
+              <div className="text-sm text-muted-foreground">No task is attached to this section yet.</div>
             )}
           </section>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-[2rem] border border-border bg-card p-5 shadow-sm">
           <div className="text-sm text-muted-foreground">
-            {completed
-              ? "Great work. This lesson is marked complete for the current session."
-              : "Finished? Mark it done and move to the next lesson."}
+            {lessonView?.status === "completed"
+              ? "This lesson is already marked complete."
+              : "Finished? Mark it complete to keep your progress updated."}
           </div>
           <Button
-            variant={completed ? "outline" : "accent"}
-            onClick={() => setCompleted((current) => !current)}
+            variant={lessonView?.status === "completed" ? "outline" : "accent"}
+            onClick={() => markLessonComplete(course.id, lesson.id)}
           >
-            {completed ? (
-              <>
-                <CheckCircle2 className="h-4 w-4" /> Completed
-              </>
-            ) : (
-              "Mark as complete"
-            )}
+            <CheckCircle2 className="h-4 w-4" /> Mark Complete
           </Button>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {navigation.previous ? (
-            <Link href={`/lesson/${navigation.previous.id}`}>
+          {previous ? (
+            <Link href={`/lesson/${previous.id}`}>
               <Button variant="outline">
-                <ArrowLeft className="h-4 w-4" /> Previous
+                <ArrowLeft className="h-4 w-4" /> Previous Lesson
               </Button>
             </Link>
           ) : (
             <Button variant="outline" disabled>
-              <ArrowLeft className="h-4 w-4" /> Previous
+              <ArrowLeft className="h-4 w-4" /> Previous Lesson
             </Button>
           )}
 
-          {navigation.next ? (
-            <Link href={`/lesson/${navigation.next.id}`}>
+          {next ? (
+            <Link href={`/lesson/${next.id}`}>
               <Button variant="accent">
-                Next <ArrowRight className="h-4 w-4" />
+                Next Lesson <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
           ) : (
             <Button variant="outline" disabled>
-              Next <ArrowRight className="h-4 w-4" />
+              Next Lesson <ArrowRight className="h-4 w-4" />
             </Button>
           )}
         </div>

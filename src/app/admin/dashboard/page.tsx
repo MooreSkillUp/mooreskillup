@@ -1,23 +1,55 @@
 "use client";
 
 import Link from "next/link";
-import { BellRing, CreditCard, FolderKanban, Shield, UserPlus, Users } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  BellRing,
+  FolderKanban,
+  Shield,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui-kit/Button";
-import {
-  adminBroadcasts,
-  getAdminCourseRows,
-  getPlatformOverview,
-  getRevenueSummary,
-  getTeacherRows,
-} from "@/lib/mock-data";
+import { useTeacherWorkspace } from "@/lib/teacher-workspace";
+
+type BroadcastAudience = "students" | "tutors";
 
 export default function AdminDashboardPage() {
-  const overview = getPlatformOverview();
-  const revenue = getRevenueSummary();
-  const teachers = getTeacherRows();
-  const courses = getAdminCourseRows().slice(0, 4);
+  const { teachers, courses, broadcasts, createBroadcast, clearBroadcastHistory } = useTeacherWorkspace();
+  const [audience, setAudience] = useState<BroadcastAudience>("students");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
+  const inactiveTeachers = teachers.filter((teacher) => teacher.status === "inactive").length;
+  const publishedCourses = courses.filter((course) => course.status === "published").length;
+
+  const topTeachers = useMemo(
+    () =>
+      teachers
+        .map((teacher) => ({
+          ...teacher,
+          courseCount: courses.filter((course) => course.teacherId === teacher.id).length,
+        }))
+        .sort((left, right) => right.courseCount - left.courseCount)
+        .slice(0, 4),
+    [courses, teachers],
+  );
+
+  const sendBroadcast = () => {
+    if (!title.trim() || !description.trim()) return;
+    createBroadcast({ title: title.trim(), description: description.trim(), audience });
+    setSuccess(
+      audience === "students"
+        ? "Notification sent to all students"
+        : "Notification sent to all teachers",
+    );
+    setTitle("");
+    setDescription("");
+  };
 
   return (
     <AppShell allowedRoles={["admin"]}>
@@ -28,29 +60,28 @@ export default function AdminDashboardPage() {
               Admin panel
             </div>
             <h1 className="mt-2 font-display text-4xl font-bold">Platform control room</h1>
-            <p className="mt-2 max-w-2xl text-muted-foreground">
-              Manage tutors, platform notifications, payment visibility, and course ownership from
-              one Django-ready admin workspace.
+            <p className="mt-2 max-w-3xl text-muted-foreground">
+              Broadcast updates, monitor teacher activity, manage ownership fallback, and keep platform data synchronized from one admin workspace.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/auth/admin-register">
+            <Link href="/auth/teacher-register">
               <Button variant="accent">
-                <UserPlus className="h-4 w-4" /> Create admin account
+                <UserPlus className="h-4 w-4" /> Create teacher account
               </Button>
             </Link>
-            <Link href="/auth/teacher-register">
-              <Button variant="outline">Create teacher account</Button>
+            <Link href="/admin/users">
+              <Button variant="outline">Manage teachers</Button>
             </Link>
           </div>
         </div>
 
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {[
-            { icon: Users, label: "Total students", value: `${overview.totalStudents}` },
-            { icon: Shield, label: "Total tutors", value: `${overview.totalTutors}` },
-            { icon: UserPlus, label: "Total admins", value: `${overview.totalAdmins}` },
-            { icon: FolderKanban, label: "Total courses", value: `${overview.totalCourses}` },
+            { icon: Shield, label: "Active teachers", value: `${activeTeachers}` },
+            { icon: Users, label: "Inactive teachers", value: `${inactiveTeachers}` },
+            { icon: FolderKanban, label: "Total courses", value: `${courses.length}` },
+            { icon: BellRing, label: "Broadcasts (24h)", value: `${broadcasts.length}` },
           ].map((item) => (
             <div key={item.label} className="rounded-3xl border border-border bg-card p-6 shadow-sm">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -62,140 +93,155 @@ export default function AdminDashboardPage() {
           ))}
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-primary" />
-              <h2 className="font-display text-2xl font-bold">Payments and revenue</h2>
-            </div>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-border bg-background p-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Total revenue</div>
-                <div className="mt-2 font-display text-3xl font-bold">${revenue.totalRevenue}</div>
-              </div>
-              <div className="rounded-2xl border border-border bg-background p-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Course purchases</div>
-                <div className="mt-2 font-display text-3xl font-bold">{revenue.totalPurchases}</div>
-              </div>
-            </div>
-            <div className="mt-5 space-y-3">
-              {revenue.byCourse.slice(0, 5).map((item) => (
-                <div key={item.courseId} className="rounded-2xl border border-border bg-background p-4">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <div className="font-medium">{item.courseTitle}</div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        Tutor: {item.tutorName} • ${item.price} per course
-                      </div>
-                    </div>
-                    <div className="text-right text-sm text-muted-foreground">
-                      <div>{item.purchases} purchases</div>
-                      <div className="font-semibold text-foreground">${item.revenue} revenue</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+        <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+          <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
             <div className="flex items-center gap-2">
               <BellRing className="h-5 w-5 text-accent" />
               <h2 className="font-display text-2xl font-bold">Broadcast notifications</h2>
             </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Broadcasts stay synchronized with the same notification system teachers and admins see in the header. Broadcast history auto-expires after 24 hours.
+            </p>
+
             <div className="mt-5 space-y-4">
               <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
                 className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm text-foreground shadow-sm outline-none"
                 placeholder="Notification title"
               />
-              <input
-                className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm text-foreground shadow-sm outline-none"
-                placeholder="Image URL or asset path"
-              />
               <Textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
                 className="min-h-28 bg-background"
-                placeholder="Write the description that should show on the target dashboard."
+                placeholder="Notification description"
               />
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="rounded-full border border-primary bg-primary px-4 py-2 text-sm text-primary-foreground">
-                  All Students
-                </button>
-                <button type="button" className="rounded-full border border-border bg-background px-4 py-2 text-sm text-muted-foreground">
-                  Tutors
-                </button>
-              </div>
-              <Button variant="accent">Send notification</Button>
-            </div>
-            <div className="mt-6 space-y-3">
-              {adminBroadcasts.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-border bg-background p-4">
-                  <div className="font-medium">{item.title}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">{item.description}</div>
-                  <div className="mt-2 text-xs uppercase tracking-[0.2em] text-primary">
-                    {item.target} • {item.sentAt}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-            <div className="flex items-center justify-between">
               <div>
-                <h2 className="font-display text-2xl font-bold">Tutor roles table</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Teachers only. Student rows are intentionally excluded.
-                </p>
+                <div className="text-sm font-medium text-foreground">Target audience</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(["students", "tutors"] as const).map((option) => {
+                    const active = audience === option;
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setAudience(option)}
+                        className={`rounded-full border px-4 py-2 text-sm transition ${
+                          active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background text-muted-foreground"
+                        }`}
+                      >
+                        {option === "students" ? "Students" : "Teachers"}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <Link href="/admin/users" className="text-sm font-semibold text-primary">
-                Open management
-              </Link>
+              <div className="flex items-center gap-3">
+                <Button variant="accent" onClick={sendBroadcast}>
+                  Send notification
+                </Button>
+                {success && <div className="text-sm font-medium text-success">{success}</div>}
+              </div>
             </div>
-            <div className="mt-5 space-y-3">
-              {teachers.map((teacher) => (
-                <div key={teacher.id} className="rounded-2xl border border-border bg-background p-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <div className="font-medium">{teacher.name}</div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        Teacher • {teacher.program} • {teacher.track}
+
+            <div className="mt-8">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
+                  Notification history
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={clearBroadcastHistory}
+                  disabled={!broadcasts.length}
+                >
+                  Clear Notification History
+                </Button>
+              </div>
+              <div className="mt-4 space-y-3">
+                {broadcasts.length ? (
+                  broadcasts.map((item) => (
+                    <div key={item.id} className="rounded-2xl border border-border bg-background p-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <div className="font-medium">{item.title}</div>
+                          <div className="mt-1 text-sm text-muted-foreground">{item.description}</div>
+                        </div>
+                        <div className="text-sm text-muted-foreground md:text-right">
+                          <div>Audience: {item.audience === "students" ? "Students" : "Teachers"}</div>
+                          <div>Date sent: {item.sentAt}</div>
+                          <div className="font-medium text-foreground">Status: {item.status}</div>
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right text-sm text-muted-foreground">
-                      <div>{teacher.numberOfCourses} courses</div>
-                      <div>{teacher.isActive ? "Active" : "Disabled / reassigned"}</div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+                    No broadcasts in the active 24-hour window.
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-5">
+            <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+              <h2 className="font-display text-2xl font-bold">Teacher continuity</h2>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-border bg-background p-4">
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Published courses
+                  </div>
+                  <div className="mt-2 font-display text-3xl font-bold">{publishedCourses}</div>
+                </div>
+                <div className="rounded-2xl border border-border bg-background p-4">
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Admin fallback ready
+                  </div>
+                  <div className="mt-2 font-display text-3xl font-bold">Safe</div>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3 text-sm text-muted-foreground">
+                <div className="rounded-2xl bg-muted/40 p-4">
+                  Removing a teacher never deletes a course.
+                </div>
+                <div className="rounded-2xl bg-muted/40 p-4">
+                  Courses can move to admin ownership immediately or be reassigned to another teacher.
+                </div>
+                <div className="rounded-2xl bg-muted/40 p-4">
+                  Ownership changes reflect instantly on teacher dashboards and course management screens.
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-display text-2xl font-bold">Teacher snapshot</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Current teaching roster and course load.
+                  </p>
+                </div>
+                <Link href="/admin/users" className="text-sm font-semibold text-primary">
+                  Open teacher management
+                </Link>
+              </div>
+              <div className="mt-5 space-y-3">
+                {topTeachers.map((teacher) => (
+                  <div key={teacher.id} className="rounded-2xl border border-border bg-background p-4">
+                    <div className="font-medium">{teacher.displayName}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {teacher.academicProgram} | {teacher.academicTrack} | {teacher.courseCount} courses
+                    </div>
+                    <div className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                      {teacher.status === "active" ? "Active" : "Inactive"}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-display text-2xl font-bold">Admin courses view</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Read-only course ownership, tutor name, and price visibility.
-                </p>
+                ))}
               </div>
-              <Link href="/admin/courses" className="text-sm font-semibold text-primary">
-                View all courses
-              </Link>
             </div>
-            <div className="mt-5 space-y-3">
-              {courses.map((course) => (
-                <div key={course.id} className="rounded-2xl border border-border bg-background p-4">
-                  <div className="font-medium">{course.title}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    Tutor: {course.tutorName} • ${course.price}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          </section>
         </div>
       </div>
     </AppShell>

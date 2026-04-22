@@ -2,25 +2,23 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Bell, Heart, Menu, Moon, Sun } from "lucide-react";
 import { getHomeRouteForUser, useAuth } from "@/lib/auth";
-import { getNotificationsForRole } from "@/lib/mock-data";
 import { useTheme } from "@/lib/theme";
+import { useTeacherWorkspace } from "@/lib/teacher-workspace";
 
 export function TopNavbar({ onMenu }: { onMenu: () => void }) {
   const { user } = useAuth();
   const { theme, toggle } = useTheme();
+  const { notifications, markAllNotificationsAsRead } = useTeacherWorkspace();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const role = user?.role ?? "student";
   const wishlistCount = user?.wishlist.length ?? 0;
-  const quickHref = role === "student" ? "/dashboard/courses?view=saved" : getHomeRouteForUser(user);
+  const quickHref = role === "student" ? "/courses?view=saved" : getHomeRouteForUser(user);
   const quickLabel = role === "student" ? "Wishlist" : "Workspace";
-  const visibleNotifications = useMemo(
-    () => getNotificationsForRole(role).slice(0, 3),
-    [role],
-  );
-  const unreadCount = visibleNotifications.filter((item) => !item.read).length;
+  const visibleNotifications = notifications.slice(0, 5);
+  const unreadCount = visibleNotifications.length;
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-xl">
@@ -79,23 +77,47 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
               <div className="absolute right-0 top-14 w-80 rounded-3xl border border-border bg-card p-4 shadow-xl">
                 <div className="flex items-center justify-between">
                   <div className="font-display text-lg font-bold">Notifications</div>
-                  <button
-                    onClick={() => setNotificationsOpen(false)}
-                    className="text-sm text-muted-foreground hover:text-foreground"
-                  >
-                    Close
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {visibleNotifications.length > 0 && (
+                      <button
+                        onClick={() => {
+                          markAllNotificationsAsRead();
+                          setNotificationsOpen(false);
+                        }}
+                        className="text-sm font-semibold text-primary hover:text-accent"
+                      >
+                        Mark all as read
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setNotificationsOpen(false)}
+                      className="text-sm text-muted-foreground hover:text-foreground"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
                 <div className="mt-4 space-y-3">
-                  {visibleNotifications.map((item) => (
-                    <div key={item.id} className="rounded-2xl border border-border bg-background p-3">
-                      <div className="font-medium">{item.title}</div>
-                      <div className="mt-1 text-sm text-muted-foreground">{item.body}</div>
-                      <div className="mt-2 text-xs uppercase tracking-[0.2em] text-primary">
-                        {item.time}
+                  {visibleNotifications.length ? (
+                    visibleNotifications.map((item) => (
+                      <div key={item.id} className="rounded-2xl border border-border bg-background p-3">
+                        <div className="font-medium">{item.title}</div>
+                        <div className="mt-1 text-sm text-muted-foreground">{item.body}</div>
+                        <div className="mt-2 text-xs uppercase tracking-[0.2em] text-primary">
+                          {new Date(item.createdAt).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-border bg-background p-3 text-sm text-muted-foreground">
+                      No notifications right now.
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}

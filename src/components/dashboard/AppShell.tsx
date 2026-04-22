@@ -34,16 +34,16 @@ export function AppShell({
   if (allowedRoles && user && !allowedRoles.includes(user.role)) return null;
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div className="flex h-screen w-full overflow-hidden bg-background">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopNavbar onMenu={() => setSidebarOpen(true)} />
         <motion.main
           key={typeof window !== "undefined" ? window.location.pathname : "page"}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="flex-1 px-4 py-6 lg:px-8 lg:py-8"
+          className="flex-1 overflow-y-auto px-4 py-6 lg:px-8 lg:py-8"
         >
           {children}
         </motion.main>

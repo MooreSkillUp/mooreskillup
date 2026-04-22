@@ -9,7 +9,7 @@ export default function QuizPage() {
       <ComingSoonPanel
         title="Quiz is coming soon"
         body="Quiz pages remain in the codebase, but quiz interactions are disabled until the course completion flow is finalized."
-        backHref="/dashboard/courses"
+        backHref="/courses"
         backLabel="Back to courses"
       />
     </AppShell>

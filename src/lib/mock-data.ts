@@ -1,4 +1,4 @@
-export type Interest =
+export type BaseInterest =
   | "Web Development"
   | "Backend Development"
   | "Graphics and Design"
@@ -6,6 +6,8 @@ export type Interest =
   | "Engineering"
   | "Cloud and DevOps"
   | "Programming Languages";
+
+export type Interest = BaseInterest | (string & {});
 
 export type WebTrack =
   | "Frontend Development"
@@ -43,7 +45,7 @@ export type LanguageTrack =
   | "TypeScript"
   | "SQL";
 
-export type TrackName =
+export type BaseTrackName =
   | WebTrack
   | BackendTrack
   | DesignTrack
@@ -51,6 +53,8 @@ export type TrackName =
   | EngineeringTrack
   | CloudTrack
   | LanguageTrack;
+
+export type TrackName = BaseTrackName | (string & {});
 
 export type UserPlan = "free" | "pro" | "premium";
 export type UserRole = "student" | "admin" | "teacher";
@@ -248,10 +252,10 @@ export interface TeacherProfileOption {
 export interface AdminBroadcast {
   id: string;
   title: string;
-  image: string;
   description: string;
-  target: "all-students" | "tutors";
+  audience: "students" | "tutors";
   sentAt: string;
+  status: "sent" | "pending";
 }
 
 export interface CoursePaymentSnapshot {
@@ -272,7 +276,7 @@ export interface PaymentRecord {
   purchasedAt: string;
 }
 
-export const interests: Interest[] = [
+export const interests: BaseInterest[] = [
   "Web Development",
   "Backend Development",
   "Graphics and Design",
@@ -282,7 +286,7 @@ export const interests: Interest[] = [
   "Programming Languages",
 ];
 
-export const trackOptionsByInterest: Record<Interest, TrackName[]> = {
+export const trackOptionsByInterest: Record<BaseInterest, TrackName[]> = {
   "Web Development": [
     "Frontend Development",
     "Fullstack Foundations",
@@ -724,7 +728,11 @@ export const mockUser = {
   wishlist: ["backend-python-api-builder"],
   selectedInterest: "Backend Development" as Interest,
   selectedTrack: "Backend with Python" as TrackName,
-  purchasedCourseIds: ["backend-python-api-builder"],
+  purchasedCourseIds: [
+    "backend-python-api-builder",
+    "backend-javascript-engine",
+    "cloud-devops-launchpad",
+  ],
 };
 
 export const courses: Course[] = [
@@ -1573,33 +1581,36 @@ export const teacherProfileOptions: TeacherProfileOption[] = [
 ];
 
 export const adminUsers = [
-  { id: "u-11", name: "Zainab Okon", role: "Student", program: "Web Development", track: "Frontend Development", purchasedCourses: 2 },
-  { id: "u-12", name: "Chinedu Grey", role: "Student", program: "Backend Development", track: "Backend with Python", purchasedCourses: 3 },
-  { id: "u-13", name: "Mina Duarte", role: "Teacher", program: "Graphics and Design", track: "UI/UX Design", purchasedCourses: 0 },
-  { id: "u-14", name: "Ada Morgan", role: "Admin", program: "Backend Development", track: "Backend with Python", purchasedCourses: 0 },
-  { id: "u-15", name: "Tomi Bello", role: "Teacher", program: "Engineering", track: "SolidWorks", purchasedCourses: 0 },
+  { id: "u-11", name: "Zainab Okon", email: "zainab@myskillup.com", role: "Student", active: true, program: "", track: "", purchasedCourses: 2 },
+  { id: "u-12", name: "Chinedu Grey", email: "chinedu@myskillup.com", role: "Student", active: true, program: "", track: "", purchasedCourses: 3 },
+  { id: "u-13", name: "Mina Duarte", email: "mina@myskillup.com", role: "Teacher", active: true, program: "Graphics and Design", track: "UI/UX Design", purchasedCourses: 0 },
+  { id: "u-14", name: "Ada Morgan", email: "ada@myskillup.com", role: "Admin", active: true, program: "", track: "", purchasedCourses: 0 },
+  { id: "u-15", name: "Tomi Bello", email: "tomi@myskillup.com", role: "Teacher", active: false, program: "Engineering", track: "SolidWorks", purchasedCourses: 0 },
+  { id: "u-16", name: "Ifeoma James", email: "ifeoma@myskillup.com", role: "Teacher", active: true, program: "Web Development", track: "React and Modern UI", purchasedCourses: 0 },
 ];
 
 export const adminBroadcasts: AdminBroadcast[] = [
   {
     id: "b1",
     title: "New backend course sections unlocked",
-    image: "/hero-bg.jpg",
     description:
       "Free learners can now preview the first backend section before purchasing the full course.",
-    target: "all-students",
+    audience: "students",
     sentAt: "Today",
+    status: "sent",
   },
   {
     id: "b2",
     title: "Tutor upload review reminder",
-    image: "/hero-bg.jpg",
     description:
       "Tutors should add submission instructions to each section task before publishing.",
-    target: "tutors",
+    audience: "tutors",
     sentAt: "Yesterday",
+    status: "sent",
   },
 ];
+
+export const COURSE_BRAND_LABEL = "Produced by MySkillUp";
 
 const courseCatalogConfig: Record<
   string,
@@ -1776,12 +1787,16 @@ export function getPlatformOverview() {
   const students = adminUsers.filter((user) => user.role === "Student").length;
   const tutors = teacherProfileOptions.filter((teacher) => teacher.isActive !== false).length;
   const admins = adminUsers.filter((user) => user.role === "Admin").length;
+  const totalRevenue = coursePaymentSnapshots.reduce((sum, item) => sum + item.revenue, 0);
 
   return {
+    totalUsers: students + tutors + admins,
     totalStudents: students,
     totalTutors: tutors,
+    totalTeachers: tutors,
     totalAdmins: admins,
     totalCourses: courses.length,
+    totalRevenue,
   };
 }
 
@@ -1803,23 +1818,75 @@ export function getTeacherRows() {
   });
 }
 
+export function getTeacherAssignmentOptions() {
+  return teacherProfileOptions
+    .filter((teacher) => teacher.isActive !== false)
+    .map((teacher) => ({
+      id: teacher.id,
+      name: teacher.name,
+      label: `${teacher.name} | ${teacher.program} | ${teacher.track}`,
+    }));
+}
+
+export function getAdminUserRows() {
+  const teacherRows = getTeacherRows().map((teacher) => ({
+    id: teacher.id,
+    name: teacher.name,
+    email: teacher.email,
+    role: "Teacher",
+    program: teacher.program,
+    track: teacher.track,
+    numberOfCourses: teacher.numberOfCourses,
+    active: teacher.isActive,
+    reassignedTo: teacher.reassignsTo,
+  }));
+
+  const nonTeacherRows = adminUsers
+    .filter((user) => user.role !== "Teacher")
+    .map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      program: user.role === "Student" ? "Learner account" : "-",
+      track: user.role === "Student" ? "Personalized path" : "-",
+      numberOfCourses: user.role === "Student" ? user.purchasedCourses : 0,
+      active: user.active !== false,
+      reassignedTo: null as string | null,
+    }));
+
+  return [...nonTeacherRows, ...teacherRows];
+}
+
 export function getAdminCourseRows() {
   return courses.map((course) => ({
     id: course.id,
     title: course.title,
-    tutorName: getCourseMeta(course).teacherName,
+    teacherId: getCourseMeta(course).teacherId,
+    teacherName: getCourseMeta(course).teacherName,
+    ownershipStatus:
+      getCourseMeta(course).teacherId === "admin-owned" ? "Admin ownership" : "Teacher assigned",
     price: getCoursePrice(course),
     status: getCourseMeta(course).status,
+    producedBy: COURSE_BRAND_LABEL,
   }));
 }
 
 export function getRevenueSummary() {
   const totalRevenue = coursePaymentSnapshots.reduce((sum, item) => sum + item.revenue, 0);
+  const perTeacher = coursePaymentSnapshots.reduce<Record<string, number>>((acc, item) => {
+    acc[item.tutorName] = (acc[item.tutorName] ?? 0) + item.revenue;
+    return acc;
+  }, {});
 
   return {
     totalRevenue,
     totalPurchases: paymentRecords.length,
     byCourse: coursePaymentSnapshots,
+    perTeacher: Object.entries(perTeacher).map(([teacherName, revenue]) => ({
+      teacherName,
+      revenue,
+    })),
   };
 }
 
@@ -1830,14 +1897,13 @@ export function getNotificationsForRole(role: UserRole = "student") {
   });
 
   const adminMessages = adminBroadcasts
-    .filter((item) => (role === "teacher" ? item.target === "tutors" : item.target === "all-students"))
+    .filter((item) => (role === "teacher" ? item.audience === "tutors" : item.audience === "students"))
     .map((item) => ({
       id: `broadcast-${item.id}`,
       title: item.title,
       body: item.description,
       description: item.description,
-      image: item.image,
-      target: item.target,
+      target: item.audience === "tutors" ? "tutors" : "all-students",
       kind: "message" as const,
       read: false,
       time: item.sentAt,

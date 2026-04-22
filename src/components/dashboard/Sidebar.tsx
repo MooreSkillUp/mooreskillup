@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Award,
   BookOpen,
+  CreditCard,
   FolderKanban,
   LayoutDashboard,
   LogOut,
@@ -31,9 +32,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const studentLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/courses", label: "Courses", icon: BookOpen },
-    { href: "/quiz-shop", label: "Quiz Shop", icon: ShoppingBag },
-    { href: "/coming-soon", label: "Leaderboard", icon: Trophy, disabled: true },
-    { href: "/coming-soon", label: "Achievements", icon: Medal, disabled: true },
+    { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+    { href: "/dashboard/quiz-shop", label: "Quiz Shop", icon: ShoppingBag },
+    { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+    { href: "/achievements", label: "Achievements", icon: Medal },
     { href: "/certificates", label: "Certificates", icon: Award },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
@@ -41,13 +43,16 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const adminLinks = [
     { href: "/admin/dashboard", label: "Admin dashboard", icon: Shield },
     { href: "/admin/courses", label: "Admin courses", icon: FolderKanban },
+    { href: "/admin/courses?owner=admin", label: "Admin-Owned Courses", icon: BookOpen },
     { href: "/admin/users", label: "Admin users", icon: Users },
   ];
 
   const teacherLinks = [
-    { href: "/teacher/dashboard", label: "Teacher dashboard", icon: LayoutDashboard },
-    { href: "/teacher/upload", label: "Teacher upload", icon: Upload },
-    { href: "/teacher/settings", label: "Teacher settings", icon: Settings },
+    { href: "/teacher/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/teacher/courses", label: "My courses", icon: BookOpen },
+    { href: "/teacher/create-course", label: "Create course", icon: Upload },
+    { href: "/teacher/uploads", label: "Current uploads", icon: FolderKanban },
+    { href: "/teacher/settings", label: "Settings", icon: Settings },
   ];
 
   const navGroups =
@@ -65,6 +70,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 lg:static lg:translate-x-0",
+          // "fixed inset-y-0 left-0 z-40 flex h-screen w-72 flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -84,46 +90,35 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-5">
+        <div className="flex-1 px-3 py-5">
           {navGroups.map((group) => (
             <div key={group.title} className="mb-6">
               <div className="px-3 text-[11px] font-semibold uppercase tracking-[0.25em] text-sidebar-foreground/55">
                 {group.title}
               </div>
               <nav className="mt-2 space-y-1">
-                {group.items.map(({ href, label, icon: Icon, disabled }) => {
+                {group.items.map(({ href, label, icon: Icon }) => {
                   const active =
                     pathname === href ||
-                    (href === "/dashboard/courses" && pathname?.startsWith("/course"));
-                  const className = cn(
-                    "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-accent text-accent-foreground"
-                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                    disabled && "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-sidebar-foreground/80",
-                  );
-
-                  if (disabled) {
-                    return (
-                      <button
-                        key={`${href}-${label}`}
-                        type="button"
-                        disabled
-                        className={className}
-                      >
-                        <Icon className="h-4.5 w-4.5" />
-                        {label}
-                        <span className="ml-auto text-[10px] uppercase tracking-[0.2em]">Soon</span>
-                      </button>
-                    );
-                  }
-
+                    (href === "/dashboard/courses" && pathname?.startsWith("/course")) ||
+                    (href === "/dashboard/payments" &&
+                      (pathname === "/dashboard/payments" || pathname?.startsWith("/payment/"))) ||
+                    (href === "/admin/courses" && pathname?.startsWith("/admin/courses")) ||
+                    (href === "/admin/courses?owner=admin" &&
+                      pathname?.startsWith("/admin/courses") &&
+                      typeof window !== "undefined" &&
+                      window.location.search.includes("owner=admin"));
                   return (
                     <Link
                       key={href}
                       href={href}
                       onClick={onClose}
-                      className={className}
+                      className={cn(
+                        "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-colors",
+                        active
+                          ? "bg-accent text-accent-foreground"
+                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                      )}
                     >
                       <Icon className="h-4.5 w-4.5" />
                       {label}
