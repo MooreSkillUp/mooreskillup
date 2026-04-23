@@ -1703,7 +1703,7 @@ export function TeacherWorkspaceProvider({ children }: { children: ReactNode }) 
         payments: [nextPayment, ...current.payments],
       }));
 
-      updateUser({
+      void updateUser({
         purchasedCourseIds: [...(user.purchasedCourseIds ?? []), courseId],
       });
 

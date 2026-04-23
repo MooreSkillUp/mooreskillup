@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const academicPath = user?.selectedInterest ?? "Backend Development";
   const [username, setUsername] = useState(user?.username ?? "");
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
   const availableTracks = useMemo(() => {
     const categoryTracks = categories
@@ -41,21 +42,25 @@ export default function SettingsPage() {
     );
   };
 
-  const onProfile = (event: React.FormEvent) => {
+  const onProfile = async (event: React.FormEvent) => {
     event.preventDefault();
+    setError("");
     const nextTracks = selectedTracks.length ? selectedTracks : availableTracks.slice(0, 1);
-
-    updateUser({
-      username,
-      displayName: toDisplayName(username),
-      email: user?.email,
-      interests: [academicPath],
-      selectedInterest: academicPath,
-      selectedTrack: nextTracks[0] ?? user?.selectedTrack,
-      selectedTracks: nextTracks,
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await updateUser({
+        username,
+        displayName: toDisplayName(username),
+        email: user?.email,
+        interests: [academicPath],
+        selectedInterest: academicPath,
+        selectedTrack: nextTracks[0] ?? user?.selectedTrack,
+        selectedTracks: nextTracks,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to save your profile.");
+    }
   };
 
   return (
@@ -135,6 +140,7 @@ export default function SettingsPage() {
                 <Save className="h-4 w-4" /> Save changes
               </Button>
               {saved && <span className="text-sm text-success">Saved.</span>}
+              {error && <span className="text-sm text-destructive">{error}</span>}
             </div>
           </form>
         </section>

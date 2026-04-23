@@ -15,11 +15,13 @@ export function AppShell({
   children: ReactNode;
   allowedRoles?: UserRole[];
 }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
+    if (isLoading) return;
+
     if (!isAuthenticated) {
       router.push("/auth/login");
       return;
@@ -28,8 +30,9 @@ export function AppShell({
     if (allowedRoles && user && !allowedRoles.includes(user.role)) {
       router.push(getHomeRouteForUser(user));
     }
-  }, [allowedRoles, isAuthenticated, router, user]);
+  }, [allowedRoles, isAuthenticated, isLoading, router, user]);
 
+  if (isLoading) return null;
   if (!isAuthenticated) return null;
   if (allowedRoles && user && !allowedRoles.includes(user.role)) return null;
 

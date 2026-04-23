@@ -15,6 +15,7 @@ import {
   ShoppingBag,
   Trophy,
   Upload,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -42,9 +43,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
   const adminLinks = [
     { href: "/admin/dashboard", label: "Admin dashboard", icon: Shield },
+    { href: "/admin/teachers", label: "Create teacher", icon: UserPlus },
+    { href: "/admin/users", label: "Manage teachers", icon: Users },
     { href: "/admin/courses", label: "Admin courses", icon: FolderKanban },
+    { href: "/admin/payments", label: "Payments", icon: CreditCard },
     { href: "/admin/courses?owner=admin", label: "Admin-Owned Courses", icon: BookOpen },
-    { href: "/admin/users", label: "Admin users", icon: Users },
   ];
 
   const teacherLinks = [

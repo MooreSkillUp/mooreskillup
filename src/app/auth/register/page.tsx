@@ -2,23 +2,21 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { getHomeRouteForUser, useAuth } from "@/lib/auth";
-import {
-  interests,
-  trackOptionsByInterest,
-  type Interest,
-  type TrackName,
-} from "@/lib/mock-data";
+import { type Interest, type TrackName } from "@/lib/mock-data";
+import { usePlatformTaxonomy } from "@/lib/taxonomy";
 
 export default function AuthRegisterPage() {
   const { register } = useAuth();
   const router = useRouter();
+  const { interests, trackOptionsByInterest, isLoading: isLoadingTaxonomy, error: taxonomyError } =
+    usePlatformTaxonomy();
   const [form, setForm] = useState({
     username: "",
     email: "",
@@ -29,7 +27,25 @@ export default function AuthRegisterPage() {
   const [selectedTrack, setSelectedTrack] = useState<TrackName>("Backend with Python");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const trackOptions = trackOptionsByInterest[selectedInterest];
+  const trackOptions = useMemo(
+    () => trackOptionsByInterest[selectedInterest] ?? [],
+    [selectedInterest, trackOptionsByInterest],
+  );
+
+  useEffect(() => {
+    if (!interests.length) return;
+    if (!interests.includes(selectedInterest)) {
+      const nextInterest = interests[0];
+      setSelectedInterest(nextInterest);
+      setSelectedTrack(
+        (trackOptionsByInterest[nextInterest] ?? [])[0] ?? ("Backend with Python" as TrackName),
+      );
+      return;
+    }
+    if (trackOptions.length && !trackOptions.includes(selectedTrack)) {
+      setSelectedTrack(trackOptions[0]);
+    }
+  }, [interests, selectedInterest, selectedTrack, trackOptions, trackOptionsByInterest]);
 
   const setField =
     (field: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -43,19 +59,31 @@ export default function AuthRegisterPage() {
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
+    if (!interests.length || !trackOptions.length) {
+      setError("Registration is unavailable until an admin adds categories and tracks.");
+      return;
+    }
     if (form.password !== form.confirm) {
       setError("Passwords do not match.");
       return;
     }
     setLoading(true);
-    const nextUser = await register({
-      username: form.username,
-      email: form.email,
-      interests: [selectedInterest],
-      selectedInterest,
-      selectedTrack,
-    });
-    router.push(getHomeRouteForUser(nextUser));
+    try {
+      const nextUser = await register({
+        username: form.username,
+        email: form.email,
+        password: form.password,
+        displayName: form.username,
+        interests: [selectedInterest],
+        selectedInterest,
+        selectedTrack,
+      });
+      router.push(getHomeRouteForUser(nextUser));
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to create your account.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -129,6 +157,14 @@ export default function AuthRegisterPage() {
 
             <div>
               <div className="text-sm font-medium text-foreground">Choose your main academy path</div>
+              {taxonomyError && (
+                <p className="mt-2 text-sm text-destructive">{taxonomyError}</p>
+              )}
+              {!taxonomyError && !isLoadingTaxonomy && !interests.length && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Registration opens after an admin adds categories and tracks.
+                </p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
                 {interests.map((interest) => {
                   const active = selectedInterest === interest;
@@ -182,7 +218,13 @@ export default function AuthRegisterPage() {
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 
-            <Button type="submit" variant="accent" size="lg" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              variant="accent"
+              size="lg"
+              className="w-full"
+              disabled={loading || isLoadingTaxonomy || !interests.length || !trackOptions.length}
+            >
               {loading ? "Creating account..." : "Create account"}
             </Button>
           </form>

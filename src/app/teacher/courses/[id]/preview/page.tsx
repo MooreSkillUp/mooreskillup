@@ -5,11 +5,11 @@ import { useParams } from "next/navigation";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { LearnerCoursePreview } from "@/components/teacher/LearnerCoursePreview";
 import { Button } from "@/components/ui-kit/Button";
-import { useTeacherWorkspace } from "@/lib/teacher-workspace";
+import { useTeacherPlatform } from "@/lib/teacher-platform";
 
 export default function TeacherCoursePreviewPage() {
   const params = useParams();
-  const { getCourseById } = useTeacherWorkspace();
+  const { getCourseById } = useTeacherPlatform();
   const course = getCourseById(params.id as string);
 
   if (!course) {

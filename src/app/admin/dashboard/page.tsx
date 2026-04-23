@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   BellRing,
+  CreditCard,
   FolderKanban,
   Shield,
   UserPlus,
@@ -12,19 +13,19 @@ import {
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui-kit/Button";
-import { useTeacherWorkspace } from "@/lib/teacher-workspace";
+import { useAdminPlatform } from "@/lib/admin-platform";
 
-type BroadcastAudience = "students" | "tutors";
+type BroadcastAudience = "students" | "teachers";
 
 export default function AdminDashboardPage() {
-  const { teachers, courses, broadcasts, createBroadcast, clearBroadcastHistory } = useTeacherWorkspace();
+  const { teachers, courses, broadcasts, createBroadcast, clearBroadcastHistory, totals, isLoading, error } =
+    useAdminPlatform();
   const [audience, setAudience] = useState<BroadcastAudience>("students");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [success, setSuccess] = useState("");
 
   const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
-  const inactiveTeachers = teachers.filter((teacher) => teacher.status === "inactive").length;
   const publishedCourses = courses.filter((course) => course.status === "published").length;
 
   const topTeachers = useMemo(
@@ -41,14 +42,15 @@ export default function AdminDashboardPage() {
 
   const sendBroadcast = () => {
     if (!title.trim() || !description.trim()) return;
-    createBroadcast({ title: title.trim(), description: description.trim(), audience });
-    setSuccess(
-      audience === "students"
-        ? "Notification sent to all students"
-        : "Notification sent to all teachers",
-    );
-    setTitle("");
-    setDescription("");
+    void createBroadcast({ title: title.trim(), description: description.trim(), audience }).then(() => {
+      setSuccess(
+        audience === "students"
+          ? "Notification sent to all students"
+          : "Notification sent to all teachers",
+      );
+      setTitle("");
+      setDescription("");
+    });
   };
 
   return (
@@ -64,8 +66,9 @@ export default function AdminDashboardPage() {
               Broadcast updates, monitor teacher activity, manage ownership fallback, and keep platform data synchronized from one admin workspace.
             </p>
           </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex flex-wrap gap-3">
-            <Link href="/auth/teacher-register">
+            <Link href="/admin/teachers">
               <Button variant="accent">
                 <UserPlus className="h-4 w-4" /> Create teacher account
               </Button>
@@ -78,10 +81,10 @@ export default function AdminDashboardPage() {
 
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {[
+            { icon: Users, label: "Students", value: `${totals?.students ?? 0}` },
             { icon: Shield, label: "Active teachers", value: `${activeTeachers}` },
-            { icon: Users, label: "Inactive teachers", value: `${inactiveTeachers}` },
             { icon: FolderKanban, label: "Total courses", value: `${courses.length}` },
-            { icon: BellRing, label: "Broadcasts (24h)", value: `${broadcasts.length}` },
+            { icon: CreditCard, label: "Payments", value: `${totals?.payments ?? 0}` },
           ].map((item) => (
             <div key={item.label} className="rounded-3xl border border-border bg-card p-6 shadow-sm">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -119,7 +122,7 @@ export default function AdminDashboardPage() {
               <div>
                 <div className="text-sm font-medium text-foreground">Target audience</div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {(["students", "tutors"] as const).map((option) => {
+                  {(["students", "teachers"] as const).map((option) => {
                     const active = audience === option;
                     return (
                       <button
@@ -153,7 +156,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <Button
                   variant="outline"
-                  onClick={clearBroadcastHistory}
+                  onClick={() => void clearBroadcastHistory()}
                   disabled={!broadcasts.length}
                 >
                   Clear Notification History
@@ -169,8 +172,8 @@ export default function AdminDashboardPage() {
                           <div className="mt-1 text-sm text-muted-foreground">{item.description}</div>
                         </div>
                         <div className="text-sm text-muted-foreground md:text-right">
-                          <div>Audience: {item.audience === "students" ? "Students" : "Teachers"}</div>
-                          <div>Date sent: {item.sentAt}</div>
+                          <div>Audience: {item.audience === "students" ? "Students" : item.audience === "teachers" ? "Teachers" : "All"}</div>
+                          <div>Date sent: {item.sentAt ? new Date(item.sentAt).toLocaleString("en-NG") : "Pending"}</div>
                           <div className="font-medium text-foreground">Status: {item.status}</div>
                         </div>
                       </div>
@@ -178,7 +181,7 @@ export default function AdminDashboardPage() {
                   ))
                 ) : (
                   <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
-                    No broadcasts in the active 24-hour window.
+                    {isLoading ? "Loading broadcasts..." : "No broadcasts in the active 24-hour window."}
                   </div>
                 )}
               </div>

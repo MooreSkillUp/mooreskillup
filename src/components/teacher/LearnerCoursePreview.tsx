@@ -1,8 +1,8 @@
 "use client";
 
-import { Lock, PlayCircle, ScrollText, ClipboardCheck, Eye } from "lucide-react";
+import { ClipboardCheck, Eye, Lock, PlayCircle, ScrollText } from "lucide-react";
 import { formatNaira } from "@/lib/commerce";
-import type { TeacherCourse } from "@/lib/teacher-workspace";
+import type { TeacherCourse } from "@/lib/teacher-platform";
 
 function stripHtml(value: string) {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -27,7 +27,7 @@ export function LearnerCoursePreview({ course }: { course: TeacherCourse }) {
             <span>{course.analytics.completionRate}% completion rate</span>
             <span>{course.sections.length} sections</span>
             <span>
-              {course.price === 0 ? "₦0 free course" : `${formatNaira(course.price)} unlocks full course`}
+              {course.price === 0 ? "N0 free course" : `${formatNaira(course.price)} unlocks full course`}
             </span>
           </div>
 
@@ -69,9 +69,7 @@ export function LearnerCoursePreview({ course }: { course: TeacherCourse }) {
                     </div>
                     <div
                       className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${
-                        locked
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-success/10 text-success"
+                        locked ? "bg-muted text-muted-foreground" : "bg-success/10 text-success"
                       }`}
                     >
                       {locked ? "Paid" : "Free"}
@@ -121,10 +119,7 @@ export function LearnerCoursePreview({ course }: { course: TeacherCourse }) {
                         {!locked && task.resourceLinks.length > 0 && (
                           <div className="mt-3 flex flex-wrap gap-2">
                             {task.resourceLinks.map((link) => (
-                              <span
-                                key={link}
-                                className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground"
-                              >
+                              <span key={link} className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
                                 {link}
                               </span>
                             ))}
@@ -148,8 +143,7 @@ export function LearnerCoursePreview({ course }: { course: TeacherCourse }) {
             <div
               className="prose prose-sm mt-3 max-w-none text-muted-foreground dark:prose-invert"
               dangerouslySetInnerHTML={{
-                __html:
-                  course.overview || "<p>Course overview will appear here once added.</p>",
+                __html: course.overview || "<p>Course overview will appear here once added.</p>",
               }}
             />
           </div>
@@ -168,7 +162,7 @@ export function LearnerCoursePreview({ course }: { course: TeacherCourse }) {
                 Free sections are visible to all learners.
               </div>
               <div className="rounded-2xl bg-muted/40 p-4">
-                Course price: {course.price === 0 ? "₦0" : formatNaira(course.price)}.
+                Course price: {course.price === 0 ? "N0" : formatNaira(course.price)}.
               </div>
               <div className="rounded-2xl bg-muted/40 p-4">
                 Locked sections stay clearly marked until the learner pays once to unlock the full course.

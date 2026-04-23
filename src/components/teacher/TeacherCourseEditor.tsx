@@ -22,14 +22,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { LearnerCoursePreview } from "@/components/teacher/LearnerCoursePreview";
 import { RichTextEditor } from "@/components/teacher/RichTextEditor";
 import {
-  useTeacherWorkspace,
+  useTeacherPlatform,
   type TeacherCourse,
   type TeacherLesson,
   type TeacherLessonContentType,
   type TeacherSection,
   type TeacherTask,
   type TeacherTaskSubmissionType,
-} from "@/lib/teacher-workspace";
+} from "@/lib/teacher-platform";
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
@@ -92,7 +92,7 @@ export function TeacherCourseEditor({
     saveCourse,
     validateCourse,
     recordActivity,
-  } = useTeacherWorkspace();
+  } = useTeacherPlatform();
   const source = courseId ? getCourseById(courseId) : undefined;
   const [course, setCourse] = useState<TeacherCourse>(() => clone(source ?? buildEmptyCourse()));
   const [previewOpen, setPreviewOpen] = useState(mode === "create");
@@ -137,12 +137,13 @@ export function TeacherCourseEditor({
     const interval = window.setInterval(() => {
       const nextSnapshot = JSON.stringify(course);
       if (nextSnapshot === lastSnapshot.current) return;
-      const result = saveCourse({ ...course, status: "draft" }, "draft", { autosave: true });
-      if (result.ok) {
-        lastSnapshot.current = JSON.stringify(result.course);
-        setCourse(result.course);
-        setAutosaveMessage(`Auto-saved ${result.course.lastUpdated}`);
-      }
+      void saveCourse({ ...course, status: "draft" }, "draft", { autosave: true }).then((result) => {
+        if (result.ok) {
+          lastSnapshot.current = JSON.stringify(result.course);
+          setCourse(result.course);
+          setAutosaveMessage(`Auto-saved ${result.course.lastUpdated}`);
+        }
+      });
     }, 12000);
 
     return () => window.clearInterval(interval);
@@ -172,7 +173,7 @@ export function TeacherCourseEditor({
       };
     });
     setActiveSectionId(nextSectionId);
-    recordActivity(
+    void recordActivity(
       `Added Section ${course.sections.length + 1} to ${course.title || "Untitled course"}`,
       "edit-course",
     );
@@ -197,7 +198,7 @@ export function TeacherCourseEditor({
       ...current,
       lessons: [...current.lessons, buildLesson()],
     }));
-    recordActivity(
+    void recordActivity(
       `Added Lesson ${(section?.lessons.length ?? 0) + 1} to ${section?.title || "a section"}`,
       "edit-course",
     );
@@ -209,7 +210,7 @@ export function TeacherCourseEditor({
       ...current,
       tasks: [...current.tasks, buildTask()],
     }));
-    recordActivity(`Added a task to ${section?.title || "a section"}`, "edit-course");
+    void recordActivity(`Added a task to ${section?.title || "a section"}`, "edit-course");
   };
 
   const moveSection = (fromId: string, toId: string) => {
@@ -222,7 +223,7 @@ export function TeacherCourseEditor({
       sections.splice(toIndex, 0, moved);
       return { ...current, sections };
     });
-    recordActivity(`Reordered sections in ${course.title || "Untitled course"}`, "reorder-content");
+    void recordActivity(`Reordered sections in ${course.title || "Untitled course"}`, "reorder-content");
   };
 
   const moveLesson = (sectionId: string, fromId: string, toId: string) => {
@@ -235,7 +236,7 @@ export function TeacherCourseEditor({
       lessons.splice(toIndex, 0, moved);
       return { ...section, lessons };
     });
-    recordActivity(
+    void recordActivity(
       `Reordered lessons inside ${
         course.sections.find((section) => section.id === sectionId)?.title || "a section"
       }`,
@@ -251,15 +252,15 @@ export function TeacherCourseEditor({
     }
   };
 
-  const saveDraft = () => {
-    const result = saveCourse({ ...course, status: "draft" }, "draft");
+  const saveDraft = async () => {
+    const result = await saveCourse({ ...course, status: "draft" }, "draft");
     if (!result.ok) return;
     persistAndNavigateIfNeeded(result.course);
     setManualMessage("Draft saved");
   };
 
-  const publish = () => {
-    const result = saveCourse({ ...course, status: "published" }, "publish");
+  const publish = async () => {
+    const result = await saveCourse({ ...course, status: "published" }, "publish");
     if (!result.ok) {
       setManualMessage("Fix validation issues before publishing");
       return;
@@ -268,8 +269,8 @@ export function TeacherCourseEditor({
     setManualMessage("Course published");
   };
 
-  const unpublish = () => {
-    const result = saveCourse({ ...course, status: "draft" }, "unpublish");
+  const unpublish = async () => {
+    const result = await saveCourse({ ...course, status: "draft" }, "unpublish");
     if (!result.ok) return;
     persistAndNavigateIfNeeded(result.course);
     setManualMessage("Course moved back to draft");

@@ -2,10 +2,10 @@
 
 import { Trash2 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
-import { useTeacherWorkspace } from "@/lib/teacher-workspace";
+import { useTeacherPlatform } from "@/lib/teacher-platform";
 
 export default function TeacherUploadsPage() {
-  const { activities, clearTeacherActivities } = useTeacherWorkspace();
+  const { activities, clearTeacherActivities } = useTeacherPlatform();
 
   return (
     <AppShell allowedRoles={["teacher", "admin"]}>
@@ -40,7 +40,7 @@ export default function TeacherUploadsPage() {
               </div>
               <div className="flex-1 rounded-3xl border border-border bg-card p-5 shadow-sm">
                 <div className="font-medium">{activity.message}</div>
-                <div className="mt-1 text-sm text-muted-foreground">{activity.timestamp}</div>
+                <div className="mt-1 text-sm text-muted-foreground">{new Date(activity.timestamp).toLocaleString("en-NG")}</div>
                 <div className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
                   {activity.type}
                 </div>

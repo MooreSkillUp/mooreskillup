@@ -15,13 +15,21 @@ export default function AuthLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    setError("");
     setLoading(true);
-    const nextUser = await login(email || "alex.pro@mooreskillup.com");
-    router.push(getHomeRouteForUser(nextUser));
+    try {
+      const nextUser = await login(email, password);
+      router.push(getHomeRouteForUser(nextUser));
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to sign in.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -107,6 +115,7 @@ export default function AuthLoginPage() {
                 Forgot password?
               </Link>
             </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" variant="accent" size="lg" className="w-full" disabled={loading}>
               {loading ? "Signing in..." : "Login"}
             </Button>

@@ -1,31 +1,54 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, UserPlus, Users } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
-import { interests, trackOptionsByInterest, type Interest, type TrackName } from "@/lib/mock-data";
-import { useTeacherWorkspace } from "@/lib/teacher-workspace";
+import { useAdminPlatform } from "@/lib/admin-platform";
+import { type Interest, type TrackName } from "@/lib/mock-data";
+import { usePlatformTaxonomy } from "@/lib/taxonomy";
 
 export default function AdminUsersPage() {
+  const { interests, trackOptionsByInterest } = usePlatformTaxonomy();
   const {
     teachers,
     courses,
     createTeacher,
     updateTeacher,
     reassignCourse,
-  } = useTeacherWorkspace();
+    isLoading,
+    error,
+  } = useAdminPlatform();
   const [editingTeacherId, setEditingTeacherId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [draftEmail, setDraftEmail] = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
+  const [createdTeacherMessage, setCreatedTeacherMessage] = useState("");
   const [newTeacherForm, setNewTeacherForm] = useState({
     displayName: "",
     email: "",
     program: "Web Development" as Interest,
     track: "React and Modern UI" as TrackName,
   });
+
+  useEffect(() => {
+    if (!interests.length) return;
+    const nextProgram = interests.includes(newTeacherForm.program)
+      ? newTeacherForm.program
+      : interests[0];
+    const nextTracks = trackOptionsByInterest[nextProgram] ?? [];
+    const nextTrack = nextTracks.includes(newTeacherForm.track) ? newTeacherForm.track : nextTracks[0];
+
+    if (nextProgram !== newTeacherForm.program || nextTrack !== newTeacherForm.track) {
+      setNewTeacherForm((current) => ({
+        ...current,
+        program: nextProgram,
+        track: nextTrack ?? current.track,
+      }));
+    }
+  }, [interests, newTeacherForm.program, newTeacherForm.track, trackOptionsByInterest]);
 
   const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
   const inactiveTeachers = teachers.filter((teacher) => teacher.status === "inactive").length;
@@ -50,7 +73,7 @@ export default function AdminUsersPage() {
 
   const saveEdit = () => {
     if (!editingTeacherId) return;
-    updateTeacher(editingTeacherId, {
+    void updateTeacher(editingTeacherId, {
       displayName: draftName.trim() || undefined,
       email: draftEmail.trim() || undefined,
     });
@@ -59,24 +82,30 @@ export default function AdminUsersPage() {
 
   const assignToExistingTeacher = () => {
     if (!selectedCourseId || !selectedOwnerId) return;
-    reassignCourse({ courseId: selectedCourseId, newTeacherId: selectedOwnerId });
+    void reassignCourse({ courseId: selectedCourseId, newTeacherId: selectedOwnerId });
   };
 
   const createTeacherAndAssign = () => {
     if (!selectedCourseId || !newTeacherForm.displayName.trim() || !newTeacherForm.email.trim()) return;
-    const nextTeacher = createTeacher({
+    void createTeacher({
       displayName: newTeacherForm.displayName.trim(),
       email: newTeacherForm.email.trim(),
       program: newTeacherForm.program,
       track: newTeacherForm.track,
-    });
-    reassignCourse({ courseId: selectedCourseId, newTeacherId: nextTeacher.id });
-    setSelectedOwnerId(nextTeacher.id);
-    setNewTeacherForm({
-      displayName: "",
-      email: "",
-      program: "Web Development",
-      track: "React and Modern UI",
+    }).then((nextTeacher) => {
+      setCreatedTeacherMessage(
+        nextTeacher.temporaryPassword
+          ? `Teacher created: ${nextTeacher.email} | Temporary password: ${nextTeacher.temporaryPassword}`
+          : `Teacher created: ${nextTeacher.email}`,
+      );
+      void reassignCourse({ courseId: selectedCourseId, newTeacherId: nextTeacher.id });
+      setSelectedOwnerId(nextTeacher.id);
+      setNewTeacherForm({
+        displayName: "",
+        email: "",
+        program: "Web Development",
+        track: "React and Modern UI",
+      });
     });
   };
 
@@ -92,10 +121,13 @@ export default function AdminUsersPage() {
             <p className="mt-2 max-w-3xl text-muted-foreground">
               This view focuses only on teachers so course ownership and reassignment remain clear and manageable.
             </p>
+            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
           </div>
-          <Button variant="accent" onClick={() => setEditingTeacherId("new")}>
-            <UserPlus className="h-4 w-4" /> Prepare new teacher
-          </Button>
+          <Link href="/admin/teachers">
+            <Button variant="accent">
+              <UserPlus className="h-4 w-4" /> Create new teacher
+            </Button>
+          </Link>
         </div>
 
         <div className="grid gap-5 md:grid-cols-3">
@@ -159,7 +191,7 @@ export default function AdminUsersPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              updateTeacher(teacher.id, {
+                              void updateTeacher(teacher.id, {
                                 status: teacher.status === "active" ? "inactive" : "active",
                               })
                             }
@@ -263,7 +295,7 @@ export default function AdminUsersPage() {
                     variant="outline"
                     onClick={() => {
                       if (!selectedCourseId) return;
-                      reassignCourse({ courseId: selectedCourseId, newTeacherId: "admin-owned" });
+                      void reassignCourse({ courseId: selectedCourseId, newTeacherId: "admin-owned" });
                     }}
                     disabled={!selectedCourseId}
                   >
@@ -320,16 +352,25 @@ export default function AdminUsersPage() {
                       }
                       className="h-11 rounded-lg border border-input bg-card px-3.5 text-sm"
                     >
-                      {trackOptionsByInterest[newTeacherForm.program].map((track) => (
+                      {(trackOptionsByInterest[newTeacherForm.program] ?? []).map((track) => (
                         <option key={track} value={track}>
                           {track}
                         </option>
                       ))}
                     </select>
                   </div>
-                  <Button variant="outline" onClick={createTeacherAndAssign} disabled={!selectedCourseId}>
+                  <Button
+                    variant="outline"
+                    onClick={createTeacherAndAssign}
+                    disabled={!selectedCourseId || !interests.length || isLoading}
+                  >
                     Create teacher account + assign course
                   </Button>
+                  {createdTeacherMessage && (
+                    <div className="rounded-2xl border border-border bg-muted/20 p-3 text-sm text-foreground">
+                      {createdTeacherMessage}
+                    </div>
+                  )}
                 </div>
               </div>
 

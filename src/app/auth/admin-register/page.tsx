@@ -18,6 +18,7 @@ export default function AdminRegisterPage() {
     email: "",
     password: "",
     confirm: "",
+    adminRegistrationToken: "",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,16 +35,25 @@ export default function AdminRegisterPage() {
       return;
     }
     setLoading(true);
-    const nextUser = await register({
-      username: form.username,
-      email: form.email,
-      interests: ["Backend Development"],
-      selectedInterest: "Backend Development",
-      selectedTrack: "Backend with Python",
-      role: "admin",
-      plan: "premium",
-    });
-    router.push(getHomeRouteForUser(nextUser));
+    try {
+      const nextUser = await register({
+        username: form.username,
+        email: form.email,
+        password: form.password,
+        displayName: form.username,
+        interests: ["Backend Development"],
+        selectedInterest: "Backend Development",
+        selectedTrack: "Backend with Python",
+        role: "admin",
+        plan: "premium",
+        adminRegistrationToken: form.adminRegistrationToken,
+      });
+      router.push(getHomeRouteForUser(nextUser));
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to create admin account.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -70,13 +80,13 @@ export default function AdminRegisterPage() {
             Provision admin access with a dedicated frontend route.
           </h1>
           <p className="mt-5 max-w-md text-lg text-muted-foreground">
-            This is a UI-only admin account creation flow so platform management can
-            be mapped out before Django auth is wired in.
+            Use the backend bootstrap token to create the first admin account safely,
+            then manage the platform from the real admin dashboard.
           </p>
         </div>
 
         <div className="rounded-3xl border border-border bg-card/70 p-5 text-sm text-muted-foreground">
-          Admin accounts land on `/admin/dashboard` and inherit premium access in the mock frontend.
+          Admin accounts land on `/admin/dashboard` and use the real backend auth session.
         </div>
       </div>
 
@@ -98,7 +108,7 @@ export default function AdminRegisterPage() {
 
           <h2 className="font-display text-3xl font-bold tracking-tight">Create admin account</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            This mock flow is for routing and UI planning only.
+            This route is for secure backend bootstrap and admin access setup.
           </p>
 
           <form onSubmit={onSubmit} className="mt-8 space-y-4">
@@ -106,6 +116,13 @@ export default function AdminRegisterPage() {
             <Input label="Email" type="email" value={form.email} onChange={setField("email")} required />
             <Input label="Password" type="password" value={form.password} onChange={setField("password")} required />
             <Input label="Confirm password" type="password" value={form.confirm} onChange={setField("confirm")} required />
+            <Input
+              label="Admin setup token"
+              type="password"
+              value={form.adminRegistrationToken}
+              onChange={setField("adminRegistrationToken")}
+              required
+            />
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" variant="accent" size="lg" className="w-full" disabled={loading}>
               <UserPlus className="h-4 w-4" />

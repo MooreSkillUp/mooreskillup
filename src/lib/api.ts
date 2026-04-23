@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 /**
  * API client for frontend/backend communication
  * Uses NEXT_PUBLIC_API_URL for browser requests
@@ -8,13 +6,13 @@ import fetch from 'node-fetch';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
   status: number;
 }
 
-export async function apiCall<T = any>(
+export async function apiCall<T = unknown>(
   endpoint: string,
   options?: RequestInit
 ): Promise<ApiResponse<T>> {

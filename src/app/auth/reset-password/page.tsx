@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -25,6 +26,7 @@ function ResetPasswordContent() {
 
 function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
   const { resetPassword } = useAuth();
+  const router = useRouter();
   const [token, setToken] = useState(initialToken);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -40,6 +42,9 @@ function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
     setLoading(true);
     const result = await resetPassword(token, password);
     setMessage(result.message);
+    if (result.ok) {
+      setTimeout(() => router.push("/auth/login"), 1200);
+    }
     setLoading(false);
   };
 
@@ -62,7 +67,7 @@ function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
 
         <h1 className="font-display text-3xl font-bold">Reset password</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Enter the email token you received and choose a new password.
+          Enter the reset token from your email and choose a new password.
         </p>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4">

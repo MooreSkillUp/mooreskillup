@@ -12,15 +12,29 @@ import { useAuth } from "@/lib/auth";
 export default function ForgotPasswordPage() {
   const { requestPasswordReset } = useAuth();
   const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
   const [token, setToken] = useState("");
+  const [resetUrl, setResetUrl] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    setError("");
+    setMessage("");
+    setToken("");
+    setResetUrl("");
     setLoading(true);
-    const result = await requestPasswordReset(email);
-    setToken(result.token);
-    setLoading(false);
+    try {
+      const result = await requestPasswordReset(email);
+      setMessage(result.message);
+      setToken(result.debugToken ?? "");
+      setResetUrl(result.debugResetUrl ?? "");
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to send reset email.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -59,9 +73,22 @@ export default function ForgotPasswordPage() {
           </Button>
         </form>
 
+        {error && <div className="mt-6 text-sm text-destructive">{error}</div>}
+
+        {message && (
+          <div className="mt-6 rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+            {message}
+          </div>
+        )}
+
         {token && (
           <div className="mt-6 rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-            Reset email queued. Use this token to continue: <span className="font-semibold text-foreground">{token}</span>
+            Development email preview token: <span className="font-semibold text-foreground">{token}</span>
+            {resetUrl && (
+              <div className="mt-2 break-all text-xs text-muted-foreground">
+                {resetUrl}
+              </div>
+            )}
             <div className="mt-3">
               <Link href={`/auth/reset-password?token=${token}`} className="font-semibold text-primary hover:text-accent">
                 Continue to reset password

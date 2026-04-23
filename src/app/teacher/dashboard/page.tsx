@@ -13,10 +13,10 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
-import { useTeacherWorkspace } from "@/lib/teacher-workspace";
+import { useTeacherPlatform } from "@/lib/teacher-platform";
 
 export default function TeacherDashboardPage() {
-  const { teacher, stats, activities, teacherCourses, clearTeacherActivities } = useTeacherWorkspace();
+  const { profile, stats, activities, teacherCourses, clearTeacherActivities, isLoading, error } = useTeacherPlatform();
   const topCourse = [...teacherCourses].sort(
     (left, right) => right.analytics.enrollments - left.analytics.enrollments,
   )[0];
@@ -30,11 +30,12 @@ export default function TeacherDashboardPage() {
               Teacher dashboard
             </div>
             <h1 className="mt-2 font-display text-4xl font-bold">
-              Welcome back, {teacher.displayName}
+              Welcome back, {profile.displayName}
             </h1>
             <p className="mt-2 max-w-3xl text-muted-foreground">
               Manage your course pipeline, learner reach, draft progress, and recent instructor activity from one professional LMS workspace.
             </p>
+            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/teacher/create-course">
@@ -95,9 +96,16 @@ export default function TeacherDashboardPage() {
               {activities.slice(0, 6).map((activity) => (
                 <div key={activity.id} className="rounded-2xl border border-border bg-background p-4">
                   <div className="font-medium">{activity.message}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">{activity.timestamp}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    {new Date(activity.timestamp).toLocaleString("en-NG")}
+                  </div>
                 </div>
               ))}
+              {!activities.length && (
+                <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+                  {isLoading ? "Loading activity..." : "No recent activity yet."}
+                </div>
+              )}
             </div>
           </section>
 

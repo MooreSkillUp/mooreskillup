@@ -5,19 +5,29 @@ import Image from "next/image";
 import { useState } from "react";
 import { Bell, Heart, Menu, Moon, Sun } from "lucide-react";
 import { getHomeRouteForUser, useAuth } from "@/lib/auth";
+import { useAdminPlatform } from "@/lib/admin-platform";
+import { usePlatformNotifications } from "@/lib/platform-notifications";
 import { useTheme } from "@/lib/theme";
-import { useTeacherWorkspace } from "@/lib/teacher-workspace";
 
 export function TopNavbar({ onMenu }: { onMenu: () => void }) {
   const { user } = useAuth();
   const { theme, toggle } = useTheme();
-  const { notifications, markAllNotificationsAsRead } = useTeacherWorkspace();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const role = user?.role ?? "student";
+  const adminPlatform = useAdminPlatform({ enabled: role === "admin" });
+  const platformNotifications = usePlatformNotifications(role !== "admin" && !!user);
   const wishlistCount = user?.wishlist.length ?? 0;
   const quickHref = role === "student" ? "/courses?view=saved" : getHomeRouteForUser(user);
   const quickLabel = role === "student" ? "Wishlist" : "Workspace";
-  const visibleNotifications = notifications.slice(0, 5);
+  const visibleNotifications =
+    role === "admin"
+      ? adminPlatform.broadcasts.slice(0, 5).map((item) => ({
+          id: item.id,
+          title: item.title,
+          body: item.description,
+          createdAt: item.sentAt ?? new Date().toISOString(),
+        }))
+      : platformNotifications.notifications.slice(0, 5);
   const unreadCount = visibleNotifications.length;
 
   return (
@@ -81,12 +91,16 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
                     {visibleNotifications.length > 0 && (
                       <button
                         onClick={() => {
-                          markAllNotificationsAsRead();
+                          if (role === "admin") {
+                            void adminPlatform.clearBroadcastHistory();
+                          } else {
+                            void platformNotifications.markAllAsRead();
+                          }
                           setNotificationsOpen(false);
                         }}
                         className="text-sm font-semibold text-primary hover:text-accent"
                       >
-                        Mark all as read
+                        {role === "admin" ? "Clear history" : "Mark all as read"}
                       </button>
                     )}
                     <button

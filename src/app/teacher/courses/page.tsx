@@ -5,18 +5,18 @@ import { useMemo, useState } from "react";
 import { Eye, PencilLine, Trash2, Upload } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
-import { useTeacherWorkspace, type TeacherCourseStatus } from "@/lib/teacher-workspace";
+import { useTeacherPlatform, type TeacherCourseStatus } from "@/lib/teacher-platform";
 
 export default function TeacherCoursesPage() {
-  const {
-    teacherCourses,
-    saveCourse,
-    deleteCourse,
-    getCourseById,
-    getCategoryName,
-    getSubcategoryName,
-  } = useTeacherWorkspace();
+  const { teacherCourses, saveCourse, deleteCourse, getCourseById, categories } = useTeacherPlatform();
   const [tab, setTab] = useState<TeacherCourseStatus>("published");
+
+  const getCategoryName = (id: string) =>
+    categories.find((category) => category.id === id)?.name ?? "Unassigned category";
+  const getSubcategoryName = (categoryId: string, subcategoryId: string) =>
+    categories
+      .find((category) => category.id === categoryId)
+      ?.subcategories.find((subcategory) => subcategory.id === subcategoryId)?.name ?? "Unassigned track";
 
   const filteredCourses = useMemo(
     () => teacherCourses.filter((course) => course.status === tab),
@@ -72,12 +72,11 @@ export default function TeacherCoursesPage() {
                     <div className="font-display text-2xl font-bold">{course.title}</div>
                     <div className="mt-1 text-sm text-muted-foreground">
                       {course.status === "published" ? "Published" : course.status === "draft" ? "Draft" : "Archived"}{" "}
-                      • {course.analytics.enrollments} learners • updated {course.lastUpdated}
+                      | {course.analytics.enrollments} learners | updated {new Date(course.lastUpdated).toLocaleString("en-NG")}
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">
-                      {getCategoryName(course.categoryId)} /{" "}
-                      {getSubcategoryName(course.categoryId, course.subcategoryId)} •{" "}
-                      {course.sections.length} sections • {course.analytics.views} views • {course.track}
+                      {getCategoryName(course.categoryId)} / {getSubcategoryName(course.categoryId, course.subcategoryId)} |{" "}
+                      {course.sections.length} sections | {course.analytics.views} views | {course.track}
                     </div>
                   </div>
                   <div className="rounded-full border border-border px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -123,7 +122,9 @@ export default function TeacherCoursesPage() {
                       size="sm"
                       onClick={() => {
                         const found = getCourseById(course.id);
-                        if (found) saveCourse(found, "unpublish");
+                        if (found) {
+                          void saveCourse(found, "unpublish");
+                        }
                       }}
                     >
                       Unpublish
@@ -134,13 +135,15 @@ export default function TeacherCoursesPage() {
                       size="sm"
                       onClick={() => {
                         const found = getCourseById(course.id);
-                        if (found) saveCourse(found, "publish");
+                        if (found) {
+                          void saveCourse(found, "publish");
+                        }
                       }}
                     >
                       Publish
                     </Button>
                   )}
-                  <Button variant="outline" size="sm" onClick={() => deleteCourse(course.id)}>
+                  <Button variant="outline" size="sm" onClick={() => void deleteCourse(course.id)}>
                     <Trash2 className="h-4 w-4" /> Delete
                   </Button>
                 </div>

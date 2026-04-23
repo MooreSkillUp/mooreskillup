@@ -6,7 +6,7 @@ import { PencilLine, Plus, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { formatNaira } from "@/lib/commerce";
-import { useTeacherWorkspace } from "@/lib/teacher-workspace";
+import { useAdminPlatform } from "@/lib/admin-platform";
 
 type OwnerFilter = "all" | "admin";
 
@@ -15,15 +15,19 @@ export default function AdminCoursesPage() {
     categories,
     courses,
     teachers,
-    getCategoryName,
-    getSubcategoryName,
     addCategory,
     updateCategory,
     deleteCategory,
     addSubcategory,
     updateSubcategory,
     deleteSubcategory,
-  } = useTeacherWorkspace();
+    reassignCourse,
+    isLoading,
+    error,
+  } = useAdminPlatform();
+  const categoryList = useMemo(() => (Array.isArray(categories) ? categories : []), [categories]);
+  const teacherList = useMemo(() => (Array.isArray(teachers) ? teachers : []), [teachers]);
+  const courseList = useMemo(() => (Array.isArray(courses) ? courses : []), [courses]);
 
   const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>("all");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
@@ -34,22 +38,23 @@ export default function AdminCoursesPage() {
   const selectedCategory =
     selectedCategoryId === "all"
       ? null
-      : categories.find((category) => category.id === selectedCategoryId) ?? null;
+      : categoryList.find((category) => category.id === selectedCategoryId) ?? null;
 
   const visibleCourses = useMemo(
     () =>
-      courses.filter((course) => {
+      courseList.filter((course) => {
+        if (!course) return false;
         if (ownerFilter === "admin" && course.teacherId !== "admin-owned") return false;
         if (selectedCategoryId !== "all" && course.categoryId !== selectedCategoryId) return false;
         if (selectedSubcategoryId !== "all" && course.subcategoryId !== selectedSubcategoryId) return false;
         return true;
       }),
-    [courses, ownerFilter, selectedCategoryId, selectedSubcategoryId],
+    [courseList, ownerFilter, selectedCategoryId, selectedSubcategoryId],
   );
 
   const adminOwnedCourses = useMemo(
-    () => courses.filter((course) => course.teacherId === "admin-owned"),
-    [courses],
+    () => courseList.filter((course) => course.teacherId === "admin-owned"),
+    [courseList],
   );
 
   useEffect(() => {
@@ -109,13 +114,13 @@ export default function AdminCoursesPage() {
             </div>
 
             <div className="space-y-4">
-              {categories.map((category) => (
+              {categoryList.map((category) => (
                 <div key={category.id} className="rounded-2xl border border-border bg-background p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <div className="font-display text-xl font-bold">{category.name}</div>
                       <div className="mt-3 space-y-2">
-                        {category.subcategories.length ? (
+                      {category.subcategories.length ? (
                           category.subcategories.map((subcategory) => (
                             <div
                               key={subcategory.id}
@@ -128,7 +133,7 @@ export default function AdminCoursesPage() {
                                   onClick={() => {
                                     const nextName = window.prompt("Edit subcategory name", subcategory.name);
                                     if (nextName?.trim()) {
-                                      updateSubcategory({
+                                      void updateSubcategory({
                                         categoryId: category.id,
                                         subcategoryId: subcategory.id,
                                         name: nextName.trim(),
@@ -142,7 +147,7 @@ export default function AdminCoursesPage() {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    deleteSubcategory({
+                                    void deleteSubcategory({
                                       categoryId: category.id,
                                       subcategoryId: subcategory.id,
                                     })
@@ -167,7 +172,7 @@ export default function AdminCoursesPage() {
                         type="button"
                         onClick={() => {
                           const nextName = window.prompt("Edit category name", category.name);
-                          if (nextName?.trim()) updateCategory(category.id, { name: nextName.trim() });
+                          if (nextName?.trim()) void updateCategory(category.id, { name: nextName.trim() });
                         }}
                         className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
                       >
@@ -175,7 +180,7 @@ export default function AdminCoursesPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => deleteCategory(category.id)}
+                        onClick={() => void deleteCategory(category.id)}
                         className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
                       >
                         <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -200,7 +205,7 @@ export default function AdminCoursesPage() {
                       onClick={() => {
                         const value = newSubcategoryByCategory[category.id]?.trim();
                         if (!value) return;
-                        addSubcategory({ categoryId: category.id, name: value });
+                        void addSubcategory({ categoryId: category.id, name: value });
                         setNewSubcategoryByCategory((current) => ({ ...current, [category.id]: "" }));
                       }}
                     >
@@ -219,6 +224,7 @@ export default function AdminCoursesPage() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   Filter by category, subcategory, and ownership without losing reassignment visibility.
                 </p>
+                {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
               </div>
               <div className="flex flex-wrap gap-2">
                 {[
@@ -254,7 +260,7 @@ export default function AdminCoursesPage() {
                 className="h-11 rounded-lg border border-input bg-background px-3.5 text-sm"
               >
                 <option value="all">All categories</option>
-                {categories.map((category) => (
+                {categoryList.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
@@ -266,7 +272,7 @@ export default function AdminCoursesPage() {
                 className="h-11 rounded-lg border border-input bg-background px-3.5 text-sm"
               >
                 <option value="all">All subcategories</option>
-                {(selectedCategory?.subcategories ?? categories.flatMap((category) => category.subcategories)).map(
+                {(selectedCategory?.subcategories ?? categoryList.flatMap((category) => category.subcategories)).map(
                   (subcategory) => (
                     <option key={subcategory.id} value={subcategory.id}>
                       {subcategory.name}
@@ -288,12 +294,11 @@ export default function AdminCoursesPage() {
                 Object.entries(groupedCourses).map(([key, courseGroup]) => (
                   <div key={key} className="rounded-2xl border border-border bg-background p-4">
                     <div className="font-display text-xl font-bold">
-                      {getCategoryName(courseGroup[0].categoryId)} /{" "}
-                      {getSubcategoryName(courseGroup[0].categoryId, courseGroup[0].subcategoryId)}
+                      {courseGroup[0].categoryName} / {courseGroup[0].subcategoryName}
                     </div>
                     <div className="mt-3 space-y-3">
                       {courseGroup.map((course) => {
-                        const owner = teachers.find((teacher) => teacher.id === course.teacherId);
+                        const owner = teacherList.find((teacher) => teacher.id === course.teacherId);
                         const ownerLabel = owner?.displayName ?? "Admin ownership";
 
                         return (
@@ -302,16 +307,29 @@ export default function AdminCoursesPage() {
                               <div>
                                 <div className="font-medium">{course.title}</div>
                                 <div className="mt-1 text-sm text-muted-foreground">
-                                  Owner: {ownerLabel} | {course.track} | {course.status} | {formatNaira(course.price)}
+                                  Owner: {ownerLabel} | {course.track} | {course.status} | {formatNaira(Number(course.price))}
                                 </div>
                               </div>
                               <div className="flex flex-wrap gap-2">
                                 <Link href={`/teacher/courses/${course.id}/edit`}>
                                   <Button variant="outline">Edit</Button>
                                 </Link>
-                                <Link href="/admin/users">
-                                  <Button variant="outline">Reassign</Button>
-                                </Link>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    const selectedTeacherId = window.prompt(
+                                      "Enter a teacher profile ID to reassign, or type admin-owned",
+                                      course.teacherId ?? "admin-owned",
+                                    );
+                                    if (!selectedTeacherId?.trim()) return;
+                                    void reassignCourse({
+                                      courseId: course.id,
+                                      newTeacherId: selectedTeacherId.trim(),
+                                    });
+                                  }}
+                                >
+                                  Reassign
+                                </Button>
                               </div>
                             </div>
                           </div>
@@ -322,7 +340,7 @@ export default function AdminCoursesPage() {
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
-                  No courses match the selected filters.
+                  {isLoading ? "Loading courses..." : "No courses match the selected filters."}
                 </div>
               )}
             </div>
