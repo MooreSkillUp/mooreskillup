@@ -12,13 +12,9 @@ RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies - use prod for Railway, dev for local
+# Install dependencies (prod includes gunicorn + whitenoise)
 COPY backend/requirements /tmp/requirements
-RUN if [ -z "$DJANGO_DEBUG" ] || [ "$DJANGO_DEBUG" = "False" ]; then \
-    pip install --no-cache-dir -r /tmp/requirements/prod.txt; \
-    else \
-    pip install --no-cache-dir -r /tmp/requirements/dev.txt; \
-    fi
+RUN pip install --no-cache-dir -r /tmp/requirements/prod.txt
 
 # Copy project
 COPY backend /app
