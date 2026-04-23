@@ -10,6 +10,18 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 
 class BroadcastNotificationSerializer(serializers.ModelSerializer):
+    sentAt = serializers.DateTimeField(source="sent_at", read_only=True)
+
     class Meta:
         model = BroadcastNotification
-        fields = ("id", "title", "description", "audience", "status", "sent_at", "expires_at", "created_at")
+        fields = (
+            "id",
+            "title",
+            "description",
+            "audience",
+            "status",
+            "sent_at",
+            "sentAt",
+            "expires_at",
+            "created_at",
+        )

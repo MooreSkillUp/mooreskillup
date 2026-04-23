@@ -14,8 +14,18 @@ class NotificationListView(views.APIView):
         return response.Response(NotificationSerializer(queryset, many=True).data)
 
 
+class NotificationMarkAllReadView(views.APIView):
+    def post(self, request):
+        updated = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return response.Response({"detail": "Notifications marked as read.", "updated": updated})
+
+
 class BroadcastCreateView(views.APIView):
     permission_classes = [IsAdminUserRole]
+
+    def get(self, request):
+        queryset = BroadcastNotification.objects.filter(created_by=request.user).order_by("-created_at")
+        return response.Response(BroadcastNotificationSerializer(queryset, many=True).data)
 
     def post(self, request):
         serializer = BroadcastNotificationSerializer(data=request.data)
@@ -43,3 +53,7 @@ class BroadcastCreateView(views.APIView):
             ]
         )
         return response.Response(BroadcastNotificationSerializer(broadcast).data)
+
+    def delete(self, request):
+        deleted_count, _ = BroadcastNotification.objects.filter(created_by=request.user).delete()
+        return response.Response({"detail": "Broadcast history cleared.", "deleted": deleted_count})

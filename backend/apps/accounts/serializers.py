@@ -1,3 +1,6 @@
+import os
+import secrets
+
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from rest_framework import serializers
@@ -15,9 +18,26 @@ class StudentProfileSerializer(serializers.ModelSerializer):
 
 
 class TeacherProfileSerializer(serializers.ModelSerializer):
+    displayName = serializers.CharField(source="user.display_name", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    userId = serializers.UUIDField(source="user_id", read_only=True)
+    academicProgram = serializers.CharField(source="program", read_only=True)
+    academicTrack = serializers.CharField(source="track", read_only=True)
+
     class Meta:
         model = TeacherProfile
-        fields = ("program", "track", "bio", "status")
+        fields = (
+            "id",
+            "userId",
+            "displayName",
+            "email",
+            "program",
+            "track",
+            "academicProgram",
+            "academicTrack",
+            "bio",
+            "status",
+        )
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -100,18 +120,71 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
+    displayName = serializers.CharField(source="display_name", required=False)
+    avatarUrl = serializers.URLField(source="avatar_url", required=False, allow_blank=True)
+    selectedInterest = serializers.CharField(required=False, allow_blank=True)
+    selectedTrack = serializers.CharField(required=False, allow_blank=True)
+    selectedTracks = serializers.ListField(child=serializers.CharField(), required=False)
+    interests = serializers.ListField(child=serializers.CharField(), required=False)
+
     class Meta:
         model = User
-        fields = ("username", "display_name", "avatar_url")
+        fields = (
+            "username",
+            "displayName",
+            "avatarUrl",
+            "selectedInterest",
+            "selectedTrack",
+            "selectedTracks",
+            "interests",
+        )
+
+    def update(self, instance, validated_data):
+        selected_interest = validated_data.pop("selectedInterest", None)
+        selected_track = validated_data.pop("selectedTrack", None)
+        selected_tracks = validated_data.pop("selectedTracks", None)
+        interests = validated_data.pop("interests", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if hasattr(instance, "student_profile"):
+            profile = instance.student_profile
+            if selected_interest is not None:
+                profile.selected_interest = selected_interest
+            elif interests:
+                profile.selected_interest = interests[0]
+            if selected_track is not None:
+                profile.selected_track = selected_track
+            elif selected_tracks:
+                profile.selected_track = selected_tracks[0]
+            profile.save()
+        elif hasattr(instance, "teacher_profile"):
+            profile = instance.teacher_profile
+            if selected_interest is not None:
+                profile.program = selected_interest
+            elif interests:
+                profile.program = interests[0]
+            if selected_track is not None:
+                profile.track = selected_track
+            elif selected_tracks:
+                profile.track = selected_tracks[0]
+            profile.save()
+
+        return instance
 
 
 class RegisterSerializer(serializers.ModelSerializer):
+    display_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    displayName = serializers.CharField(source="display_name", write_only=True, required=False, allow_blank=True)
     password = serializers.CharField(write_only=True, min_length=8)
     interests = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
     selectedInterest = serializers.CharField(write_only=True, required=False, allow_blank=True)
     selectedTrack = serializers.CharField(write_only=True, required=False, allow_blank=True)
     selectedTracks = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
     plan = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    adminRegistrationToken = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model = User
@@ -119,6 +192,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             "email",
             "username",
             "display_name",
+            "displayName",
             "password",
             "role",
             "interests",
@@ -126,12 +200,44 @@ class RegisterSerializer(serializers.ModelSerializer):
             "selectedTrack",
             "selectedTracks",
             "plan",
+            "adminRegistrationToken",
         )
 
-    def validate_role(self, value):
-        if value == "admin":
-            raise serializers.ValidationError("Admin accounts cannot be created through public registration.")
-        return value
+    def validate(self, attrs):
+        role = attrs.get("role", "student")
+        allow_admin_registration = self.context.get("allow_admin_registration", False)
+        allow_teacher_registration = self.context.get("allow_teacher_registration", False)
+
+        if role == "admin":
+            if not allow_admin_registration:
+                raise serializers.ValidationError(
+                    {"role": "Admin accounts cannot be created through public registration."}
+                )
+            expected_token = os.getenv("ADMIN_REGISTRATION_TOKEN", "").strip()
+            provided_token = attrs.pop("adminRegistrationToken", "").strip()
+            if not expected_token:
+                raise serializers.ValidationError(
+                    {"adminRegistrationToken": "Admin registration is not configured on this server."}
+                )
+            if not provided_token or provided_token != expected_token:
+                raise serializers.ValidationError(
+                    {"adminRegistrationToken": "Invalid admin registration token."}
+                )
+        else:
+            attrs.pop("adminRegistrationToken", None)
+
+        if role == "teacher" and not allow_teacher_registration:
+            raise serializers.ValidationError(
+                {"role": "Teacher accounts must be created by an admin."}
+            )
+
+        if not attrs.get("display_name"):
+            username = attrs.get("username", "").strip()
+            attrs["display_name"] = " ".join(
+                part.capitalize() for part in username.replace(".", " ").replace("_", " ").split() if part
+            ) or username
+
+        return attrs
 
     def create(self, validated_data):
         role = validated_data.get("role", "student")
@@ -140,9 +246,16 @@ class RegisterSerializer(serializers.ModelSerializer):
         selected_tracks = validated_data.pop("selectedTracks", [])
         interests = validated_data.pop("interests", [])
         plan = validated_data.pop("plan", "free")
+        validated_data.pop("adminRegistrationToken", None)
+        if role == "admin":
+            validated_data["is_staff"] = True
         user = User.objects.create_user(**validated_data)
         if role == "teacher":
-            TeacherProfile.objects.create(user=user, program=selected_interest or (interests[0] if interests else ""), track=selected_track)
+            TeacherProfile.objects.create(
+                user=user,
+                program=selected_interest or (interests[0] if interests else ""),
+                track=selected_track or (selected_tracks[0] if selected_tracks else ""),
+            )
         elif role == "student":
             StudentProfile.objects.create(
                 user=user,
@@ -151,6 +264,50 @@ class RegisterSerializer(serializers.ModelSerializer):
                 plan=plan or "free",
             )
         return user
+
+
+class AdminTeacherCreateSerializer(serializers.Serializer):
+    displayName = serializers.CharField()
+    email = serializers.EmailField()
+    program = serializers.CharField()
+    track = serializers.CharField()
+    password = serializers.CharField(required=False, allow_blank=True, min_length=8)
+    status = serializers.ChoiceField(choices=("active", "inactive"), required=False, default="active")
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def create(self, validated_data):
+        display_name = validated_data["displayName"].strip()
+        email = validated_data["email"]
+        program = validated_data["program"].strip()
+        track = validated_data["track"].strip()
+        status = validated_data.get("status", "active")
+        password = validated_data.get("password", "").strip() or secrets.token_urlsafe(10)
+        username_base = display_name.lower().replace(" ", ".")
+        username = username_base
+        suffix = 1
+        while User.objects.filter(username=username).exists():
+            suffix += 1
+            username = f"{username_base}.{suffix}"
+
+        user = User.objects.create_user(
+            email=email,
+            username=username,
+            display_name=display_name,
+            password=password,
+            role="teacher",
+        )
+        teacher_profile = TeacherProfile.objects.create(
+            user=user,
+            program=program,
+            track=track,
+            status=status,
+        )
+        teacher_profile._generated_password = password
+        return teacher_profile
 
 
 class LoginSerializer(serializers.Serializer):
@@ -182,6 +339,17 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         if reset_token.used_at or reset_token.expires_at <= timezone.now():
             raise serializers.ValidationError({"token": "Expired or used token."})
         attrs["reset_token"] = reset_token
+        return attrs
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField()
+    new_password = serializers.CharField(min_length=8)
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        if not user.check_password(attrs["current_password"]):
+            raise serializers.ValidationError({"current_password": "Current password is incorrect."})
         return attrs
 
 

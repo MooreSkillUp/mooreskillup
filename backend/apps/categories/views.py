@@ -11,6 +11,9 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CategorySerializer
     permission_classes = [permissions.AllowAny]
 
+    def get_queryset(self):
+        return Category.objects.filter(is_active=True).prefetch_related("subcategories")
+
 
 class AdminCategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all().prefetch_related("subcategories")
@@ -22,3 +25,10 @@ class AdminSubcategoryViewSet(viewsets.ModelViewSet):
     queryset = Subcategory.objects.select_related("category").all()
     serializer_class = SubcategorySerializer
     permission_classes = [IsAdminUserRole]
+
+    def get_queryset(self):
+        queryset = Subcategory.objects.select_related("category").all()
+        category_id = self.request.query_params.get("category")
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
+        return queryset

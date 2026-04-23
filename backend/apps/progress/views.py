@@ -5,9 +5,11 @@ from rest_framework import response, status, views
 
 from common.permissions import IsAdminUserRole, IsStudentUserRole, IsTeacherUserRole
 from apps.courses.models import Course, Lesson
+from apps.courses.serializers import CourseSerializer, TeacherActivitySerializer
 from apps.enrollments.models import Enrollment
 from apps.notifications.models import Notification
 from apps.payments.models import Payment
+from apps.courses.models import TeacherActivityLog
 
 from .models import CourseProgress, LessonProgress
 from .serializers import CourseProgressSerializer, LessonProgressSerializer
@@ -150,6 +152,9 @@ class TeacherDashboardView(views.APIView):
     def get(self, request):
         teacher = request.user.teacher_profile
         courses = Course.objects.filter(teacher=teacher)
+        total_learners = Enrollment.objects.filter(course__teacher=teacher).values("student_id").distinct().count()
+        recent_activities = TeacherActivityLog.objects.filter(teacher=teacher)[:8]
+        recent_courses = courses.order_by("-updated_at", "-created_at")[:6]
         return response.Response(
             {
                 "teacher": {
@@ -164,7 +169,10 @@ class TeacherDashboardView(views.APIView):
                     "publishedCourses": courses.filter(status="published").count(),
                     "draftCourses": courses.filter(status="draft").count(),
                     "activeCourses": courses.filter(status="published", visibility="visible").count(),
+                    "totalLearners": total_learners,
                 },
+                "recentActivities": TeacherActivitySerializer(recent_activities, many=True).data,
+                "recentCourses": CourseSerializer(recent_courses, many=True, context={"request": request}).data,
             }
         )
 

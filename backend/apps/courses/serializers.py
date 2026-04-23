@@ -3,7 +3,7 @@ from rest_framework import serializers
 from apps.enrollments.models import Enrollment, Watchlist
 from apps.progress.models import LessonProgress
 
-from .models import Course, CourseTag, Lesson, Section, Task
+from .models import Course, CourseTag, Lesson, Section, Task, TeacherActivityLog
 
 
 class LessonSerializer(serializers.ModelSerializer):
@@ -86,6 +86,15 @@ class TaskSerializer(serializers.ModelSerializer):
     def get_submissionChannelUrl(self, obj):
         return obj.resource_links[2] if len(obj.resource_links) > 2 else ""
 
+    def to_internal_value(self, data):
+        mutable = data.copy()
+        submission_type = mutable.get("submission_type")
+        if submission_type == "file-upload":
+            mutable["submission_type"] = "file_upload"
+        elif submission_type == "text-submission":
+            mutable["submission_type"] = "text_submission"
+        return super().to_internal_value(mutable)
+
 
 class SectionSerializer(serializers.ModelSerializer):
     lessons = LessonSerializer(many=True, read_only=True)
@@ -136,12 +145,23 @@ class SectionSerializer(serializers.ModelSerializer):
 class CourseSerializer(serializers.ModelSerializer):
     sections = SectionSerializer(many=True, read_only=True)
     teacherName = serializers.SerializerMethodField()
+    teacherId = serializers.SerializerMethodField()
+    ownerType = serializers.SerializerMethodField()
+    teacherProgram = serializers.SerializerMethodField()
+    teacherTrack = serializers.SerializerMethodField()
     producedBy = serializers.SerializerMethodField()
     isOwned = serializers.SerializerMethodField()
     isInWatchlist = serializers.SerializerMethodField()
     cta = serializers.SerializerMethodField()
     categoryName = serializers.CharField(source="category.name", read_only=True)
     subcategoryName = serializers.CharField(source="subcategory.name", read_only=True)
+    categoryId = serializers.UUIDField(source="category_id", read_only=True)
+    subcategoryId = serializers.UUIDField(source="subcategory_id", read_only=True)
+    program = serializers.CharField(source="category.name", read_only=True)
+    track = serializers.CharField(source="subcategory.name", read_only=True)
+    lastUpdated = serializers.DateTimeField(source="updated_at", read_only=True)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    analytics = serializers.SerializerMethodField()
     tags = serializers.SlugRelatedField(slug_field="name", many=True, queryset=CourseTag.objects.all(), required=False)
 
     class Meta:
@@ -161,12 +181,23 @@ class CourseSerializer(serializers.ModelSerializer):
             "featured",
             "total_lessons",
             "teacherName",
+            "teacherId",
+            "ownerType",
+            "teacherProgram",
+            "teacherTrack",
             "producedBy",
             "isOwned",
             "isInWatchlist",
             "cta",
             "categoryName",
             "subcategoryName",
+            "categoryId",
+            "subcategoryId",
+            "program",
+            "track",
+            "lastUpdated",
+            "createdAt",
+            "analytics",
             "category",
             "subcategory",
             "tags",
@@ -175,6 +206,18 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def get_teacherName(self, obj):
         return obj.teacher.user.display_name if obj.teacher else "Admin ownership"
+
+    def get_teacherId(self, obj):
+        return str(obj.teacher_id) if obj.teacher_id else "admin-owned"
+
+    def get_ownerType(self, obj):
+        return "teacher" if obj.teacher_id else "admin"
+
+    def get_teacherProgram(self, obj):
+        return obj.teacher.program if obj.teacher else None
+
+    def get_teacherTrack(self, obj):
+        return obj.teacher.track if obj.teacher else None
 
     def get_producedBy(self, obj):
         return "Produced by More SkillUp"
@@ -197,3 +240,35 @@ class CourseSerializer(serializers.ModelSerializer):
         if self.get_isOwned(obj):
             return "open_course"
         return "unlock_course"
+
+    def get_analytics(self, obj):
+        enrollments_count = obj.enrollments.count()
+        course_progress = obj.enrollments.filter(course_progress__isnull=False).values_list(
+            "course_progress__progress_percent", flat=True
+        )
+        completion_rate = 0
+        progress_values = [float(value) for value in course_progress if value is not None]
+        if progress_values:
+            completion_rate = round(sum(progress_values) / len(progress_values))
+
+        total_lessons = obj.total_lessons or Lesson.objects.filter(section__course=obj, is_published=True).count()
+        synthetic_views = getattr(obj, "synthetic_views", None)
+        if synthetic_views is None:
+            published_lessons_count = Lesson.objects.filter(section__course=obj, is_published=True).count()
+            synthetic_views = enrollments_count * 3 + published_lessons_count * 5 + 24
+
+        return {
+            "views": synthetic_views,
+            "enrollments": enrollments_count,
+            "completionRate": completion_rate,
+            "totalLessons": total_lessons,
+        }
+
+
+class TeacherActivitySerializer(serializers.ModelSerializer):
+    timestamp = serializers.DateTimeField(source="created_at", read_only=True)
+    type = serializers.CharField(source="activity_type", read_only=True)
+
+    class Meta:
+        model = TeacherActivityLog
+        fields = ("id", "message", "timestamp", "type", "created_at")

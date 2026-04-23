@@ -108,3 +108,27 @@ class Task(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+
+class TeacherActivityLog(UUIDPrimaryKeyModel, TimeStampedModel):
+    TYPE_CHOICES = (
+        ("create-course", "Create course"),
+        ("edit-course", "Edit course"),
+        ("publish-course", "Publish course"),
+        ("unpublish-course", "Unpublish course"),
+        ("save-draft", "Save draft"),
+        ("delete-course", "Delete course"),
+        ("reorder-content", "Reorder content"),
+        ("settings-update", "Settings update"),
+    )
+
+    teacher = models.ForeignKey("accounts.TeacherProfile", on_delete=models.CASCADE, related_name="activity_logs")
+    course = models.ForeignKey("courses.Course", null=True, blank=True, on_delete=models.SET_NULL, related_name="activity_logs")
+    message = models.CharField(max_length=255)
+    activity_type = models.CharField(max_length=30, choices=TYPE_CHOICES)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.teacher.user.display_name}: {self.message}"
