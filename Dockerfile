@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install dependencies
 COPY backend/requirements /tmp/requirements
-RUN pip install --no-cache-dir -r /tmp/requirements/dev.txt
+RUN pip install --no-cache-dir -r /tmp/requirements/prod.txt
 
 # Copy project
 COPY backend /app
