@@ -12,9 +12,13 @@ RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
+# Install dependencies - use prod for Railway, dev for local
 COPY backend/requirements /tmp/requirements
-RUN pip install --no-cache-dir -r /tmp/requirements/prod.txt
+RUN if [ -z "$DJANGO_DEBUG" ] || [ "$DJANGO_DEBUG" = "False" ]; then \
+    pip install --no-cache-dir -r /tmp/requirements/prod.txt; \
+    else \
+    pip install --no-cache-dir -r /tmp/requirements/dev.txt; \
+    fi
 
 # Copy project
 COPY backend /app
