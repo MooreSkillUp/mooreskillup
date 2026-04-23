@@ -37,3 +37,4 @@ backend/**/*.pyc
 backend/staticfiles/
 backend/media/
 backend/.env
+backend/.env.railway

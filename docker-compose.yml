@@ -3,15 +3,15 @@ services:
     image: postgres:16
     environment:
       POSTGRES_DB: mooreskillup
-      POSTGRES_USER: moore_user
-      POSTGRES_PASSWORD: moore_password
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U moore_user -d mooreskillup"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mooreskillup"]
       interval: 5s
       retries: 5
 
@@ -38,8 +38,10 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      - DEBUG=True
-      - ALLOWED_HOSTS=localhost,127.0.0.1,api
+      - DJANGO_DEBUG=True
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,api
+      - DB_HOST=db
+      - DB_PORT=5432
 
   web:
     build:

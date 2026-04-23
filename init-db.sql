@@ -1,2 +1,2 @@
--- Grant mooreskillup database to moore_user
-ALTER DATABASE mooreskillup OWNER TO moore_user;
+-- Grant mooreskillup database to postgres
+ALTER DATABASE mooreskillup OWNER TO postgres;
