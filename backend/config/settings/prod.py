@@ -6,7 +6,7 @@ DEBUG = False
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
-SECURE_SSL_REDIRECT = True
+SECURE_SSL_REDIRECT = False  # Railway handles HTTPS, don't redirect
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
@@ -17,3 +17,9 @@ MIDDLEWARE = [
 ] + MIDDLEWARE
 
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_URL = "/static/"
+
+# Allow static files to be served
+WHITENOISE_AUTOREFRESH = True
+WHITENOISE_USE_FINDERS = True
