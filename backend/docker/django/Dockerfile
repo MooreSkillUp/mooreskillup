@@ -23,5 +23,5 @@ COPY backend /app
 RUN chmod +x /app/docker/django/entrypoint.sh
 ENTRYPOINT ["/app/docker/django/entrypoint.sh"]
 
-# Run server
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Run server (gunicorn for production, dev server for local)
+CMD ["sh", "-c", "if [ \"$DJANGO_DEBUG\" = \"True\" ]; then python manage.py runserver 0.0.0.0:8000; else gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4; fi"]
