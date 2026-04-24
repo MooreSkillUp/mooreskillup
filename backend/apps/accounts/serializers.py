@@ -2,6 +2,8 @@ import os
 import secrets
 
 from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -338,6 +340,12 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
         if reset_token.used_at or reset_token.expires_at <= timezone.now():
             raise serializers.ValidationError({"token": "Expired or used token."})
+
+        try:
+            validate_password(attrs["password"], user=reset_token.user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"password": list(exc.messages)}) from exc
+
         attrs["reset_token"] = reset_token
         return attrs
 

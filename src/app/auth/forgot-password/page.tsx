@@ -15,6 +15,7 @@ export default function ForgotPasswordPage() {
   const [message, setMessage] = useState("");
   const [token, setToken] = useState("");
   const [resetUrl, setResetUrl] = useState("");
+  const [emailHint, setEmailHint] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -24,12 +25,14 @@ export default function ForgotPasswordPage() {
     setMessage("");
     setToken("");
     setResetUrl("");
+    setEmailHint("");
     setLoading(true);
     try {
       const result = await requestPasswordReset(email);
       setMessage(result.message);
       setToken(result.debugToken ?? "");
       setResetUrl(result.debugResetUrl ?? "");
+      setEmailHint(result.emailHint ?? "");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to send reset email.");
     } finally {
@@ -56,7 +59,7 @@ export default function ForgotPasswordPage() {
 
         <h1 className="font-display text-3xl font-bold">Forgot password</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Request a reset email and continue with the token-based password reset flow.
+          Enter the email for your account. If it exists, you will receive a message with a link to set a new password.
         </p>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4">
@@ -78,6 +81,12 @@ export default function ForgotPasswordPage() {
         {message && (
           <div className="mt-6 rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
             {message}
+          </div>
+        )}
+
+        {emailHint && (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+            {emailHint}
           </div>
         )}
 

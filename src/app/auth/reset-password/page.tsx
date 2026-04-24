@@ -31,19 +31,29 @@ function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"neutral" | "success" | "error">("neutral");
   const [loading, setLoading] = useState(false);
+  const fromEmailLink = Boolean(initialToken);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (password !== confirm) {
+      setMessageTone("error");
       setMessage("Passwords do not match.");
       return;
     }
+    if (!token.trim()) {
+      setMessageTone("error");
+      setMessage("Reset link is missing or invalid. Open the link from your email again.");
+      return;
+    }
     setLoading(true);
-    const result = await resetPassword(token, password);
+    setMessage("");
+    const result = await resetPassword(token.trim(), password);
+    setMessageTone(result.ok ? "success" : "error");
     setMessage(result.message);
     if (result.ok) {
-      setTimeout(() => router.push("/auth/login"), 1200);
+      setTimeout(() => router.push("/auth/login"), 2000);
     }
     setLoading(false);
   };
@@ -67,16 +77,21 @@ function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
 
         <h1 className="font-display text-3xl font-bold">Reset password</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Enter the reset token from your email and choose a new password.
+          {fromEmailLink
+            ? "Choose a new password below. You will be redirected to sign in when it succeeds."
+            : "Paste the reset link from your email into the address bar, or enter the token from the email and choose a new password."}
         </p>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4">
-          <Input
-            label="Reset Token"
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            required
-          />
+          {!fromEmailLink ? (
+            <Input
+              label="Reset token"
+              value={token}
+              onChange={(event) => setToken(event.target.value)}
+              placeholder="From your reset email"
+              required
+            />
+          ) : null}
           <Input
             label="New Password"
             type="password"
@@ -96,7 +111,28 @@ function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
           </Button>
         </form>
 
-        {message && <div className="mt-6 text-sm text-muted-foreground">{message}</div>}
+        {message && (
+          <div
+            className={
+              messageTone === "success"
+                ? "mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+                : messageTone === "error"
+                  ? "mt-6 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+                  : "mt-6 text-sm text-muted-foreground"
+            }
+          >
+            {message}
+            {messageTone === "success" && (
+              <p className="mt-2 text-xs text-emerald-800/90 dark:text-emerald-200/90">
+                Taking you to the login page… or{" "}
+                <Link href="/auth/login" className="font-semibold underline underline-offset-2">
+                  go now
+                </Link>
+                .
+              </p>
+            )}
+          </div>
+        )}
       </motion.div>
     </div>
   );

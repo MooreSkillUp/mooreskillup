@@ -2,7 +2,6 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework import generics, permissions, response, status
 from rest_framework.decorators import api_view, permission_classes
@@ -14,6 +13,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from common.permissions import IsAdminUserRole
 
 from .models import PasswordResetToken
+from .password_reset_email import try_send_password_reset_email
 from .serializers import (
     AdminTeacherCreateSerializer,
     ChangePasswordSerializer,
@@ -86,44 +86,50 @@ class PasswordResetRequestView(APIView):
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data["email"]
+        email = (serializer.validated_data["email"] or "").strip()
         from .models import User
 
-        user = User.objects.filter(email=email).first()
+        user = User.objects.filter(email__iexact=email).first()
         debug_token = None
         debug_reset_url = None
+        email_hint = None
 
         if user:
+            PasswordResetToken.objects.filter(user=user, used_at__isnull=True).delete()
             reset_token = PasswordResetToken.objects.create(
                 user=user,
                 token=secrets.token_urlsafe(32),
                 expires_at=timezone.now() + timedelta(hours=1),
             )
-            frontend_url = getattr(settings, "FRONTEND_URL", "").rstrip("/")
-            reset_url = (
-                f"{frontend_url}/auth/reset-password?token={reset_token.token}"
-                if frontend_url
-                else reset_token.token
-            )
-            send_mail(
-                subject="Reset your More SkillUp password",
-                message=(
-                    "We received a request to reset your password.\n\n"
-                    f"Use this link to continue:\n{reset_url}\n\n"
-                    "If you did not request this, you can ignore this email."
-                ),
-                from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-                recipient_list=[user.email],
-                fail_silently=False,
+            frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000").rstrip("/")
+            reset_url = f"{frontend_url}/auth/reset-password?token={reset_token.token}"
+            sent_ok = try_send_password_reset_email(
+                to_email=user.email,
+                display_name=user.display_name or user.username or "there",
+                reset_url=reset_url,
             )
             if settings.DEBUG:
                 debug_token = reset_token.token
                 debug_reset_url = reset_url
+                backend = (getattr(settings, "EMAIL_BACKEND", "") or "").lower()
+                if not sent_ok:
+                    email_hint = (
+                        "Email could not be sent (check SMTP credentials in backend/.env). "
+                        "Use the preview link below to reset your password locally."
+                    )
+                elif "console" in backend:
+                    email_hint = (
+                        "Console email backend is active: nothing is sent to a real inbox. "
+                        "Open a terminal and run: docker compose logs -f api "
+                        "(you will see the full message there), or use the preview link below."
+                    )
 
         payload = {"detail": "If the account exists, a reset link has been sent."}
         if debug_token:
             payload["debugToken"] = debug_token
             payload["debugResetUrl"] = debug_reset_url
+        if email_hint:
+            payload["emailHint"] = email_hint
         return response.Response(payload)
 
 
@@ -138,6 +144,9 @@ class PasswordResetConfirmView(APIView):
         reset_token.user.save(update_fields=["password"])
         reset_token.used_at = timezone.now()
         reset_token.save(update_fields=["used_at"])
+        PasswordResetToken.objects.filter(user=reset_token.user, used_at__isnull=True).exclude(
+            pk=reset_token.pk
+        ).delete()
         return response.Response({"detail": "Password reset successful."})
 
 

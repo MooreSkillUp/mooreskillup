@@ -54,6 +54,8 @@ interface PasswordResetRequestResult {
   message: string;
   debugToken?: string;
   debugResetUrl?: string;
+  /** Present in DEBUG when using console email or SMTP failure — explains why inbox is empty */
+  emailHint?: string;
 }
 
 interface PasswordResetConfirmResult {
@@ -408,6 +410,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : "If the account exists, a reset link has been sent.",
       debugToken: typeof payload?.debugToken === "string" ? payload.debugToken : undefined,
       debugResetUrl: typeof payload?.debugResetUrl === "string" ? payload.debugResetUrl : undefined,
+      emailHint: typeof payload?.emailHint === "string" ? payload.emailHint : undefined,
     };
   }, []);
 
