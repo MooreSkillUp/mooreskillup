@@ -25,7 +25,7 @@ export function BrandLogo({
     <Link href={href} className={cn("flex items-center gap-3", className)}>
       <div
         className={cn(
-          "relative flex items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary-glow to-accent text-primary-foreground shadow-lg shadow-primary/20",
+          "relative flex items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-lg shadow-primary/20",
           iconSize,
         )}
       >
