@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ClipboardCheck, Eye, Lock, PlayCircle, ScrollText } from "lucide-react";
 import { formatNaira } from "@/lib/commerce";
 import type { TeacherCourse } from "@/lib/teacher-platform";
@@ -9,6 +10,8 @@ function stripHtml(value: string) {
 }
 
 export function LearnerCoursePreview({ course }: { course: TeacherCourse }) {
+  const [openSectionIds, setOpenSectionIds] = useState<string[]>(course.sections[0] ? [course.sections[0].id] : []);
+
   return (
     <div className="space-y-6">
       <section className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
@@ -53,9 +56,20 @@ export function LearnerCoursePreview({ course }: { course: TeacherCourse }) {
           <div className="mt-5 space-y-4">
             {course.sections.map((section, index) => {
               const locked = course.price > 0 && section.accessType === "paid";
+              const isOpen = openSectionIds.includes(section.id);
               return (
                 <div key={section.id} className="rounded-3xl border border-border bg-background p-5">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenSectionIds((current) =>
+                        current.includes(section.id)
+                          ? current.filter((id) => id !== section.id)
+                          : [...current, section.id],
+                      )
+                    }
+                    className="flex w-full flex-col gap-3 text-left md:flex-row md:items-start md:justify-between"
+                  >
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">
                         Section {index + 1}
@@ -67,67 +81,85 @@ export function LearnerCoursePreview({ course }: { course: TeacherCourse }) {
                         {section.description || "Section description goes here."}
                       </div>
                     </div>
-                    <div
-                      className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${
-                        locked ? "bg-muted text-muted-foreground" : "bg-success/10 text-success"
-                      }`}
-                    >
-                      {locked ? "Paid" : "Free"}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div
+                        className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${
+                          locked ? "bg-muted text-muted-foreground" : "bg-success/10 text-success"
+                        }`}
+                      >
+                        {locked ? "Paid" : "Free"}
+                      </div>
+                      <div className="rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        {isOpen ? "Hide content" : "Open content"}
+                      </div>
                     </div>
-                  </div>
+                  </button>
 
-                  <div className="mt-4 space-y-3">
-                    {section.lessons.map((lesson, lessonIndex) => (
-                      <div key={lesson.id} className="rounded-2xl border border-border bg-card p-4">
-                        <div className="flex items-center gap-2 font-medium">
-                          {locked ? (
-                            <Lock className="h-4 w-4 text-muted-foreground" />
-                          ) : lesson.contentType === "video" ? (
-                            <PlayCircle className="h-4 w-4 text-primary" />
-                          ) : (
-                            <ScrollText className="h-4 w-4 text-accent" />
-                          )}
-                          Lesson {lessonIndex + 1}: {lesson.title || "Untitled lesson"}
-                        </div>
-                        <div className="mt-2 text-sm text-muted-foreground">
-                          {locked
-                            ? "Locked until the learner pays once to unlock the full course."
-                            : lesson.contentType === "video"
-                              ? lesson.videoUrl || "Video lesson URL will appear here."
-                              : stripHtml(lesson.textContent) || "Text lesson content preview will appear here."}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    {section.tasks.map((task, taskIndex) => (
-                      <div key={task.id} className="rounded-2xl border border-border bg-card p-4">
-                        <div className="flex items-center gap-2 font-medium">
-                          {locked ? (
-                            <Lock className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ClipboardCheck className="h-4 w-4 text-primary" />
-                          )}
-                          Task {taskIndex + 1}: {task.title || "Untitled task"}
-                        </div>
-                        <div className="mt-2 text-sm text-muted-foreground">
-                          {locked
-                            ? "Task details are hidden until this section is unlocked."
-                            : stripHtml(task.instructions) || "Task instructions will appear here."}
-                        </div>
-                        {!locked && task.resourceLinks.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {task.resourceLinks.map((link) => (
-                              <span key={link} className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                                {link}
-                              </span>
-                            ))}
+                  {isOpen && (
+                    <div className="mt-4 space-y-3">
+                      {section.lessons.map((lesson, lessonIndex) => (
+                        <div key={lesson.id} className="rounded-2xl border border-border bg-card p-4">
+                          <div className="flex items-center gap-2 font-medium">
+                            {locked ? (
+                              <Lock className="h-4 w-4 text-muted-foreground" />
+                            ) : lesson.contentType === "video" ? (
+                              <PlayCircle className="h-4 w-4 text-primary" />
+                            ) : (
+                              <ScrollText className="h-4 w-4 text-accent" />
+                            )}
+                            Lesson {lessonIndex + 1}: {lesson.title || "Untitled lesson"}
                           </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                          <div className="mt-2 text-sm text-muted-foreground">
+                            {locked
+                              ? "Locked until the learner pays once to unlock the full course."
+                              : lesson.contentType === "video"
+                                ? "This lesson opens a protected video player when the learner enters the lesson."
+                                : stripHtml(lesson.textContent) || "Text lesson content preview will appear here."}
+                          </div>
+                          {!locked && lesson.tags.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {lesson.tags.map((tag) => (
+                                <span key={tag} className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {isOpen && (
+                    <div className="mt-4 space-y-3">
+                      {section.tasks.map((task, taskIndex) => (
+                        <div key={task.id} className="rounded-2xl border border-border bg-card p-4">
+                          <div className="flex items-center gap-2 font-medium">
+                            {locked ? (
+                              <Lock className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ClipboardCheck className="h-4 w-4 text-primary" />
+                            )}
+                            Task {taskIndex + 1}: {task.title || "Untitled task"}
+                          </div>
+                          <div className="mt-2 text-sm text-muted-foreground">
+                            {locked
+                              ? "Task details are hidden until this section is unlocked."
+                              : stripHtml(task.instructions) || "Task instructions will appear here."}
+                          </div>
+                          {!locked && task.resourceLinks.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {task.resourceLinks.map((link) => (
+                                <span key={link} className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+                                  {link}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -152,6 +184,24 @@ export function LearnerCoursePreview({ course }: { course: TeacherCourse }) {
             <h3 className="font-display text-2xl font-bold">Scheme of work</h3>
             <div className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
               {course.schemeOfWork || "Scheme of work will appear here once defined."}
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+            <h3 className="font-display text-2xl font-bold">Roadmap link</h3>
+            <div className="mt-3 text-sm text-muted-foreground">
+              {course.roadmapLink ? (
+                <a
+                  href={course.roadmapLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-primary"
+                >
+                  Open roadmap
+                </a>
+              ) : (
+                "Roadmap link will appear here once added."
+              )}
             </div>
           </div>
 

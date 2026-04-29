@@ -33,6 +33,7 @@ export interface AuthUser {
   selectedTracks: TrackName[];
   purchasedCourseIds: string[];
   status?: "active" | "disabled";
+  mustChangePassword?: boolean;
 }
 
 interface RegisterPayload {
@@ -149,7 +150,7 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
   if (!raw?.id || !raw.email) return null;
 
   const selectedInterest = (raw.selectedInterest ?? raw.interests?.[0] ?? DEFAULT_INTEREST) as Interest;
-  const fallbackTrack = (trackOptionsByInterest[selectedInterest]?.[0] ?? "Backend with Python") as TrackName;
+  const fallbackTrack = ((trackOptionsByInterest as Record<string, TrackName[]>)[selectedInterest]?.[0] ?? "Backend with Python") as TrackName;
   const selectedTracks =
     Array.isArray(raw.selectedTracks) && raw.selectedTracks.length
       ? (raw.selectedTracks as TrackName[])
@@ -176,6 +177,7 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
     selectedTracks,
     purchasedCourseIds: Array.isArray(raw.purchasedCourseIds) ? raw.purchasedCourseIds : [],
     status: (raw.status ?? "active") as "active" | "disabled",
+    mustChangePassword: Boolean(raw.mustChangePassword),
   };
 }
 

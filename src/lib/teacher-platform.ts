@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { isSupportedEmbeddedVideoUrl } from "@/lib/video";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const ACCESS_TOKEN_STORAGE_KEY = "mooreskillup.access-token";
@@ -38,6 +39,8 @@ export interface TeacherLesson {
   contentType: TeacherLessonContentType;
   videoUrl: string;
   textContent: string;
+  tags: string[];
+  embedUrl?: string;
 }
 
 export interface TeacherTask {
@@ -99,6 +102,7 @@ export interface TeacherProfileSettings {
   email: string;
   program: string;
   track: string;
+  tracks: string[];
 }
 
 export interface TeacherDashboardStats {
@@ -116,6 +120,7 @@ interface TeacherDashboardPayload {
     email: string;
     program: string;
     track: string;
+    tracks?: string[];
   };
   stats: TeacherDashboardStats;
   recentActivities?: unknown;
@@ -124,6 +129,13 @@ interface TeacherDashboardPayload {
 
 interface PaginatedResponse<T> {
   results?: T[];
+}
+
+interface AdminEditorDashboardPayload {
+  teacher: TeacherDashboardPayload["teacher"];
+  stats: TeacherDashboardStats;
+  recentActivities?: unknown;
+  recentCourses?: unknown;
 }
 
 function buildApiUrl(endpoint: string) {
@@ -274,6 +286,8 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
                 contentType: (String(typedLesson.content_type ?? typedLesson.type ?? "video") as TeacherLessonContentType),
                 videoUrl: String(typedLesson.video_url ?? typedLesson.videoUrl ?? ""),
                 textContent: String(typedLesson.text_content ?? typedLesson.textContent ?? ""),
+                tags: Array.isArray(typedLesson.tags) ? typedLesson.tags.map((tag: unknown) => String(tag)) : [],
+                embedUrl: String(typedLesson.embedUrl ?? ""),
               };
             })
           : [],
@@ -287,8 +301,10 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
                 instructions: String(typedTask.instructions ?? ""),
                 submissionType:
                   submissionType === "file_upload" ? "file-upload" : "text-submission",
-                resourceLinks: Array.isArray(typedTask.resource_links ?? typedTask.resourceLinks)
-                  ? (typedTask.resource_links ?? typedTask.resourceLinks).map((link: unknown) => String(link))
+                resourceLinks: Array.isArray(typedTask.resource_links)
+                  ? typedTask.resource_links.map((link: unknown) => String(link))
+                  : Array.isArray(typedTask.resourceLinks)
+                    ? typedTask.resourceLinks.map((link: unknown) => String(link))
                   : [],
               };
             })
@@ -319,13 +335,44 @@ function stripHtml(value: string) {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-export function useTeacherPlatform(enabled = true) {
-  const { refreshCurrentUser } = useAuth();
+function getInheritedCategory(categories: TeacherCategory[], program: string) {
+  return categories.find((category) => category.name === program || category.program === program) ?? categories[0];
+}
+
+function getInheritedTrack(category: TeacherCategory | undefined, track: string) {
+  return category?.subcategories.find((subcategory) => subcategory.name === track) ?? category?.subcategories[0];
+}
+
+function getCategoryForTrack(categories: TeacherCategory[], program: string, track: string) {
+  const matchingProgramCategories = categories.filter(
+    (category) => category.name === program || category.program === program,
+  );
+  const scopedCategories = matchingProgramCategories.length ? matchingProgramCategories : categories;
+  return (
+    scopedCategories.find((category) =>
+      category.subcategories.some((subcategory) => subcategory.name === track),
+    ) ?? scopedCategories[0]
+  );
+}
+
+export function useTeacherPlatform(
+  options?: {
+    enabled?: boolean;
+    platformMode?: "teacher" | "admin-owned";
+    courseId?: string;
+  },
+) {
+  const enabled = options?.enabled ?? true;
+  const platformMode = options?.platformMode ?? "teacher";
+  const adminCourseId = options?.courseId;
+  const { refreshCurrentUser, user } = useAuth();
+  const isAdminOwnedMode = platformMode === "admin-owned" && user?.role === "admin";
   const [profile, setProfile] = useState<TeacherProfileSettings>({
     displayName: "",
     email: "",
     program: "",
     track: "",
+    tracks: [],
   });
   const [stats, setStats] = useState<TeacherDashboardStats>({
     totalCourses: 0,
@@ -348,26 +395,59 @@ export function useTeacherPlatform(enabled = true) {
 
     setIsLoading(true);
     setError("");
-    const [dashboardResult, categoriesResult, coursesResult, activitiesResult] = await Promise.allSettled([
-      authenticatedRequest<TeacherDashboardPayload>("/api/dashboard/teacher/"),
-      authenticatedRequest<unknown>("/api/admin/categories/"),
-      authenticatedRequest<unknown>("/api/teacher/courses/"),
-      authenticatedRequest<unknown>("/api/teacher/activities/"),
-    ]);
+    const [dashboardResult, categoriesResult, coursesResult, activitiesResult] = isAdminOwnedMode
+      ? await Promise.allSettled([
+          Promise.resolve<AdminEditorDashboardPayload>({
+            teacher: {
+              id: "admin-owned",
+              displayName: "Admin-owned course",
+              email: user?.email ?? "",
+              program: "",
+              track: "",
+            },
+            stats: {
+              totalCourses: 0,
+              publishedCourses: 0,
+              draftCourses: 0,
+              activeCourses: 0,
+              totalLearners: 0,
+            },
+          }),
+          authenticatedRequest<unknown>("/api/admin/categories/"),
+          adminCourseId
+            ? authenticatedRequest<Record<string, unknown>>(`/api/admin/courses/${adminCourseId}/`)
+            : Promise.resolve<Record<string, unknown> | null>(null),
+          Promise.resolve<unknown>([]),
+        ])
+      : await Promise.allSettled([
+          authenticatedRequest<TeacherDashboardPayload>("/api/dashboard/teacher/"),
+          authenticatedRequest<unknown>("/api/categories/"),
+          authenticatedRequest<unknown>("/api/teacher/courses/"),
+          authenticatedRequest<unknown>("/api/teacher/activities/"),
+        ]);
 
     const failures: string[] = [];
 
     if (dashboardResult.status === "fulfilled") {
       setProfile({
-        displayName: dashboardResult.value.teacher.displayName,
-        email: dashboardResult.value.teacher.email,
+        displayName: isAdminOwnedMode ? "Admin workspace" : dashboardResult.value.teacher.displayName,
+        email: user?.email ?? dashboardResult.value.teacher.email,
         program: dashboardResult.value.teacher.program,
         track: dashboardResult.value.teacher.track,
+        tracks: dashboardResult.value.teacher.tracks ?? (dashboardResult.value.teacher.track ? [dashboardResult.value.teacher.track] : []),
       });
       setStats(dashboardResult.value.stats);
-      setActivities(normalizeListPayload<Record<string, unknown>>(dashboardResult.value.recentActivities).map(normalizeActivity));
-      if (Array.isArray(dashboardResult.value.recentCourses)) {
-        setTeacherCourses(dashboardResult.value.recentCourses.map((course) => normalizeCourse(course as Record<string, unknown>)));
+      setActivities(
+        isAdminOwnedMode
+          ? []
+          : normalizeListPayload<Record<string, unknown>>(dashboardResult.value.recentActivities).map(normalizeActivity),
+      );
+      if (!isAdminOwnedMode && Array.isArray(dashboardResult.value.recentCourses)) {
+        setTeacherCourses(
+          dashboardResult.value.recentCourses.map((course: unknown) =>
+            normalizeCourse(course as Record<string, unknown>),
+          ),
+        );
       }
     } else {
       failures.push(dashboardResult.reason instanceof Error ? dashboardResult.reason.message : "Teacher dashboard failed to load.");
@@ -380,39 +460,63 @@ export function useTeacherPlatform(enabled = true) {
     }
 
     if (coursesResult.status === "fulfilled") {
-      setTeacherCourses(normalizeListPayload<Record<string, unknown>>(coursesResult.value).map(normalizeCourse));
+      if (isAdminOwnedMode) {
+        const adminCourse = coursesResult.value ? normalizeCourse(coursesResult.value as Record<string, unknown>) : null;
+        setTeacherCourses(adminCourse ? [adminCourse] : []);
+        if (adminCourse) {
+          setProfile((current) => ({
+            ...current,
+            program: adminCourse.program,
+            track: adminCourse.track,
+            tracks: adminCourse.track ? [adminCourse.track] : [],
+          }));
+        }
+      } else {
+        setTeacherCourses(normalizeListPayload<Record<string, unknown>>(coursesResult.value).map(normalizeCourse));
+      }
     } else {
       failures.push(coursesResult.reason instanceof Error ? coursesResult.reason.message : "Courses failed to load.");
     }
 
     if (activitiesResult.status === "fulfilled") {
-      setActivities(normalizeListPayload<Record<string, unknown>>(activitiesResult.value).map(normalizeActivity));
+      setActivities(
+        isAdminOwnedMode
+          ? []
+          : normalizeListPayload<Record<string, unknown>>(activitiesResult.value).map(normalizeActivity),
+      );
     } else {
       failures.push(activitiesResult.reason instanceof Error ? activitiesResult.reason.message : "Activities failed to load.");
     }
 
     setError(failures.join(" | "));
     setIsLoading(false);
-  }, [enabled]);
+  }, [adminCourseId, enabled, isAdminOwnedMode, user?.email]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const allowedCategories = useMemo(() => {
+    if (isAdminOwnedMode) return categories;
     const matching = categories.filter((category) => category.name === profile.program || category.program === profile.program);
     return matching.length ? matching : categories;
-  }, [categories, profile.program]);
+  }, [categories, isAdminOwnedMode, profile.program]);
 
   const allowedTracks = useMemo(() => {
-    const tracks = allowedCategories.flatMap((category) => category.subcategories.map((subcategory) => subcategory.name));
+    const allowedTrackSet = new Set(profile.tracks.length ? profile.tracks : profile.track ? [profile.track] : []);
+    const tracks = allowedCategories.flatMap((category) =>
+      category.subcategories
+        .map((subcategory) => subcategory.name)
+        .filter((track) => !allowedTrackSet.size || allowedTrackSet.has(track)),
+    );
     const uniqueTracks = Array.from(new Set(tracks));
-    return uniqueTracks.length ? uniqueTracks : profile.track ? [profile.track] : [];
-  }, [allowedCategories, profile.track]);
+    return uniqueTracks.length ? uniqueTracks : profile.tracks.length ? profile.tracks : profile.track ? [profile.track] : [];
+  }, [allowedCategories, profile.track, profile.tracks]);
 
   const buildEmptyCourse = useCallback((): TeacherCourse => {
-    const category = allowedCategories[0];
-    const subcategory = category?.subcategories[0];
+    const category = getInheritedCategory(allowedCategories, profile.program);
+    const preferredTrack = profile.tracks[0] ?? profile.track;
+    const subcategory = getInheritedTrack(category, preferredTrack);
     return {
       id: createLocalId("course"),
       teacherId: "self",
@@ -421,7 +525,7 @@ export function useTeacherPlatform(enabled = true) {
       categoryId: category?.id ?? "",
       subcategoryId: subcategory?.id ?? "",
       program: category?.name ?? profile.program,
-      track: subcategory?.name ?? profile.track,
+      track: subcategory?.name ?? preferredTrack,
       tags: [],
       roadmapLink: "",
       overview: "",
@@ -443,6 +547,7 @@ export function useTeacherPlatform(enabled = true) {
               contentType: "video",
               videoUrl: "",
               textContent: "",
+              tags: [],
             },
           ],
           tasks: [],
@@ -456,20 +561,38 @@ export function useTeacherPlatform(enabled = true) {
       lastUpdated: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
-  }, [allowedCategories, profile.program, profile.track]);
+  }, [allowedCategories, profile.program, profile.track, profile.tracks]);
 
   const getCourseById = useCallback((id: string) => teacherCourses.find((course) => course.id === id), [teacherCourses]);
 
-  const validateCourse = useCallback((course: TeacherCourse) => {
-    const issues: string[] = [];
-    if (!course.title.trim()) issues.push("Course title is required.");
-    if (!course.subtitle.trim()) issues.push("Course subtitle is required.");
-    if (!course.categoryId) issues.push("Category is required.");
-    if (!course.subcategoryId) issues.push("Subcategory is required.");
-    if (!stripHtml(course.overview)) issues.push("Course overview is required.");
-    if (!course.sections.length) issues.push("At least one section is required.");
+  const syncCourseClassification = useCallback(
+    (course: TeacherCourse): TeacherCourse => {
+      const selectedTrack = course.track || profile.tracks[0] || profile.track;
+      const category = getCategoryForTrack(allowedCategories, profile.program, selectedTrack);
+      const subcategory = getInheritedTrack(category, selectedTrack);
 
-    course.sections.forEach((section, sectionIndex) => {
+      return {
+        ...course,
+        program: category?.name ?? profile.program,
+        categoryId: category?.id ?? course.categoryId,
+        track: subcategory?.name ?? selectedTrack,
+        subcategoryId: subcategory?.id ?? course.subcategoryId,
+      };
+    },
+    [allowedCategories, profile.program, profile.track, profile.tracks],
+  );
+
+  const validateCourse = useCallback((course: TeacherCourse) => {
+    const normalizedCourse = syncCourseClassification(course);
+    const issues: string[] = [];
+    if (!normalizedCourse.title.trim()) issues.push("Course title is required.");
+    if (!normalizedCourse.subtitle.trim()) issues.push("Course subtitle is required.");
+    if (!normalizedCourse.categoryId) issues.push("Program is required.");
+    if (!normalizedCourse.subcategoryId) issues.push("Track is required.");
+    if (!stripHtml(normalizedCourse.overview)) issues.push("Course overview is required.");
+    if (!normalizedCourse.sections.length) issues.push("At least one section is required.");
+
+    normalizedCourse.sections.forEach((section, sectionIndex) => {
       if (!section.title.trim()) issues.push(`Section ${sectionIndex + 1} needs a title.`);
       if (!section.lessons.length) issues.push(`Section ${sectionIndex + 1} needs at least one lesson.`);
       section.lessons.forEach((lesson, lessonIndex) => {
@@ -479,6 +602,11 @@ export function useTeacherPlatform(enabled = true) {
         if (lesson.contentType === "video" && !lesson.videoUrl.trim()) {
           issues.push(`Video lesson ${lessonIndex + 1} in section ${sectionIndex + 1} needs a video URL.`);
         }
+        if (lesson.contentType === "video" && lesson.videoUrl.trim() && !isSupportedEmbeddedVideoUrl(lesson.videoUrl)) {
+          issues.push(
+            `Video lesson ${lessonIndex + 1} in section ${sectionIndex + 1} needs a valid YouTube, Vimeo, or direct video file URL.`,
+          );
+        }
         if (lesson.contentType === "text" && !stripHtml(lesson.textContent)) {
           issues.push(`Text lesson ${lessonIndex + 1} in section ${sectionIndex + 1} needs content.`);
         }
@@ -486,23 +614,56 @@ export function useTeacherPlatform(enabled = true) {
     });
 
     return issues;
-  }, []);
+  }, [syncCourseClassification]);
 
   const recordActivity = useCallback(
     async (message: string, type: TeacherActivityType, courseId?: string) => {
+      if (isAdminOwnedMode) return;
       const activity = await authenticatedRequest<Record<string, unknown>>("/api/teacher/activities/", {
         method: "POST",
         body: JSON.stringify({ message, type, courseId }),
       });
       setActivities((current) => [normalizeActivity(activity), ...current]);
     },
-    [],
+    [isAdminOwnedMode],
   );
 
   const clearTeacherActivities = useCallback(async () => {
+    if (isAdminOwnedMode) {
+      setActivities([]);
+      return;
+    }
     await authenticatedRequest("/api/teacher/activities/", { method: "DELETE" });
     setActivities([]);
-  }, []);
+  }, [isAdminOwnedMode]);
+
+  const endpoints = useMemo(
+    () =>
+      isAdminOwnedMode
+        ? {
+            courseCollection: "/api/admin/courses/",
+            courseDetail: (id: string) => `/api/admin/courses/${id}/`,
+            publishCourse: (id: string) => `/api/admin/courses/${id}/publish/`,
+            createSection: (id: string) => `/api/admin/courses/${id}/sections/`,
+            sectionDetail: (id: string) => `/api/admin/sections/${id}/`,
+            createLesson: (id: string) => `/api/admin/sections/${id}/lessons/`,
+            lessonDetail: (id: string) => `/api/admin/lessons/${id}/`,
+            createTask: (id: string) => `/api/admin/sections/${id}/tasks/`,
+            taskDetail: (id: string) => `/api/admin/tasks/${id}/`,
+          }
+        : {
+            courseCollection: "/api/teacher/courses/",
+            courseDetail: (id: string) => `/api/teacher/courses/${id}/`,
+            publishCourse: (id: string) => `/api/teacher/courses/${id}/publish/`,
+            createSection: (id: string) => `/api/teacher/courses/${id}/sections/`,
+            sectionDetail: (id: string) => `/api/teacher/sections/${id}/`,
+            createLesson: (id: string) => `/api/teacher/sections/${id}/lessons/`,
+            lessonDetail: (id: string) => `/api/teacher/lessons/${id}/`,
+            createTask: (id: string) => `/api/teacher/sections/${id}/tasks/`,
+            taskDetail: (id: string) => `/api/teacher/tasks/${id}/`,
+          },
+    [isAdminOwnedMode],
+  );
 
   const syncSections = useCallback(async (courseId: string, nextCourse: TeacherCourse, previousCourse?: TeacherCourse) => {
     const previousSections = previousCourse?.sections ?? [];
@@ -520,13 +681,13 @@ export function useTeacherPlatform(enabled = true) {
 
       let savedSectionId = section.id;
       if (!existingSectionIds.has(section.id)) {
-        const created = await authenticatedRequest<Record<string, unknown>>(`/api/teacher/courses/${courseId}/sections/`, {
+        const created = await authenticatedRequest<Record<string, unknown>>(endpoints.createSection(courseId), {
           method: "POST",
           body: JSON.stringify(sectionPayload),
         });
         savedSectionId = String(created.id);
       } else {
-        await authenticatedRequest(`/api/teacher/sections/${section.id}/`, {
+        await authenticatedRequest(endpoints.sectionDetail(section.id), {
           method: "PATCH",
           body: JSON.stringify(sectionPayload),
         });
@@ -547,6 +708,7 @@ export function useTeacherPlatform(enabled = true) {
           content_type: lesson.contentType,
           video_url: lesson.videoUrl,
           text_content: lesson.textContent,
+          tags: lesson.tags,
           duration_minutes: 0,
           order: lessonIndex + 1,
           is_previewable: lessonIndex === 0,
@@ -555,13 +717,13 @@ export function useTeacherPlatform(enabled = true) {
 
         let savedLessonId = lesson.id;
         if (!previousLessonIds.has(lesson.id)) {
-          const createdLesson = await authenticatedRequest<Record<string, unknown>>(`/api/teacher/sections/${savedSectionId}/lessons/`, {
+          const createdLesson = await authenticatedRequest<Record<string, unknown>>(endpoints.createLesson(savedSectionId), {
             method: "POST",
             body: JSON.stringify(lessonPayload),
           });
           savedLessonId = String(createdLesson.id);
         } else {
-          await authenticatedRequest(`/api/teacher/lessons/${lesson.id}/`, {
+          await authenticatedRequest(endpoints.lessonDetail(lesson.id), {
             method: "PATCH",
             body: JSON.stringify(lessonPayload),
           });
@@ -571,7 +733,7 @@ export function useTeacherPlatform(enabled = true) {
 
       for (const previousLesson of previousLessons) {
         if (!nextLessonIds.has(previousLesson.id)) {
-          await authenticatedRequest(`/api/teacher/lessons/${previousLesson.id}/`, { method: "DELETE" });
+          await authenticatedRequest(endpoints.lessonDetail(previousLesson.id), { method: "DELETE" });
         }
       }
 
@@ -587,13 +749,13 @@ export function useTeacherPlatform(enabled = true) {
 
         let savedTaskId = task.id;
         if (!previousTaskIds.has(task.id)) {
-          const createdTask = await authenticatedRequest<Record<string, unknown>>(`/api/teacher/sections/${savedSectionId}/tasks/`, {
+          const createdTask = await authenticatedRequest<Record<string, unknown>>(endpoints.createTask(savedSectionId), {
             method: "POST",
             body: JSON.stringify(taskPayload),
           });
           savedTaskId = String(createdTask.id);
         } else {
-          await authenticatedRequest(`/api/teacher/tasks/${task.id}/`, {
+          await authenticatedRequest(endpoints.taskDetail(task.id), {
             method: "PATCH",
             body: JSON.stringify(taskPayload),
           });
@@ -603,63 +765,80 @@ export function useTeacherPlatform(enabled = true) {
 
       for (const previousTask of previousTasks) {
         if (!nextTaskIds.has(previousTask.id)) {
-          await authenticatedRequest(`/api/teacher/tasks/${previousTask.id}/`, { method: "DELETE" });
+          await authenticatedRequest(endpoints.taskDetail(previousTask.id), { method: "DELETE" });
         }
       }
     }
 
     for (const previousSection of previousSections) {
       if (!nextSectionIds.has(previousSection.id)) {
-        await authenticatedRequest(`/api/teacher/sections/${previousSection.id}/`, { method: "DELETE" });
+        await authenticatedRequest(endpoints.sectionDetail(previousSection.id), { method: "DELETE" });
       }
     }
-  }, []);
+  }, [endpoints]);
 
   const saveCourse = useCallback(
-    async (course: TeacherCourse, intent: "draft" | "publish" | "unpublish", options?: { autosave?: boolean }) => {
-      const issues = validateCourse(course);
+    async (
+      course: TeacherCourse,
+      intent: "draft" | "publish" | "unpublish" | "archive" | "restore",
+      options?: { autosave?: boolean },
+    ) => {
+      const nextCourse = syncCourseClassification(course);
+      const issues = validateCourse(nextCourse);
       if (intent === "publish" && issues.length) {
-        return { ok: false, course, issues };
+        return { ok: false, course: nextCourse, issues };
       }
 
-      const previousCourse = getCourseById(course.id);
+      const previousCourse = getCourseById(nextCourse.id);
       const payload = {
-        title: course.title,
-        subtitle: course.subtitle,
-        category: course.categoryId,
-        subcategory: course.subcategoryId,
-        overview: course.overview,
-        scheme_of_work: course.schemeOfWork,
-        roadmap_link: course.roadmapLink,
-        price: course.price,
-        status: intent === "publish" ? "draft" : intent === "unpublish" ? "draft" : course.status,
-        visibility: intent === "publish" ? "hidden" : course.visibility,
-        tags: course.tags,
+        title: nextCourse.title,
+        subtitle: nextCourse.subtitle,
+        category: nextCourse.categoryId,
+        subcategory: nextCourse.subcategoryId,
+        overview: nextCourse.overview,
+        scheme_of_work: nextCourse.schemeOfWork,
+        roadmap_link: nextCourse.roadmapLink,
+        price: nextCourse.price,
+        status:
+          intent === "publish"
+            ? "draft"
+            : intent === "unpublish" || intent === "restore"
+              ? "draft"
+              : intent === "archive"
+                ? "archived"
+                : nextCourse.status,
+        visibility: intent === "publish" ? "hidden" : nextCourse.visibility,
+        tags: nextCourse.tags,
       };
 
       let saved = previousCourse
-        ? await authenticatedRequest<Record<string, unknown>>(`/api/teacher/courses/${course.id}/`, {
+        ? await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(nextCourse.id), {
             method: "PATCH",
             body: JSON.stringify(payload),
           })
-        : await authenticatedRequest<Record<string, unknown>>("/api/teacher/courses/", {
+        : await authenticatedRequest<Record<string, unknown>>(endpoints.courseCollection, {
             method: "POST",
             body: JSON.stringify(payload),
           });
 
-      await syncSections(String(saved.id), course, previousCourse);
+      await syncSections(String(saved.id), nextCourse, previousCourse);
 
       if (intent === "publish") {
-        saved = await authenticatedRequest<Record<string, unknown>>(`/api/teacher/courses/${saved.id}/publish/`, {
+        saved = await authenticatedRequest<Record<string, unknown>>(endpoints.publishCourse(String(saved.id)), {
           method: "POST",
         });
+      } else if (intent === "archive") {
+        saved = await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(String(saved.id)), {
+          method: "PATCH",
+          body: JSON.stringify({ status: "archived", visibility: "hidden" }),
+        });
       } else if (intent === "unpublish") {
-        saved = await authenticatedRequest<Record<string, unknown>>(`/api/teacher/courses/${saved.id}/`, {
+        saved = await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(String(saved.id)), {
           method: "PATCH",
           body: JSON.stringify({ status: "draft", visibility: "hidden" }),
         });
       } else {
-        saved = await authenticatedRequest<Record<string, unknown>>(`/api/teacher/courses/${saved.id}/`, {
+        saved = await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(String(saved.id)), {
           method: "GET",
         });
       }
@@ -673,6 +852,8 @@ export function useTeacherPlatform(enabled = true) {
       const activityType: TeacherActivityType =
         intent === "publish"
           ? "publish-course"
+          : intent === "archive"
+            ? "unpublish-course"
           : intent === "unpublish"
             ? "unpublish-course"
             : options?.autosave
@@ -684,6 +865,8 @@ export function useTeacherPlatform(enabled = true) {
       await recordActivity(
         intent === "publish"
           ? `Published course ${normalized.title}`
+          : intent === "archive"
+            ? `Archived course ${normalized.title}`
           : intent === "unpublish"
             ? `Moved course ${normalized.title} back to draft`
             : previousCourse
@@ -695,19 +878,19 @@ export function useTeacherPlatform(enabled = true) {
 
       return { ok: true, course: normalized, issues };
     },
-    [getCourseById, recordActivity, syncSections, validateCourse],
+    [endpoints, getCourseById, recordActivity, syncSections, validateCourse],
   );
 
   const deleteCourse = useCallback(
     async (courseId: string) => {
       const course = getCourseById(courseId);
-      await authenticatedRequest(`/api/teacher/courses/${courseId}/`, { method: "DELETE" });
+      await authenticatedRequest(endpoints.courseDetail(courseId), { method: "DELETE" });
       setTeacherCourses((current) => current.filter((item) => item.id !== courseId));
       if (course) {
         await recordActivity(`Deleted course ${course.title}`, "delete-course", courseId);
       }
     },
-    [getCourseById, recordActivity],
+    [endpoints, getCourseById, recordActivity],
   );
 
   const updateProfile = useCallback(
@@ -726,6 +909,10 @@ export function useTeacherPlatform(enabled = true) {
         email: String(updatedUser.email ?? current.email),
         program: String(updatedUser.selectedInterest ?? current.program),
         track: String(updatedUser.selectedTrack ?? current.track),
+        tracks:
+          Array.isArray(updatedUser.selectedTracks) && updatedUser.selectedTracks.length
+            ? updatedUser.selectedTracks.map((track: unknown) => String(track))
+            : current.tracks,
       }));
       await recordActivity("Updated teacher profile settings", "settings-update");
     },
@@ -740,7 +927,20 @@ export function useTeacherPlatform(enabled = true) {
         new_password: nextPassword,
       }),
     });
-  }, []);
+    await refreshCurrentUser();
+  }, [refreshCurrentUser]);
+
+  const archiveCourse = useCallback(async (courseId: string) => {
+    const course = getCourseById(courseId);
+    if (!course) return;
+    await saveCourse({ ...course, status: "archived", visibility: "hidden" }, "archive");
+  }, [getCourseById, saveCourse]);
+
+  const restoreCourse = useCallback(async (courseId: string) => {
+    const course = getCourseById(courseId);
+    if (!course) return;
+    await saveCourse({ ...course, status: "draft", visibility: "hidden" }, "restore");
+  }, [getCourseById, saveCourse]);
 
   return {
     profile,
@@ -756,6 +956,8 @@ export function useTeacherPlatform(enabled = true) {
     buildEmptyCourse,
     getCourseById,
     saveCourse,
+    archiveCourse,
+    restoreCourse,
     deleteCourse,
     validateCourse,
     recordActivity,

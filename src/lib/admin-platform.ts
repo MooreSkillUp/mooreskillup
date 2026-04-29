@@ -11,8 +11,10 @@ export interface AdminTeacher {
   email: string;
   program: string;
   track: string;
+  tracks: string[];
   academicProgram: string;
   academicTrack: string;
+  academicTracks: string[];
   status: "active" | "inactive";
   temporaryPassword?: string | null;
 }
@@ -47,6 +49,8 @@ export interface AdminCourse {
   teacherId: string;
   teacherName: string;
   ownerType: "admin" | "teacher";
+  ownerId?: string;
+  featured?: boolean;
 }
 
 export interface AdminBroadcast {
@@ -64,6 +68,8 @@ export interface AdminTotals {
   students: number;
   courses: number;
   payments: number;
+  transactions: number;
+  payingStudents: number;
   revenue: string;
 }
 
@@ -123,6 +129,22 @@ function normalizeListPayload<T>(payload: unknown): T[] {
 function normalizeTeacherPayload(payload: unknown): AdminTeacher[] {
   return normalizeListPayload<AdminTeacher>(payload).map((teacher) => ({
     ...teacher,
+    tracks:
+      Array.isArray(teacher.tracks) && teacher.tracks.length
+        ? teacher.tracks
+        : Array.isArray(teacher.academicTracks) && teacher.academicTracks.length
+          ? teacher.academicTracks
+          : teacher.track
+            ? [teacher.track]
+            : [],
+    academicTracks:
+      Array.isArray(teacher.academicTracks) && teacher.academicTracks.length
+        ? teacher.academicTracks
+        : Array.isArray(teacher.tracks) && teacher.tracks.length
+          ? teacher.tracks
+          : teacher.academicTrack
+            ? [teacher.academicTrack]
+            : [],
     temporaryPassword: teacher.temporaryPassword ?? null,
   }));
 }
@@ -306,7 +328,7 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
   );
 
   const createTeacher = useCallback(
-    async (input: { displayName: string; email: string; program: string; track: string; password?: string }) => {
+    async (input: { displayName: string; email: string; program: string; track: string; tracks?: string[]; password?: string }) => {
       const teacher = await runAction(() =>
         authenticatedRequest<AdminTeacher>("/api/admin/teachers/", {
           method: "POST",
@@ -329,8 +351,9 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     );
     const normalizedTeacher = normalizeTeacherPayload([teacher])[0] ?? teacher;
     setTeachers((current) => current.map((item) => (item.id === teacherId ? normalizedTeacher : item)));
+    await load();
     return normalizedTeacher;
-  }, [runAction]);
+  }, [load, runAction]);
 
   const addCategory = useCallback(async (input: { name: string; description?: string }) => {
       const category = await runAction(() =>
@@ -472,6 +495,29 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     await load();
   }, [load, runAction]);
 
+  const updateCourseCatalog = useCallback(async (courseId: string, patch: Record<string, unknown>) => {
+    const course = await runAction(() =>
+      authenticatedRequest<AdminCourse>(`/api/admin/course-catalog/${courseId}/`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    );
+    const normalizedCourse = normalizeCoursePayload([course])[0] ?? course;
+    setCourses((current) => current.map((item) => (item.id === courseId ? normalizedCourse : item)));
+    return normalizedCourse;
+  }, [runAction]);
+
+  const publishAdminOwnedCourse = useCallback(async (courseId: string) => {
+    const course = await runAction(() =>
+      authenticatedRequest<AdminCourse>(`/api/admin/courses/${courseId}/publish/`, {
+        method: "POST",
+      }),
+    );
+    const normalizedCourse = normalizeCoursePayload([course])[0] ?? course;
+    setCourses((current) => current.map((item) => (item.id === courseId ? normalizedCourse : item)));
+    return normalizedCourse;
+  }, [runAction]);
+
   return {
     teachers,
     activeTeachers,
@@ -494,5 +540,7 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     createBroadcast,
     clearBroadcastHistory,
     reassignCourse,
+    updateCourseCatalog,
+    publishAdminOwnedCourse,
   };
 }

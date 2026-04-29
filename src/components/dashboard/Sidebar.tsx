@@ -46,8 +46,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     { href: "/admin/teachers", label: "Create teacher", icon: UserPlus },
     { href: "/admin/users", label: "Manage teachers", icon: Users },
     { href: "/admin/courses", label: "Admin courses", icon: FolderKanban },
+    { href: "/admin/owned-courses", label: "Admin-Owned Courses", icon: BookOpen },
     { href: "/admin/payments", label: "Payments", icon: CreditCard },
-    { href: "/admin/courses?owner=admin", label: "Admin-Owned Courses", icon: BookOpen },
   ];
 
   const teacherLinks = [
@@ -107,10 +107,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                     (href === "/dashboard/payments" &&
                       (pathname === "/dashboard/payments" || pathname?.startsWith("/payment/"))) ||
                     (href === "/admin/courses" && pathname?.startsWith("/admin/courses")) ||
-                    (href === "/admin/courses?owner=admin" &&
-                      pathname?.startsWith("/admin/courses") &&
-                      typeof window !== "undefined" &&
-                      window.location.search.includes("owner=admin"));
+                    (href === "/admin/owned-courses" && pathname?.startsWith("/admin/owned-courses"));
                   return (
                     <Link
                       key={href}

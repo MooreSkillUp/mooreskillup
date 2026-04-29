@@ -1,94 +1,103 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { PencilLine, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { PencilLine, Plus, Sparkles, Star, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
-import { formatNaira } from "@/lib/commerce";
+import { Input } from "@/components/ui-kit/Input";
 import { useAdminPlatform } from "@/lib/admin-platform";
-
-type OwnerFilter = "all" | "admin";
 
 export default function AdminCoursesPage() {
   const {
     categories,
     courses,
-    teachers,
     addCategory,
     updateCategory,
     deleteCategory,
     addSubcategory,
     updateSubcategory,
     deleteSubcategory,
-    reassignCourse,
+    updateCourseCatalog,
     isLoading,
     error,
   } = useAdminPlatform();
-  const categoryList = useMemo(() => (Array.isArray(categories) ? categories : []), [categories]);
-  const teacherList = useMemo(() => (Array.isArray(teachers) ? teachers : []), [teachers]);
-  const courseList = useMemo(() => (Array.isArray(courses) ? courses : []), [courses]);
-
-  const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>("all");
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
-  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string>("all");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newSubcategoryByCategory, setNewSubcategoryByCategory] = useState<Record<string, string>>({});
+  const [courseSearch, setCourseSearch] = useState("");
+  const [selectedProgramId, setSelectedProgramId] = useState("all");
+  const [selectedTrackId, setSelectedTrackId] = useState("all");
 
-  const selectedCategory =
-    selectedCategoryId === "all"
-      ? null
-      : categoryList.find((category) => category.id === selectedCategoryId) ?? null;
-
-  const visibleCourses = useMemo(
-    () =>
-      courseList.filter((course) => {
-        if (!course) return false;
-        if (ownerFilter === "admin" && course.teacherId !== "admin-owned") return false;
-        if (selectedCategoryId !== "all" && course.categoryId !== selectedCategoryId) return false;
-        if (selectedSubcategoryId !== "all" && course.subcategoryId !== selectedSubcategoryId) return false;
-        return true;
-      }),
-    [courseList, ownerFilter, selectedCategoryId, selectedSubcategoryId],
+  const featuredCourses = useMemo(() => courses.filter((course) => course.featured), [courses]);
+  const totalTracks = useMemo(
+    () => categories.reduce((sum, category) => sum + category.subcategories.length, 0),
+    [categories],
   );
+  const trackOptions = useMemo(() => {
+    if (selectedProgramId === "all") {
+      return categories.flatMap((category) =>
+        category.subcategories.map((subcategory) => ({
+          id: subcategory.id,
+          name: subcategory.name,
+          categoryName: category.name,
+        })),
+      );
+    }
 
-  const adminOwnedCourses = useMemo(
-    () => courseList.filter((course) => course.teacherId === "admin-owned"),
-    [courseList],
-  );
+    const selectedCategory = categories.find((category) => category.id === selectedProgramId);
+    return (selectedCategory?.subcategories ?? []).map((subcategory) => ({
+      id: subcategory.id,
+      name: subcategory.name,
+      categoryName: selectedCategory?.name ?? "",
+    }));
+  }, [categories, selectedProgramId]);
+  const filteredCourses = useMemo(() => {
+    const query = courseSearch.trim().toLowerCase();
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    setOwnerFilter(params.get("owner") === "admin" ? "admin" : "all");
-  }, []);
-
-  const groupedCourses = useMemo(
-    () =>
-      visibleCourses.reduce<Record<string, typeof visibleCourses>>((acc, course) => {
-        const key = `${course.categoryId}:${course.subcategoryId}`;
-        acc[key] = [...(acc[key] ?? []), course];
-        return acc;
-      }, {}),
-    [visibleCourses],
-  );
+    return courses.filter((course) => {
+      const matchesSearch =
+        !query ||
+        [course.title, course.teacherName, course.program, course.track]
+          .filter(Boolean)
+          .some((value) => value.toLowerCase().includes(query));
+      const matchesProgram = selectedProgramId === "all" || course.categoryId === selectedProgramId;
+      const matchesTrack = selectedTrackId === "all" || course.subcategoryId === selectedTrackId;
+      return matchesSearch && matchesProgram && matchesTrack;
+    });
+  }, [courseSearch, courses, selectedProgramId, selectedTrackId]);
 
   return (
     <AppShell allowedRoles={["admin"]}>
       <div className="space-y-6">
         <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-          <h1 className="font-display text-3xl font-bold">Admin courses management</h1>
+          <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
+            Course structure
+          </div>
+          <h1 className="mt-2 font-display text-3xl font-bold">Admin courses configuration</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Manage category structure, keep admin-owned courses safe, and make course organization update everywhere instantly.
+            This area is only for platform structure: programs, tracks, course organization rules, and featured course setup. Admin-owned course editing lives in its own module.
           </p>
+          {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
+        <div className="grid gap-5 md:grid-cols-3">
+          {[
+            { label: "Programs", value: `${categories.length}` },
+            { label: "Tracks", value: `${totalTracks}` },
+            { label: "Featured courses", value: `${featuredCourses.length}` },
+          ].map((item) => (
+            <div key={item.label} className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{item.label}</div>
+              <div className="mt-2 font-display text-3xl font-bold">{item.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
           <section className="space-y-5 rounded-3xl border border-border bg-card p-6 shadow-sm">
             <div>
-              <h2 className="font-display text-2xl font-bold">Categories and subcategories</h2>
+              <h2 className="font-display text-2xl font-bold">Programs and tracks</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Add a main category with only its name, then attach specializations beneath it.
+                Programs are the top-level course categories. Tracks are the specializations beneath each program.
               </p>
             </div>
 
@@ -98,29 +107,29 @@ export default function AdminCoursesPage() {
                   value={newCategoryName}
                   onChange={(event) => setNewCategoryName(event.target.value)}
                   className="h-11 rounded-lg border border-input bg-card px-3.5 text-sm text-foreground shadow-sm outline-none"
-                  placeholder="Category name"
+                  placeholder="Program name"
                 />
                 <Button
                   variant="accent"
                   onClick={() => {
                     if (!newCategoryName.trim()) return;
-                    addCategory({ name: newCategoryName.trim() });
+                    void addCategory({ name: newCategoryName.trim() });
                     setNewCategoryName("");
                   }}
                 >
-                  <Plus className="h-4 w-4" /> Add Category
+                  <Plus className="h-4 w-4" /> Add Program
                 </Button>
               </div>
             </div>
 
             <div className="space-y-4">
-              {categoryList.map((category) => (
+              {categories.map((category) => (
                 <div key={category.id} className="rounded-2xl border border-border bg-background p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <div className="font-display text-xl font-bold">{category.name}</div>
                       <div className="mt-3 space-y-2">
-                      {category.subcategories.length ? (
+                        {category.subcategories.length ? (
                           category.subcategories.map((subcategory) => (
                             <div
                               key={subcategory.id}
@@ -131,7 +140,7 @@ export default function AdminCoursesPage() {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const nextName = window.prompt("Edit subcategory name", subcategory.name);
+                                    const nextName = window.prompt("Edit track name", subcategory.name);
                                     if (nextName?.trim()) {
                                       void updateSubcategory({
                                         categoryId: category.id,
@@ -161,7 +170,7 @@ export default function AdminCoursesPage() {
                           ))
                         ) : (
                           <div className="rounded-2xl border border-dashed border-border bg-card px-3 py-2 text-sm text-muted-foreground">
-                            No subcategories yet.
+                            No tracks yet.
                           </div>
                         )}
                       </div>
@@ -171,7 +180,7 @@ export default function AdminCoursesPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          const nextName = window.prompt("Edit category name", category.name);
+                          const nextName = window.prompt("Edit program name", category.name);
                           if (nextName?.trim()) void updateCategory(category.id, { name: nextName.trim() });
                         }}
                         className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
@@ -198,7 +207,7 @@ export default function AdminCoursesPage() {
                         }))
                       }
                       className="h-11 rounded-lg border border-input bg-card px-3.5 text-sm text-foreground shadow-sm outline-none"
-                      placeholder={`Add subcategory under ${category.name}`}
+                      placeholder={`Add track under ${category.name}`}
                     />
                     <Button
                       variant="outline"
@@ -209,7 +218,7 @@ export default function AdminCoursesPage() {
                         setNewSubcategoryByCategory((current) => ({ ...current, [category.id]: "" }));
                       }}
                     >
-                      <Plus className="h-4 w-4" /> Add Subcategory
+                      <Plus className="h-4 w-4" /> Add Track
                     </Button>
                   </div>
                 </div>
@@ -218,129 +227,107 @@ export default function AdminCoursesPage() {
           </section>
 
           <section className="space-y-5 rounded-3xl border border-border bg-card p-6 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h2 className="font-display text-2xl font-bold">Course organization</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Filter by category, subcategory, and ownership without losing reassignment visibility.
-                </p>
-                {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: "all", label: "All Courses" },
-                  { id: "admin", label: "Admin-Owned Courses" },
-                ].map((item) => {
-                  const active = ownerFilter === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setOwnerFilter(item.id as OwnerFilter)}
-                      className={`rounded-full border px-4 py-2 text-sm transition ${
-                        active
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background text-muted-foreground"
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
+            <div>
+              <h2 className="font-display text-2xl font-bold">Organization and featured setup</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Keep the global course catalog organized and decide which courses receive featured placement on the platform.
+              </p>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
-              <select
-                value={selectedCategoryId}
-                onChange={(event) => {
-                  setSelectedCategoryId(event.target.value);
-                  setSelectedSubcategoryId("all");
-                }}
-                className="h-11 rounded-lg border border-input bg-background px-3.5 text-sm"
-              >
-                <option value="all">All categories</option>
-                {categoryList.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={selectedSubcategoryId}
-                onChange={(event) => setSelectedSubcategoryId(event.target.value)}
-                className="h-11 rounded-lg border border-input bg-background px-3.5 text-sm"
-              >
-                <option value="all">All subcategories</option>
-                {(selectedCategory?.subcategories ?? categoryList.flatMap((category) => category.subcategories)).map(
-                  (subcategory) => (
-                    <option key={subcategory.id} value={subcategory.id}>
-                      {subcategory.name}
-                    </option>
-                  ),
-                )}
-              </select>
-            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-border bg-background p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-primary">
+                  <Sparkles className="h-4 w-4" />
+                  Course organization
+                </div>
+                <div className="mt-3 space-y-3 text-sm text-muted-foreground">
+                  <div className="rounded-2xl bg-card p-3">
+                    Every course inherits its program and track from the teacher assignment or existing admin-owned course mapping.
+                  </div>
+                  <div className="rounded-2xl bg-card p-3">
+                    Admin-owned course editing is isolated from this page so platform structure and owned content do not collide.
+                  </div>
+                </div>
+              </div>
 
-            <div className="rounded-2xl border border-border bg-background p-4">
-              <div className="font-medium">Admin-owned fallback</div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                {adminOwnedCourses.length} course{adminOwnedCourses.length === 1 ? "" : "s"} currently safe under admin ownership.
+              <div className="rounded-2xl border border-border bg-background p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-primary">
+                  <Star className="h-4 w-4" />
+                  Featured configuration
+                </div>
+                <div className="mt-3 text-sm text-muted-foreground">
+                  Featured courses remain learner-visible highlights. Toggle them below without moving ownership or editing content.
+                </div>
               </div>
             </div>
 
-            <div className="space-y-4">
-              {Object.entries(groupedCourses).length ? (
-                Object.entries(groupedCourses).map(([key, courseGroup]) => (
-                  <div key={key} className="rounded-2xl border border-border bg-background p-4">
-                    <div className="font-display text-xl font-bold">
-                      {courseGroup[0].categoryName} / {courseGroup[0].subcategoryName}
-                    </div>
-                    <div className="mt-3 space-y-3">
-                      {courseGroup.map((course) => {
-                        const owner = teacherList.find((teacher) => teacher.id === course.teacherId);
-                        const ownerLabel = owner?.displayName ?? "Admin ownership";
+            <div className="space-y-3">
+              <div className="grid gap-4 rounded-2xl border border-border bg-background p-4 lg:grid-cols-[1.3fr_0.8fr_0.8fr]">
+                <Input
+                  label="Search courses"
+                  value={courseSearch}
+                  onChange={(event) => setCourseSearch(event.target.value)}
+                  placeholder="Search by title, teacher, program, or track"
+                />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Program</label>
+                  <select
+                    value={selectedProgramId}
+                    onChange={(event) => {
+                      setSelectedProgramId(event.target.value);
+                      setSelectedTrackId("all");
+                    }}
+                    className="h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm"
+                  >
+                    <option value="all">All programs</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Track</label>
+                  <select
+                    value={selectedTrackId}
+                    onChange={(event) => setSelectedTrackId(event.target.value)}
+                    className="h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm"
+                  >
+                    <option value="all">All tracks</option>
+                    {trackOptions.map((track) => (
+                      <option key={track.id} value={track.id}>
+                        {track.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-                        return (
-                          <div key={course.id} className="rounded-2xl border border-border bg-card p-4">
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                              <div>
-                                <div className="font-medium">{course.title}</div>
-                                <div className="mt-1 text-sm text-muted-foreground">
-                                  Owner: {ownerLabel} | {course.track} | {course.status} | {formatNaira(Number(course.price))}
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                <Link href={`/teacher/courses/${course.id}/edit`}>
-                                  <Button variant="outline">Edit</Button>
-                                </Link>
-                                <Button
-                                  variant="outline"
-                                  onClick={() => {
-                                    const selectedTeacherId = window.prompt(
-                                      "Enter a teacher profile ID to reassign, or type admin-owned",
-                                      course.teacherId ?? "admin-owned",
-                                    );
-                                    if (!selectedTeacherId?.trim()) return;
-                                    void reassignCourse({
-                                      courseId: course.id,
-                                      newTeacherId: selectedTeacherId.trim(),
-                                    });
-                                  }}
-                                >
-                                  Reassign
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+              {filteredCourses.length ? (
+                filteredCourses.map((course) => (
+                  <div key={course.id} className="rounded-2xl border border-border bg-background p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <div className="font-medium">{course.title}</div>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {course.program} / {course.track} | {course.ownerType === "admin" ? "Admin-owned" : course.teacherName}
+                        </div>
+                      </div>
+                      <Button
+                        variant={course.featured ? "accent" : "outline"}
+                        onClick={() => void updateCourseCatalog(course.id, { featured: !course.featured })}
+                        disabled={isLoading}
+                      >
+                        <Star className="h-4 w-4" />
+                        {course.featured ? "Featured" : "Mark Featured"}
+                      </Button>
                     </div>
                   </div>
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
-                  {isLoading ? "Loading courses..." : "No courses match the selected filters."}
+                  {isLoading ? "Loading course catalog..." : "No courses matched that filter yet."}
                 </div>
               )}
             </div>

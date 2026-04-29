@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -19,7 +18,6 @@ import {
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { Textarea } from "@/components/ui/textarea";
-import { LearnerCoursePreview } from "@/components/teacher/LearnerCoursePreview";
 import { RichTextEditor } from "@/components/teacher/RichTextEditor";
 import {
   useTeacherPlatform,
@@ -30,6 +28,7 @@ import {
   type TeacherTask,
   type TeacherTaskSubmissionType,
 } from "@/lib/teacher-platform";
+import { getEmbeddedVideoUrl, getVideoRenderMode } from "@/lib/video";
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
@@ -50,6 +49,7 @@ function buildLesson(): TeacherLesson {
     contentType: "video",
     videoUrl: "",
     textContent: "",
+    tags: [],
   };
 }
 
@@ -78,26 +78,26 @@ function buildSection(index: number): TeacherSection {
 export function TeacherCourseEditor({
   mode,
   courseId,
+  platformMode = "teacher",
 }: {
   mode: "create" | "edit";
   courseId?: string;
+  platformMode?: "teacher" | "admin-owned";
 }) {
   const router = useRouter();
   const {
     profile,
-    allowedCategories,
-    allowedTracks,
     buildEmptyCourse,
     getCourseById,
     saveCourse,
     validateCourse,
     recordActivity,
-  } = useTeacherPlatform();
+  } = useTeacherPlatform({ platformMode, courseId });
   const source = courseId ? getCourseById(courseId) : undefined;
   const [course, setCourse] = useState<TeacherCourse>(() => clone(source ?? buildEmptyCourse()));
-  const [previewOpen, setPreviewOpen] = useState(mode === "create");
   const [autosaveMessage, setAutosaveMessage] = useState("Waiting for changes");
   const [manualMessage, setManualMessage] = useState("");
+  const [manualMessageTone, setManualMessageTone] = useState<"success" | "warning">("success");
   const [activeSectionId, setActiveSectionId] = useState<string | null>(course.sections[0]?.id ?? null);
   const lastSnapshot = useRef(JSON.stringify(source ?? buildEmptyCourse()));
   const dragSectionId = useRef<string | null>(null);
@@ -111,11 +111,6 @@ export function TeacherCourseEditor({
   }, [buildEmptyCourse, courseId, source]);
 
   const issues = useMemo(() => validateCourse(course), [course, validateCourse]);
-  const selectedCategory = useMemo(
-    () => allowedCategories.find((category) => category.id === course.categoryId) ?? allowedCategories[0],
-    [allowedCategories, course.categoryId],
-  );
-  const availableSubcategories = selectedCategory?.subcategories ?? [];
   const incompleteSectionIds = useMemo(
     () =>
       course.sections
@@ -137,7 +132,7 @@ export function TeacherCourseEditor({
     const interval = window.setInterval(() => {
       const nextSnapshot = JSON.stringify(course);
       if (nextSnapshot === lastSnapshot.current) return;
-      void saveCourse({ ...course, status: "draft" }, "draft", { autosave: true }).then((result) => {
+      void saveCourse(course, "draft", { autosave: true }).then((result) => {
         if (result.ok) {
           lastSnapshot.current = JSON.stringify(result.course);
           setCourse(result.course);
@@ -151,6 +146,21 @@ export function TeacherCourseEditor({
 
   const updateCourse = <K extends keyof TeacherCourse>(field: K, value: TeacherCourse[K]) => {
     setCourse((current) => ({ ...current, [field]: value }));
+  };
+
+  const openPreview = async () => {
+    const result = await saveCourse(course, "draft");
+    if (!result.ok) {
+      setManualMessage("Save the course as a draft before previewing.");
+      return;
+    }
+
+    persistAndNavigateIfNeeded(result.course);
+    const href =
+      platformMode === "admin-owned"
+        ? `/admin/owned-courses/${result.course.id}/preview`
+        : `/teacher/courses/${result.course.id}/preview`;
+    window.open(href, "_blank", "noopener,noreferrer");
   };
 
   const updateSection = (sectionId: string, updater: (section: TeacherSection) => TeacherSection) => {
@@ -252,28 +262,47 @@ export function TeacherCourseEditor({
     }
   };
 
+  const showManualMessage = (message: string, tone: "success" | "warning" = "success") => {
+    setManualMessage(message);
+    setManualMessageTone(tone);
+  };
+
   const saveDraft = async () => {
     const result = await saveCourse({ ...course, status: "draft" }, "draft");
     if (!result.ok) return;
     persistAndNavigateIfNeeded(result.course);
-    setManualMessage("Draft saved");
+    showManualMessage("Course saved as draft.");
   };
 
   const publish = async () => {
     const result = await saveCourse({ ...course, status: "published" }, "publish");
     if (!result.ok) {
-      setManualMessage("Fix validation issues before publishing");
+      showManualMessage("Fix validation issues before publishing.", "warning");
       return;
     }
     persistAndNavigateIfNeeded(result.course);
-    setManualMessage("Course published");
+    showManualMessage("Course published successfully.");
   };
 
   const unpublish = async () => {
     const result = await saveCourse({ ...course, status: "draft" }, "unpublish");
     if (!result.ok) return;
     persistAndNavigateIfNeeded(result.course);
-    setManualMessage("Course moved back to draft");
+    showManualMessage("Course moved back to draft.");
+  };
+
+  const archive = async () => {
+    const result = await saveCourse({ ...course, status: "archived", visibility: "hidden" }, "archive");
+    if (!result.ok) return;
+    persistAndNavigateIfNeeded(result.course);
+    showManualMessage("Course archived.");
+  };
+
+  const restore = async () => {
+    const result = await saveCourse({ ...course, status: "draft", visibility: "hidden" }, "restore");
+    if (!result.ok) return;
+    persistAndNavigateIfNeeded(result.course);
+    showManualMessage("Course restored to draft.");
   };
 
   const progressLabel = `${course.sections.length} section${course.sections.length === 1 ? "" : "s"} | ${
@@ -303,24 +332,25 @@ export function TeacherCourseEditor({
               <Button variant="outline" onClick={saveDraft}>
                 <Save className="h-4 w-4" /> Save as Draft
               </Button>
-              {mode === "edit" ? (
-                <Link href={`/teacher/courses/${course.id}/preview`}>
-                  <Button variant="outline">
-                    <Eye className="h-4 w-4" /> Preview
-                  </Button>
-                </Link>
-              ) : (
-                <Button variant="outline" onClick={() => setPreviewOpen((current) => !current)}>
-                  <Eye className="h-4 w-4" /> Preview
-                </Button>
-              )}
+              <Button variant="outline" onClick={openPreview}>
+                <Eye className="h-4 w-4" /> Preview
+              </Button>
               {course.status === "published" ? (
                 <Button variant="outline" onClick={unpublish}>
                   Unpublish
                 </Button>
+              ) : course.status === "archived" ? (
+                <Button variant="outline" onClick={restore}>
+                  Restore to Draft
+                </Button>
               ) : (
                 <Button variant="accent" onClick={publish}>
                   <Upload className="h-4 w-4" /> Publish
+                </Button>
+              )}
+              {course.status !== "archived" && (
+                <Button variant="outline" onClick={archive}>
+                  Archive
                 </Button>
               )}
             </div>
@@ -331,12 +361,22 @@ export function TeacherCourseEditor({
             <span>Visibility: {course.visibility}</span>
             <span>{progressLabel}</span>
             <span>Auto-save: {autosaveMessage}</span>
-            {manualMessage && <span>{manualMessage}</span>}
           </div>
+          {manualMessage && (
+            <div
+              className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+                manualMessageTone === "success"
+                  ? "border-emerald-300 bg-emerald-50/70 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-100"
+                  : "border-amber-300 bg-amber-50/70 text-amber-900 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-100"
+              }`}
+            >
+              {manualMessage}
+            </div>
+          )}
         </div>
       </section>
 
-      <div className="grid gap-6 2xl:grid-cols-[1.3fr_0.7fr]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.3fr)_24rem]">
         <section className="space-y-6 rounded-[2rem] border border-border bg-card p-6 shadow-sm">
           <div className="grid gap-4 md:grid-cols-2">
             <Input
@@ -353,58 +393,27 @@ export function TeacherCourseEditor({
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Category</label>
-              <select
-                value={course.categoryId}
-                onChange={(event) => {
-                  const nextCategory = allowedCategories.find((category) => category.id === event.target.value);
-                  updateCourse("categoryId", event.target.value);
-                  updateCourse("subcategoryId", nextCategory?.subcategories[0]?.id ?? "");
-                }}
-                className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
-              >
-                {allowedCategories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Subcategory</label>
-              <select
-                value={course.subcategoryId}
-                onChange={(event) => updateCourse("subcategoryId", event.target.value)}
-                className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
-              >
-                {availableSubcategories.map((subcategory) => (
-                  <option key={subcategory.id} value={subcategory.id}>
-                    {subcategory.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Academic Program</label>
-              <Input value={profile.program} readOnly />
+              <label className="text-sm font-medium text-foreground">Program</label>
+              <Input value={course.program || profile.program} readOnly />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Track</label>
               <select
-                value={course.track}
-                onChange={(event) => updateCourse("track", event.target.value as TeacherCourse["track"])}
+                value={course.track || profile.tracks[0] || profile.track}
+                onChange={(event) => updateCourse("track", event.target.value)}
                 className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
               >
-                {allowedTracks.map((track) => (
+                {(profile.tracks.length ? profile.tracks : profile.track ? [profile.track] : []).map((track) => (
                   <option key={track} value={track}>
                     {track}
                   </option>
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+            Program is inherited automatically. Track is chosen from the tracks assigned to this teacher for the current course.
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -678,19 +687,56 @@ export function TeacherCourseEditor({
                               </div>
 
                               {lesson.contentType === "video" ? (
-                                <Input
-                                  className="mt-4"
-                                  label="Video URL"
-                                  value={lesson.videoUrl}
-                                  onChange={(event) =>
-                                    updateLesson(
-                                      section.id,
-                                      lesson.id,
-                                      { videoUrl: event.target.value },
-                                      setCourse,
-                                    )
-                                  }
-                                />
+                                <div className="mt-4 space-y-4">
+                                  <Input
+                                    label="Video URL"
+                                    value={lesson.videoUrl}
+                                    onChange={(event) =>
+                                      updateLesson(
+                                        section.id,
+                                        lesson.id,
+                                        { videoUrl: event.target.value },
+                                        setCourse,
+                                      )
+                                    }
+                                    hint="Use a YouTube, Vimeo, or direct hosted video link. Learners will only see the player inside the lesson view."
+                                  />
+                                  {lesson.videoUrl.trim() && (
+                                    <div className="rounded-2xl border border-border bg-card p-4">
+                                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                                        Learner video preview
+                                      </div>
+                                      {getVideoRenderMode(lesson.videoUrl) === "iframe" ? (
+                                        <div className="mt-3 overflow-hidden rounded-2xl border border-border">
+                                          <div className="aspect-video w-full bg-black">
+                                            <iframe
+                                              src={getEmbeddedVideoUrl(lesson.videoUrl)}
+                                              title={lesson.title || "Lesson video preview"}
+                                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                              allowFullScreen
+                                              className="h-full w-full"
+                                            />
+                                          </div>
+                                        </div>
+                                      ) : getVideoRenderMode(lesson.videoUrl) === "native" ? (
+                                        <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-black">
+                                          <div className="aspect-video w-full">
+                                            <video
+                                              src={lesson.videoUrl}
+                                              controls
+                                              controlsList="nodownload"
+                                              className="h-full w-full"
+                                            />
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="mt-3 text-sm text-destructive">
+                                          This link cannot be embedded yet. Use a valid YouTube, Vimeo, or direct video file URL.
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               ) : (
                                 <div className="mt-4">
                                   <RichTextEditor
@@ -708,6 +754,28 @@ export function TeacherCourseEditor({
                                   />
                                 </div>
                               )}
+
+                              <div className="mt-4">
+                                <Input
+                                  label="Lesson Tags"
+                                  placeholder="Example: intro, variables, assignment"
+                                  value={lesson.tags.join(", ")}
+                                  onChange={(event) =>
+                                    updateLesson(
+                                      section.id,
+                                      lesson.id,
+                                      {
+                                        tags: event.target.value
+                                          .split(",")
+                                          .map((tag) => tag.trim())
+                                          .filter(Boolean),
+                                      },
+                                      setCourse,
+                                    )
+                                  }
+                                  hint="Use short labels that describe the lesson topic or purpose."
+                                />
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -783,6 +851,7 @@ export function TeacherCourseEditor({
                                   </div>
                                   <Input
                                     label="Resource Links"
+                                    placeholder="Example: submission form, GitHub repo, Google Drive folder"
                                     value={task.resourceLinks.join(", ")}
                                     onChange={(event) =>
                                       updateTask(
@@ -797,7 +866,7 @@ export function TeacherCourseEditor({
                                         setCourse,
                                       )
                                     }
-                                    hint="Separate links with commas."
+                                    hint="Add the links learners will use to submit or access task resources."
                                   />
                                 </div>
                               </div>
@@ -817,7 +886,7 @@ export function TeacherCourseEditor({
           </div>
         </section>
 
-        <section className="space-y-6">
+        <section className="space-y-6 2xl:sticky 2xl:top-6 self-start">
           <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-primary/10 p-3 text-primary">
@@ -866,32 +935,28 @@ export function TeacherCourseEditor({
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-3">
+          <details open className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center gap-3">
               <div className="rounded-2xl bg-accent-soft p-3 text-accent">
                 <FileBarChart className="h-5 w-5" />
               </div>
               <div>
                 <h2 className="font-display text-2xl font-bold">Course analytics</h2>
                 <p className="text-sm text-muted-foreground">
-                  Basic instructor metrics for this course.
+                  Live course metrics based on learner activity and enrollments.
                 </p>
               </div>
-            </div>
-
+            </summary>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <MetricCard label="Views" value={`${course.analytics.views}`} />
               <MetricCard label="Enrollments" value={`${course.analytics.enrollments}`} />
-              <MetricCard
-                label="Completion rate"
-                value={`${course.analytics.completionRate}%`}
-              />
+              <MetricCard label="Completion rate" value={`${course.analytics.completionRate}%`} />
               <MetricCard label="Status" value={course.status} />
             </div>
-          </div>
+          </details>
 
-          <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-            <h2 className="font-display text-2xl font-bold">Validation</h2>
+          <details open className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+            <summary className="cursor-pointer list-none font-display text-2xl font-bold">Validation</summary>
             <div className="mt-4 space-y-3 text-sm">
               {issues.length ? (
                 issues.map((issue) => (
@@ -908,47 +973,37 @@ export function TeacherCourseEditor({
                 </div>
               )}
             </div>
-          </div>
+          </details>
 
-          <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-            <h2 className="font-display text-2xl font-bold">Publishing rules</h2>
+          <details className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+            <summary className="cursor-pointer list-none font-display text-2xl font-bold">Validation rules</summary>
             <div className="mt-4 space-y-3 text-sm text-muted-foreground">
               <div className="rounded-2xl bg-muted/40 p-4">
-                Email is read-only and academic track is locked after registration.
+                Program is inherited from the teacher assignment, and the selected track must come from the assigned track list.
               </div>
               <div className="rounded-2xl bg-muted/40 p-4">
-                Categories stay inside the admin-approved scope for your assigned academic program.
+                Publishing is blocked if sections have no lessons or if lessons do not have usable content.
               </div>
               <div className="rounded-2xl bg-muted/40 p-4">
-                Teachers control course pricing here. One successful payment unlocks the full course for the learner.
-              </div>
-              <div className="rounded-2xl bg-muted/40 p-4">
-                Publishing is blocked if sections have no lessons or if lessons have no usable content.
-              </div>
-              <div className="rounded-2xl bg-muted/40 p-4">
-                Auto-save keeps drafts editable at any time while you continue building.
+                Learners see embedded video players only, not raw lesson URLs in the course structure.
               </div>
             </div>
-          </div>
+          </details>
 
-          {(previewOpen || mode === "edit") && (
-            <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="font-display text-2xl font-bold">Inline preview</h2>
-                  <p className="text-sm text-muted-foreground">
-                    See the learner-facing structure as you edit.
-                  </p>
-                </div>
-                {mode === "create" && (
-                  <Button variant="outline" size="sm" onClick={() => setPreviewOpen((current) => !current)}>
-                    {previewOpen ? "Hide" : "Show"} preview
-                  </Button>
-                )}
+          <details className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+            <summary className="cursor-pointer list-none font-display text-2xl font-bold">Preview workflow</summary>
+            <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+              <div className="rounded-2xl bg-muted/40 p-4">
+                Preview opens in a separate tab so the learner view is not squeezed beside the editor.
               </div>
-              {(previewOpen || mode === "edit") && <LearnerCoursePreview course={course} />}
+              <div className="rounded-2xl bg-muted/40 p-4">
+                The preview saves the latest draft first, then shows the learner-facing course structure.
+              </div>
+              <div className="rounded-2xl bg-muted/40 p-4">
+                Videos stay inside lesson pages. Section previews only show lesson titles, lesson types, tags, and locked states.
+              </div>
             </div>
-          )}
+          </details>
         </section>
       </div>
     </div>

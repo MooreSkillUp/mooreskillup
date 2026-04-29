@@ -36,7 +36,7 @@ export default function AdminDashboardPage() {
           courseCount: courses.filter((course) => course.teacherId === teacher.id).length,
         }))
         .sort((left, right) => right.courseCount - left.courseCount)
-        .slice(0, 4),
+        .slice(0, 8),
     [courses, teachers],
   );
 
@@ -79,12 +79,13 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
           {[
             { icon: Users, label: "Students", value: `${totals?.students ?? 0}` },
             { icon: Shield, label: "Active teachers", value: `${activeTeachers}` },
             { icon: FolderKanban, label: "Total courses", value: `${courses.length}` },
-            { icon: CreditCard, label: "Payments", value: `${totals?.payments ?? 0}` },
+            { icon: CreditCard, label: "Transactions", value: `${totals?.transactions ?? totals?.payments ?? 0}` },
+            { icon: CreditCard, label: "Revenue", value: `NGN ${totals?.revenue ?? "0.00"}` },
           ].map((item) => (
             <div key={item.label} className="rounded-3xl border border-border bg-card p-6 shadow-sm">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -230,18 +231,38 @@ export default function AdminDashboardPage() {
                   Open teacher management
                 </Link>
               </div>
-              <div className="mt-5 space-y-3">
+              <div className="mt-5 max-h-[28rem] space-y-3 overflow-y-auto pr-1">
                 {topTeachers.map((teacher) => (
                   <div key={teacher.id} className="rounded-2xl border border-border bg-background p-4">
                     <div className="font-medium">{teacher.displayName}</div>
                     <div className="mt-1 text-sm text-muted-foreground">
-                      {teacher.academicProgram} | {teacher.academicTrack} | {teacher.courseCount} courses
+                      {teacher.academicProgram} | {teacher.courseCount} courses
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {teacher.academicTracks.slice(0, 3).map((track) => (
+                        <span
+                          key={`${teacher.id}-${track}`}
+                          className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-muted-foreground"
+                        >
+                          {track}
+                        </span>
+                      ))}
+                      {teacher.academicTracks.length > 3 && (
+                        <span className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-muted-foreground">
+                          +{teacher.academicTracks.length - 3} more
+                        </span>
+                      )}
                     </div>
                     <div className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
                       {teacher.status === "active" ? "Active" : "Inactive"}
                     </div>
                   </div>
                 ))}
+                {!topTeachers.length && (
+                  <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+                    {isLoading ? "Loading teacher snapshot..." : "No teachers yet."}
+                  </div>
+                )}
               </div>
             </div>
           </section>

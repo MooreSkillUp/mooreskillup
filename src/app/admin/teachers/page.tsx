@@ -7,6 +7,7 @@ import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { useAdminPlatform } from "@/lib/admin-platform";
 import { type Interest, type TrackName } from "@/lib/mock-data";
+import { publicEnv } from "@/lib/public-env";
 import { usePlatformTaxonomy } from "@/lib/taxonomy";
 
 export default function AdminTeachersPage() {
@@ -20,7 +21,7 @@ export default function AdminTeachersPage() {
     confirmPassword: "",
   });
   const [selectedInterest, setSelectedInterest] = useState<Interest>("Web Development");
-  const [selectedTrack, setSelectedTrack] = useState<TrackName>("React and Modern UI");
+  const [selectedTracks, setSelectedTracks] = useState<TrackName[]>(["React and Modern UI"]);
   const [submitError, setSubmitError] = useState("");
   const [createdTeacher, setCreatedTeacher] = useState<{
     email: string;
@@ -40,16 +41,27 @@ export default function AdminTeachersPage() {
     if (!interests.includes(selectedInterest)) {
       const nextInterest = interests[0];
       setSelectedInterest(nextInterest);
-      setSelectedTrack((trackOptionsByInterest[nextInterest] ?? [])[0] ?? ("React and Modern UI" as TrackName));
+      setSelectedTracks(
+        ((trackOptionsByInterest[nextInterest] ?? [])[0]
+          ? [(trackOptionsByInterest[nextInterest] ?? [])[0]]
+          : ["React and Modern UI"]) as TrackName[],
+      );
       return;
     }
 
-    if (trackOptions.length && !trackOptions.includes(selectedTrack)) {
-      setSelectedTrack(trackOptions[0]);
+    if (!trackOptions.length) {
+      setSelectedTracks([]);
+      return;
     }
-  }, [interests, selectedInterest, selectedTrack, trackOptions, trackOptionsByInterest]);
+    setSelectedTracks((current) => {
+      const filtered = current.filter((track) => trackOptions.includes(track));
+      if (filtered.length) return filtered;
+      return [trackOptions[0]];
+    });
+  }, [interests, selectedInterest, trackOptions, trackOptionsByInterest]);
 
   const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
+  const teacherLoginUrl = `${publicEnv.appUrl.replace(/\/$/, "")}/login`;
 
   const resetForm = () => {
     setForm({
@@ -67,7 +79,7 @@ export default function AdminTeachersPage() {
       `Teacher Name: ${createdTeacher.displayName}`,
       `Teacher Email: ${createdTeacher.email}`,
       createdTeacher.temporaryPassword ? `Temporary Password: ${createdTeacher.temporaryPassword}` : null,
-      "Login URL: http://localhost:3000/auth/login",
+      `Login URL: ${teacherLoginUrl}`,
       "Next Step: Teacher should log in and change the password immediately.",
     ].filter(Boolean);
 
@@ -84,7 +96,7 @@ export default function AdminTeachersPage() {
     setSubmitError("");
     setCopyStatus("");
 
-    if (!interests.length || !trackOptions.length) {
+    if (!interests.length || !trackOptions.length || !selectedTracks.length) {
       setSubmitError("Create at least one category and subcategory first so teacher specialization can be assigned.");
       return;
     }
@@ -99,7 +111,8 @@ export default function AdminTeachersPage() {
         displayName: form.displayName.trim(),
         email: form.email.trim(),
         program: selectedInterest,
-        track: selectedTrack,
+        track: selectedTracks[0],
+        tracks: selectedTracks,
         password: form.password.trim() || undefined,
       });
 
@@ -204,7 +217,11 @@ export default function AdminTeachersPage() {
                         type="button"
                         onClick={() => {
                           setSelectedInterest(interest);
-                          setSelectedTrack((trackOptionsByInterest[interest] ?? [])[0] ?? selectedTrack);
+                          setSelectedTracks(
+                            ((trackOptionsByInterest[interest] ?? [])[0]
+                              ? [(trackOptionsByInterest[interest] ?? [])[0]]
+                              : []) as TrackName[],
+                          );
                         }}
                         className={`rounded-full border px-4 py-2 text-sm transition ${
                           active
@@ -220,15 +237,23 @@ export default function AdminTeachersPage() {
               </div>
 
               <div className="rounded-3xl border border-border bg-background p-5">
-                <div className="text-sm font-medium text-foreground">Assigned track</div>
+                <div className="text-sm font-medium text-foreground">Assigned tracks</div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {trackOptions.map((track) => {
-                    const active = track === selectedTrack;
+                    const active = selectedTracks.includes(track);
                     return (
                       <button
                         key={track}
                         type="button"
-                        onClick={() => setSelectedTrack(track)}
+                        onClick={() =>
+                          setSelectedTracks((current) => {
+                            if (current.includes(track)) {
+                              const nextTracks = current.filter((item) => item !== track);
+                              return nextTracks.length ? nextTracks : current;
+                            }
+                            return [...current, track];
+                          })
+                        }
                         className={`rounded-2xl border px-4 py-4 text-left transition ${
                           active
                             ? "border-accent bg-accent/10 shadow-sm"
@@ -237,11 +262,16 @@ export default function AdminTeachersPage() {
                       >
                         <div className="font-display text-lg font-bold">{track}</div>
                         <div className="mt-1 text-sm text-muted-foreground">
-                          This becomes the teacher&apos;s specialization and default course context.
+                          {active
+                            ? "Assigned to this teacher. The first selected track becomes the default course context."
+                            : "Click to assign this track to the teacher."}
                         </div>
                       </button>
                     );
                   })}
+                </div>
+                <div className="mt-3 text-sm text-muted-foreground">
+                  Default track for course creation: {selectedTracks[0] ?? "None selected"}
                 </div>
               </div>
 
@@ -252,6 +282,7 @@ export default function AdminTeachersPage() {
                 className="w-full"
                 disabled={
                   isLoading || isLoadingTaxonomy || !form.displayName.trim() || !form.email.trim() || !interests.length || !trackOptions.length
+                  || !selectedTracks.length
                 }
               >
                 <ShieldCheck className="h-4 w-4" />
@@ -285,7 +316,7 @@ export default function AdminTeachersPage() {
                   </div>
                   <div>
                     <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Teacher login</div>
-                    <div className="mt-1 font-medium">http://localhost:3000/auth/login</div>
+                    <div className="mt-1 font-medium">{teacherLoginUrl}</div>
                   </div>
                   <Button variant="outline" onClick={() => void copyCredentials()}>
                     <Copy className="h-4 w-4" />

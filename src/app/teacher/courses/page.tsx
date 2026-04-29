@@ -8,7 +8,8 @@ import { Button } from "@/components/ui-kit/Button";
 import { useTeacherPlatform, type TeacherCourseStatus } from "@/lib/teacher-platform";
 
 export default function TeacherCoursesPage() {
-  const { teacherCourses, saveCourse, deleteCourse, getCourseById, categories } = useTeacherPlatform();
+  const { teacherCourses, saveCourse, deleteCourse, getCourseById, categories, archiveCourse, restoreCourse } =
+    useTeacherPlatform();
   const [tab, setTab] = useState<TeacherCourseStatus>("published");
 
   const getCategoryName = (id: string) =>
@@ -41,6 +42,10 @@ export default function TeacherCoursesPage() {
               <Upload className="h-4 w-4" /> Create course
             </Button>
           </Link>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+          Archived courses are hidden from students but kept safely for later restoration and editing.
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -141,6 +146,15 @@ export default function TeacherCoursesPage() {
                       }}
                     >
                       Publish
+                    </Button>
+                  )}
+                  {course.status === "archived" ? (
+                    <Button variant="outline" size="sm" onClick={() => void restoreCourse(course.id)}>
+                      Restore
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => void archiveCourse(course.id)}>
+                      Archive
                     </Button>
                   )}
                   <Button variant="outline" size="sm" onClick={() => void deleteCourse(course.id)}>

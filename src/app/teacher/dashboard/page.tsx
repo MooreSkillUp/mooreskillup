@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Activity,
   BookOpen,
@@ -13,17 +14,91 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
+import { Input } from "@/components/ui-kit/Input";
+import { useAuth } from "@/lib/auth";
 import { useTeacherPlatform } from "@/lib/teacher-platform";
 
 export default function TeacherDashboardPage() {
-  const { profile, stats, activities, teacherCourses, clearTeacherActivities, isLoading, error } = useTeacherPlatform();
+  const { user } = useAuth();
+  const { profile, stats, activities, teacherCourses, clearTeacherActivities, isLoading, error, changePassword } =
+    useTeacherPlatform();
   const topCourse = [...teacherCourses].sort(
     (left, right) => right.analytics.enrollments - left.analytics.enrollments,
   )[0];
+  const [passwordPromptOpen, setPasswordPromptOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [promptMessage, setPromptMessage] = useState("");
+
+  useEffect(() => {
+    if (!user?.mustChangePassword) return;
+    const dismissedKey = `mooreskillup.teacher-password-prompt.dismissed.${user.id}`;
+    if (typeof window !== "undefined" && window.sessionStorage.getItem(dismissedKey) === "true") return;
+    setPasswordPromptOpen(true);
+  }, [user?.id, user?.mustChangePassword]);
+
+  const submitFirstLoginPassword = async () => {
+    if (!newPassword.trim()) {
+      setPromptMessage("Enter a new password to continue.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPromptMessage("New password and confirm password must match.");
+      return;
+    }
+    await changePassword("", newPassword);
+    setPromptMessage("Password updated successfully.");
+    setPasswordPromptOpen(false);
+    setNewPassword("");
+    setConfirmPassword("");
+  };
+
+  const skipPasswordPrompt = () => {
+    if (typeof window !== "undefined" && user?.id) {
+      window.sessionStorage.setItem(`mooreskillup.teacher-password-prompt.dismissed.${user.id}`, "true");
+    }
+    setPasswordPromptOpen(false);
+  };
 
   return (
     <AppShell allowedRoles={["teacher", "admin"]}>
       <div className="space-y-8">
+        {passwordPromptOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <section className="w-full max-w-2xl rounded-[2rem] border border-primary/30 bg-card p-6 shadow-2xl">
+              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
+                First login security
+              </div>
+              <h2 className="mt-2 font-display text-2xl font-bold">Update your temporary password</h2>
+              <p className="mt-2 max-w-3xl text-muted-foreground">
+                You can replace the temporary password now, or skip and continue using it until you use the forgot-password flow.
+              </p>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <Input
+                  label="New password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                />
+                <Input
+                  label="Confirm password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button variant="accent" onClick={submitFirstLoginPassword}>
+                  Save new password
+                </Button>
+                <Button variant="outline" onClick={skipPasswordPrompt}>
+                  Keep temporary password for now
+                </Button>
+              </div>
+              {promptMessage && <p className="mt-3 text-sm text-success">{promptMessage}</p>}
+            </section>
+          </div>
+        )}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">

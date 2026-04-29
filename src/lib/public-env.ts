@@ -1,4 +1,5 @@
 export const publicEnv = {
+  appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://mooreskillup.org",
   formspreeFormId:
     process.env.NEXT_PUBLIC_FORMSPREE_FORM_ID ?? "f/YOUR_FORM_ID",
   whatsappNumber: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "1234567890",

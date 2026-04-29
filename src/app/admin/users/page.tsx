@@ -23,6 +23,8 @@ export default function AdminUsersPage() {
   const [editingTeacherId, setEditingTeacherId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [draftEmail, setDraftEmail] = useState("");
+  const [draftProgram, setDraftProgram] = useState<Interest>("Web Development");
+  const [draftTracks, setDraftTracks] = useState<TrackName[]>(["React and Modern UI"]);
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
   const [createdTeacherMessage, setCreatedTeacherMessage] = useState("");
@@ -30,7 +32,7 @@ export default function AdminUsersPage() {
     displayName: "",
     email: "",
     program: "Web Development" as Interest,
-    track: "React and Modern UI" as TrackName,
+    tracks: ["React and Modern UI"] as TrackName[],
   });
 
   useEffect(() => {
@@ -39,16 +41,21 @@ export default function AdminUsersPage() {
       ? newTeacherForm.program
       : interests[0];
     const nextTracks = trackOptionsByInterest[nextProgram] ?? [];
-    const nextTrack = nextTracks.includes(newTeacherForm.track) ? newTeacherForm.track : nextTracks[0];
+    const filteredTracks = newTeacherForm.tracks.filter((track) => nextTracks.includes(track));
+    const normalizedTracks = filteredTracks.length ? filteredTracks : nextTracks[0] ? [nextTracks[0]] : [];
 
-    if (nextProgram !== newTeacherForm.program || nextTrack !== newTeacherForm.track) {
+    if (
+      nextProgram !== newTeacherForm.program ||
+      normalizedTracks.length !== newTeacherForm.tracks.length ||
+      normalizedTracks.some((track, index) => track !== newTeacherForm.tracks[index])
+    ) {
       setNewTeacherForm((current) => ({
         ...current,
         program: nextProgram,
-        track: nextTrack ?? current.track,
+        tracks: normalizedTracks,
       }));
     }
-  }, [interests, newTeacherForm.program, newTeacherForm.track, trackOptionsByInterest]);
+  }, [interests, newTeacherForm.program, newTeacherForm.tracks, trackOptionsByInterest]);
 
   const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
   const inactiveTeachers = teachers.filter((teacher) => teacher.status === "inactive").length;
@@ -69,6 +76,10 @@ export default function AdminUsersPage() {
     setEditingTeacherId(teacherId);
     setDraftName(teacher.displayName);
     setDraftEmail(teacher.email);
+    setDraftProgram(teacher.academicProgram as Interest);
+    setDraftTracks(
+      (teacher.academicTracks.length ? teacher.academicTracks : [teacher.academicTrack]) as TrackName[],
+    );
   };
 
   const saveEdit = () => {
@@ -76,6 +87,9 @@ export default function AdminUsersPage() {
     void updateTeacher(editingTeacherId, {
       displayName: draftName.trim() || undefined,
       email: draftEmail.trim() || undefined,
+      program: draftProgram,
+      track: draftTracks[0],
+      tracks: draftTracks,
     });
     setEditingTeacherId(null);
   };
@@ -90,9 +104,10 @@ export default function AdminUsersPage() {
     void createTeacher({
       displayName: newTeacherForm.displayName.trim(),
       email: newTeacherForm.email.trim(),
-      program: newTeacherForm.program,
-      track: newTeacherForm.track,
-    }).then((nextTeacher) => {
+        program: newTeacherForm.program,
+        track: newTeacherForm.tracks[0],
+        tracks: newTeacherForm.tracks,
+      }).then((nextTeacher) => {
       setCreatedTeacherMessage(
         nextTeacher.temporaryPassword
           ? `Teacher created: ${nextTeacher.email} | Temporary password: ${nextTeacher.temporaryPassword}`
@@ -100,13 +115,13 @@ export default function AdminUsersPage() {
       );
       void reassignCourse({ courseId: selectedCourseId, newTeacherId: nextTeacher.id });
       setSelectedOwnerId(nextTeacher.id);
-      setNewTeacherForm({
-        displayName: "",
-        email: "",
-        program: "Web Development",
-        track: "React and Modern UI",
+        setNewTeacherForm({
+          displayName: "",
+          email: "",
+          program: "Web Development",
+          tracks: ["React and Modern UI"],
+        });
       });
-    });
   };
 
   return (
@@ -160,7 +175,7 @@ export default function AdminUsersPage() {
                   <tr>
                     <th className="px-4 py-3">Name</th>
                     <th className="px-4 py-3">Program</th>
-                    <th className="px-4 py-3">Track</th>
+                    <th className="px-4 py-3">Tracks</th>
                     <th className="px-4 py-3">Courses uploaded</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Actions</th>
@@ -174,7 +189,18 @@ export default function AdminUsersPage() {
                         <div className="text-xs text-muted-foreground">{teacher.email}</div>
                       </td>
                       <td className="px-4 py-3">{teacher.academicProgram}</td>
-                      <td className="px-4 py-3">{teacher.academicTrack}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {teacher.academicTracks.map((track) => (
+                            <span
+                              key={`${teacher.id}-${track}`}
+                              className="rounded-full border border-border bg-background px-2 py-1 text-xs text-muted-foreground"
+                            >
+                              {track}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">{teacher.courseCount}</td>
                       <td className="px-4 py-3">
                         {teacher.status === "active" ? "Active" : "Inactive"}
@@ -236,6 +262,59 @@ export default function AdminUsersPage() {
                     className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm text-foreground shadow-sm outline-none"
                     placeholder="Teacher email"
                   />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <select
+                      value={draftProgram}
+                      onChange={(event) => {
+                        const nextProgram = event.target.value as Interest;
+                        const nextTracks = trackOptionsByInterest[nextProgram] ?? [];
+                        setDraftProgram(nextProgram);
+                        setDraftTracks(nextTracks.length ? [nextTracks[0] as TrackName] : []);
+                      }}
+                      className="h-11 rounded-lg border border-input bg-background px-3.5 text-sm"
+                    >
+                      {interests.map((interest) => (
+                        <option key={interest} value={interest}>
+                          {interest}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="rounded-lg border border-input bg-background p-3">
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Assigned tracks
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(trackOptionsByInterest[draftProgram] ?? []).map((track) => {
+                          const active = draftTracks.includes(track);
+                          return (
+                            <button
+                              key={track}
+                              type="button"
+                              onClick={() =>
+                                setDraftTracks((current) => {
+                                  if (current.includes(track)) {
+                                    const nextTracks = current.filter((item) => item !== track);
+                                    return nextTracks.length ? nextTracks : current;
+                                  }
+                                  return [...current, track];
+                                })
+                              }
+                              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                                active
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border bg-card text-muted-foreground"
+                              }`}
+                            >
+                              {track}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3 text-xs text-muted-foreground">
+                        Default track: {draftTracks[0] ?? "None selected"}
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex gap-3">
                     <Button variant="accent" onClick={saveEdit}>
                       Save changes
@@ -282,7 +361,7 @@ export default function AdminUsersPage() {
                     .filter((teacher) => teacher.status === "active")
                     .map((teacher) => (
                       <option key={teacher.id} value={teacher.id}>
-                        {teacher.displayName} | {teacher.academicProgram} | {teacher.academicTrack}
+                        {teacher.displayName} | {teacher.academicProgram} | {(teacher.academicTracks[0] ?? teacher.academicTrack)}
                       </option>
                     ))}
                 </select>
@@ -331,7 +410,9 @@ export default function AdminUsersPage() {
                         setNewTeacherForm((current) => ({
                           ...current,
                           program,
-                          track: trackOptionsByInterest[program][0],
+                          tracks: trackOptionsByInterest[program]?.length
+                            ? [trackOptionsByInterest[program][0]]
+                            : [],
                         }));
                       }}
                       className="h-11 rounded-lg border border-input bg-card px-3.5 text-sm"
@@ -342,22 +423,41 @@ export default function AdminUsersPage() {
                         </option>
                       ))}
                     </select>
-                    <select
-                      value={newTeacherForm.track}
-                      onChange={(event) =>
-                        setNewTeacherForm((current) => ({
-                          ...current,
-                          track: event.target.value as TrackName,
-                        }))
-                      }
-                      className="h-11 rounded-lg border border-input bg-card px-3.5 text-sm"
-                    >
-                      {(trackOptionsByInterest[newTeacherForm.program] ?? []).map((track) => (
-                        <option key={track} value={track}>
-                          {track}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="rounded-lg border border-input bg-card p-3">
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Assigned tracks
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(trackOptionsByInterest[newTeacherForm.program] ?? []).map((track) => {
+                          const active = newTeacherForm.tracks.includes(track);
+                          return (
+                            <button
+                              key={track}
+                              type="button"
+                              onClick={() =>
+                                setNewTeacherForm((current) => {
+                                  if (current.tracks.includes(track)) {
+                                    const nextTracks = current.tracks.filter((item) => item !== track);
+                                    return nextTracks.length ? { ...current, tracks: nextTracks } : current;
+                                  }
+                                  return { ...current, tracks: [...current.tracks, track] };
+                                })
+                              }
+                              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                                active
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border bg-background text-muted-foreground"
+                              }`}
+                            >
+                              {track}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3 text-xs text-muted-foreground">
+                        Default track: {newTeacherForm.tracks[0] ?? "None selected"}
+                      </div>
+                    </div>
                   </div>
                   <Button
                     variant="outline"

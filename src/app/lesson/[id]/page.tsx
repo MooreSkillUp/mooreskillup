@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, FileText, ListChecks, Lock } from 
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { formatNaira } from "@/lib/commerce";
+import { getEmbeddedVideoUrl, getVideoRenderMode } from "@/lib/video";
 import { useTeacherWorkspace } from "@/lib/teacher-workspace";
 
 export default function LessonPage() {
@@ -117,15 +118,26 @@ export default function LessonPage() {
 
         {lesson.contentType === "video" ? (
           <div className="overflow-hidden rounded-[2rem] border border-border bg-black shadow-sm">
-            <div className="aspect-video w-full">
-              <iframe
-                src={lesson.videoUrl.replace("watch?v=", "embed/")}
-                title={lesson.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="h-full w-full"
-              />
-            </div>
+            {getVideoRenderMode(lesson.videoUrl) === "native" ? (
+              <div className="aspect-video w-full">
+                <video
+                  src={lesson.videoUrl}
+                  controls
+                  controlsList="nodownload"
+                  className="h-full w-full"
+                />
+              </div>
+            ) : (
+              <div className="aspect-video w-full">
+                <iframe
+                  src={getEmbeddedVideoUrl(lesson.videoUrl)}
+                  title={lesson.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="h-full w-full"
+                />
+              </div>
+            )}
           </div>
         ) : (
           <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">

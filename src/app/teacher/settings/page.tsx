@@ -8,12 +8,9 @@ import { Input } from "@/components/ui-kit/Input";
 import { useTeacherPlatform } from "@/lib/teacher-platform";
 
 export default function TeacherSettingsPage() {
-  const { profile, updateProfile, changePassword, error } = useTeacherPlatform();
+  const { profile, updateProfile, error } = useTeacherPlatform();
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [message, setMessage] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
 
   useEffect(() => {
     setDisplayName(profile.displayName);
@@ -22,22 +19,6 @@ export default function TeacherSettingsPage() {
   const saveSettings = async () => {
     await updateProfile({ displayName });
     setMessage("Teacher settings saved");
-  };
-
-  const savePassword = async () => {
-    if (!currentPassword || !newPassword) {
-      setMessage("Enter your current password and a new password.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setMessage("New password and confirm password must match.");
-      return;
-    }
-    await changePassword(currentPassword, newPassword);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setMessage("Password updated successfully.");
   };
 
   return (
@@ -49,7 +30,7 @@ export default function TeacherSettingsPage() {
           </div>
           <h1 className="mt-2 font-display text-4xl font-bold">Teacher profile settings</h1>
           <p className="mt-2 max-w-3xl text-muted-foreground">
-            Only essential teacher identity fields remain here. Email and academic track stay locked.
+            Only essential teacher identity fields remain here. Email, program, and track stay locked to the admin assignment.
           </p>
           {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
         </div>
@@ -65,51 +46,29 @@ export default function TeacherSettingsPage() {
               <Input label="Email" value={profile.email} readOnly />
             </div>
 
-            <Input label="Academic Track" value={profile.track} readOnly />
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input label="Program" value={profile.program} readOnly />
+              <Input label="Default Track" value={profile.track} readOnly />
+            </div>
+
+            <div className="rounded-2xl border border-border bg-background p-4">
+              <div className="text-sm font-medium text-foreground">Assigned tracks</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(profile.tracks.length ? profile.tracks : profile.track ? [profile.track] : []).map((track) => (
+                  <span
+                    key={track}
+                    className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground"
+                  >
+                    {track}
+                  </span>
+                ))}
+              </div>
+            </div>
 
             <Button variant="accent" onClick={saveSettings}>
               <Save className="h-4 w-4" /> Save settings
             </Button>
             {message && <div className="text-sm text-success">{message}</div>}
-          </div>
-        </section>
-
-        <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-          <div className="space-y-4">
-            <div>
-              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-                Password update
-              </div>
-              <h2 className="mt-2 font-display text-2xl font-bold">Change your password</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Teachers created by admin should change the temporary password after first login.
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              <Input
-                label="Current password"
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-              />
-              <Input
-                label="New password"
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-              />
-              <Input
-                label="Confirm password"
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-              />
-            </div>
-
-            <Button variant="outline" onClick={savePassword}>
-              Update password
-            </Button>
           </div>
         </section>
       </div>
