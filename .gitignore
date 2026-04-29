@@ -39,3 +39,4 @@ backend/media/
 backend/.env
 backend/.env.railway
 .venv/
+tsconfig.tsbuildinfo
