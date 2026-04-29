@@ -19,6 +19,10 @@ interface PaginatedResponse<T> {
   results?: T[];
 }
 
+function hasResults<T>(payload: unknown): payload is PaginatedResponse<T> {
+  return payload !== null && typeof payload === "object" && "results" in payload;
+}
+
 function buildApiUrl(endpoint: string) {
   return `${API_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
 }
@@ -42,7 +46,7 @@ export function usePlatformTaxonomy() {
           | { detail?: string };
         const categoryList = Array.isArray(payload)
           ? payload
-          : Array.isArray(payload?.results)
+          : hasResults<TaxonomyCategory>(payload) && Array.isArray(payload.results)
             ? payload.results
             : null;
 
@@ -56,7 +60,7 @@ export function usePlatformTaxonomy() {
 
         if (active) {
           setCategories(
-            categoryList.map((category) => ({
+            categoryList.map((category: TaxonomyCategory) => ({
               id: category.id,
               name: category.name,
               program: category.program || category.name,
