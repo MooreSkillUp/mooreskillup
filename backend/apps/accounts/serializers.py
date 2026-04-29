@@ -4,6 +4,7 @@ import secrets
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -25,6 +26,8 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
     userId = serializers.UUIDField(source="user_id", read_only=True)
     academicProgram = serializers.CharField(source="program", read_only=True)
     academicTrack = serializers.CharField(source="track", read_only=True)
+    academicTracks = serializers.ListField(source="tracks", child=serializers.CharField(), read_only=True)
+    mustChangePassword = serializers.BooleanField(source="must_change_password", read_only=True)
 
     class Meta:
         model = TeacherProfile
@@ -37,8 +40,10 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
             "track",
             "academicProgram",
             "academicTrack",
+            "academicTracks",
             "bio",
             "status",
+            "mustChangePassword",
         )
 
 
@@ -53,6 +58,7 @@ class UserSerializer(serializers.ModelSerializer):
     purchasedCourseIds = serializers.SerializerMethodField()
     plan = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
+    mustChangePassword = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -72,53 +78,93 @@ class UserSerializer(serializers.ModelSerializer):
             "purchasedCourseIds",
             "plan",
             "status",
+            "mustChangePassword",
         )
 
     def get_selectedInterest(self, obj):
-        if hasattr(obj, "student_profile"):
-            return obj.student_profile.selected_interest or None
-        if hasattr(obj, "teacher_profile"):
-            return obj.teacher_profile.program or None
+        student_profile = self._get_student_profile(obj)
+        if student_profile:
+            return student_profile.selected_interest or None
+        teacher_profile = self._get_teacher_profile(obj)
+        if teacher_profile:
+            return teacher_profile.program or None
         return None
 
     def get_selectedTrack(self, obj):
-        if hasattr(obj, "student_profile"):
-            return obj.student_profile.selected_track or None
-        if hasattr(obj, "teacher_profile"):
-            return obj.teacher_profile.track or None
+        student_profile = self._get_student_profile(obj)
+        if student_profile:
+            return student_profile.selected_track or None
+        teacher_profile = self._get_teacher_profile(obj)
+        if teacher_profile:
+            return teacher_profile.track or None
         return None
 
     def get_selectedTracks(self, obj):
-        selected_track = self.get_selectedTrack(obj)
-        return [selected_track] if selected_track else []
+        student_profile = self._get_student_profile(obj)
+        if student_profile:
+            selected_track = student_profile.selected_track or None
+            return [selected_track] if selected_track else []
+        teacher_profile = self._get_teacher_profile(obj)
+        if teacher_profile:
+            tracks = teacher_profile.tracks or []
+            if tracks:
+                return tracks
+            return [teacher_profile.track] if teacher_profile.track else []
+        return []
 
     def get_interests(self, obj):
         selected_interest = self.get_selectedInterest(obj)
         return [selected_interest] if selected_interest else []
 
     def get_wishlist(self, obj):
-        if hasattr(obj, "student_profile"):
+        student_profile = self._get_student_profile(obj)
+        if student_profile:
             return list(
-                Watchlist.objects.filter(student=obj.student_profile).values_list("course_id", flat=True)
+                Watchlist.objects.filter(student=student_profile).values_list("course_id", flat=True)
             )
         return []
 
     def get_purchasedCourseIds(self, obj):
-        if hasattr(obj, "student_profile"):
+        student_profile = self._get_student_profile(obj)
+        if student_profile:
             return list(
-                Enrollment.objects.filter(student=obj.student_profile).values_list("course_id", flat=True)
+                Enrollment.objects.filter(student=student_profile).values_list("course_id", flat=True)
             )
         return []
 
     def get_plan(self, obj):
-        if hasattr(obj, "student_profile"):
-            return obj.student_profile.plan
+        student_profile = self._get_student_profile(obj)
+        if student_profile:
+            return student_profile.plan
         return "free"
 
     def get_status(self, obj):
-        if obj.role == "teacher" and hasattr(obj, "teacher_profile"):
-            return obj.teacher_profile.status
+        teacher_profile = self._get_teacher_profile(obj)
+        if obj.role == "teacher" and teacher_profile:
+            return teacher_profile.status
         return "active" if obj.is_active else "disabled"
+
+    def get_mustChangePassword(self, obj):
+        teacher_profile = self._get_teacher_profile(obj)
+        if obj.role == "teacher" and teacher_profile:
+            return teacher_profile.must_change_password
+        return False
+
+    def _get_student_profile(self, obj):
+        if obj.role != "student":
+            return None
+        try:
+            return obj.student_profile
+        except ObjectDoesNotExist:
+            return None
+
+    def _get_teacher_profile(self, obj):
+        if obj.role != "teacher":
+            return None
+        try:
+            return obj.teacher_profile
+        except ObjectDoesNotExist:
+            return None
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
@@ -172,6 +218,10 @@ class UserUpdateSerializer(serializers.ModelSerializer):
                 profile.track = selected_track
             elif selected_tracks:
                 profile.track = selected_tracks[0]
+            if selected_tracks is not None:
+                profile.tracks = selected_tracks
+            elif selected_track is not None:
+                profile.tracks = [selected_track] if selected_track else []
             profile.save()
 
         return instance
@@ -272,7 +322,8 @@ class AdminTeacherCreateSerializer(serializers.Serializer):
     displayName = serializers.CharField()
     email = serializers.EmailField()
     program = serializers.CharField()
-    track = serializers.CharField()
+    track = serializers.CharField(required=False, allow_blank=True)
+    tracks = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=False)
     password = serializers.CharField(required=False, allow_blank=True, min_length=8)
     status = serializers.ChoiceField(choices=("active", "inactive"), required=False, default="active")
 
@@ -285,7 +336,11 @@ class AdminTeacherCreateSerializer(serializers.Serializer):
         display_name = validated_data["displayName"].strip()
         email = validated_data["email"]
         program = validated_data["program"].strip()
-        track = validated_data["track"].strip()
+        tracks = [track.strip() for track in validated_data.get("tracks", []) if track.strip()]
+        single_track = validated_data.get("track", "").strip()
+        if single_track and single_track not in tracks:
+            tracks.insert(0, single_track)
+        track = tracks[0] if tracks else single_track
         status = validated_data.get("status", "active")
         password = validated_data.get("password", "").strip() or secrets.token_urlsafe(10)
         username_base = display_name.lower().replace(" ", ".")
@@ -306,7 +361,9 @@ class AdminTeacherCreateSerializer(serializers.Serializer):
             user=user,
             program=program,
             track=track,
+            tracks=tracks or ([track] if track else []),
             status=status,
+            must_change_password=True,
         )
         teacher_profile._generated_password = password
         return teacher_profile
@@ -351,12 +408,22 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
 
 class ChangePasswordSerializer(serializers.Serializer):
-    current_password = serializers.CharField()
+    current_password = serializers.CharField(required=False, allow_blank=True)
     new_password = serializers.CharField(min_length=8)
 
     def validate(self, attrs):
         user = self.context["request"].user
-        if not user.check_password(attrs["current_password"]):
+        current_password = attrs.get("current_password", "")
+        must_change_password = bool(
+            user.role == "teacher"
+            and hasattr(user, "teacher_profile")
+            and user.teacher_profile.must_change_password
+        )
+        if must_change_password:
+            return attrs
+        if not current_password:
+            raise serializers.ValidationError({"current_password": "Current password is required."})
+        if not user.check_password(current_password):
             raise serializers.ValidationError({"current_password": "Current password is incorrect."})
         return attrs
 

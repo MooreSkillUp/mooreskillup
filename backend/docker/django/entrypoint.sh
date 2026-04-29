@@ -11,10 +11,6 @@ done
 
 echo "Database is up!"
 
-if [ "$#" -gt 0 ]; then
-  exec "$@"
-fi
-
 # Run migrations
 echo "Running migrations..."
 python manage.py migrate --noinput
@@ -23,6 +19,10 @@ python manage.py migrate --noinput
 if [ "$DJANGO_DEBUG" != "True" ]; then
   echo "Collecting static files..."
   python manage.py collectstatic --noinput
+fi
+
+if [ "$#" -gt 0 ]; then
+  exec "$@"
 fi
 
 # Start appropriate server

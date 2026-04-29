@@ -163,6 +163,7 @@ class TeacherDashboardView(views.APIView):
                     "email": request.user.email,
                     "program": teacher.program,
                     "track": teacher.track,
+                    "tracks": teacher.tracks or ([teacher.track] if teacher.track else []),
                 },
                 "stats": {
                     "totalCourses": courses.count(),
@@ -189,6 +190,8 @@ class AdminDashboardView(views.APIView):
                     "students": request.user.__class__.objects.filter(role="student").count(),
                     "courses": Course.objects.count(),
                     "payments": Payment.objects.filter(status="successful").count(),
+                    "transactions": Payment.objects.filter(status="successful").count(),
+                    "payingStudents": Payment.objects.filter(status="successful").values("student_id").distinct().count(),
                     "revenue": str(
                         sum(Payment.objects.filter(status="successful").values_list("amount", flat=True), start=Decimal("0.00"))
                     ),

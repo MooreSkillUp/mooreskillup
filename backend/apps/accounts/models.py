@@ -64,8 +64,10 @@ class TeacherProfile(UUIDPrimaryKeyModel, TimeStampedModel):
     user = models.OneToOneField("accounts.User", on_delete=models.CASCADE, related_name="teacher_profile")
     program = models.CharField(max_length=100)
     track = models.CharField(max_length=100)
+    tracks = models.JSONField(default=list, blank=True)
     bio = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    must_change_password = models.BooleanField(default=False)
 
     def __str__(self):
         return self.user.display_name

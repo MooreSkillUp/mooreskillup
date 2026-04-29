@@ -15,6 +15,17 @@ from .views import (
     TeacherSectionViewSet,
     TeacherTaskViewSet,
 )
+from .admin_views import (
+    AdminCourseDetailView,
+    AdminOwnedCourseDetailView,
+    AdminOwnedCoursePublishView,
+    AdminOwnedCourseSectionCreateView,
+    AdminOwnedLessonView,
+    AdminOwnedSectionLessonCreateView,
+    AdminOwnedSectionTaskCreateView,
+    AdminOwnedSectionView,
+    AdminOwnedTaskView,
+)
 
 router = DefaultRouter()
 router.register("courses", CourseViewSet, basename="course")
@@ -25,6 +36,15 @@ router.register("teacher/tasks", TeacherTaskViewSet, basename="teacher-task")
 
 urlpatterns = [
     path("admin/courses/", AdminCourseListView.as_view(), name="admin-courses-list"),
+    path("admin/course-catalog/<uuid:course_id>/", AdminCourseDetailView.as_view(), name="admin-course-detail"),
+    path("admin/courses/<uuid:course_id>/", AdminOwnedCourseDetailView.as_view(), name="admin-owned-course-detail"),
+    path("admin/courses/<uuid:course_id>/publish/", AdminOwnedCoursePublishView.as_view(), name="admin-owned-course-publish"),
+    path("admin/courses/<uuid:course_id>/sections/", AdminOwnedCourseSectionCreateView.as_view(), name="admin-owned-course-sections-create"),
+    path("admin/sections/<uuid:section_id>/", AdminOwnedSectionView.as_view(), name="admin-owned-section-detail"),
+    path("admin/sections/<uuid:section_id>/lessons/", AdminOwnedSectionLessonCreateView.as_view(), name="admin-owned-section-lessons-create"),
+    path("admin/sections/<uuid:section_id>/tasks/", AdminOwnedSectionTaskCreateView.as_view(), name="admin-owned-section-tasks-create"),
+    path("admin/lessons/<uuid:lesson_id>/", AdminOwnedLessonView.as_view(), name="admin-owned-lesson-detail"),
+    path("admin/tasks/<uuid:task_id>/", AdminOwnedTaskView.as_view(), name="admin-owned-task-detail"),
     path("teacher/courses/<uuid:course_id>/sections/", TeacherCourseSectionCreateView.as_view(), name="teacher-course-sections-create"),
     path("teacher/sections/<uuid:section_id>/lessons/", TeacherSectionLessonCreateView.as_view(), name="teacher-section-lessons-create"),
     path("teacher/sections/<uuid:section_id>/tasks/", TeacherSectionTaskCreateView.as_view(), name="teacher-section-tasks-create"),

@@ -74,6 +74,7 @@ class Lesson(UUIDPrimaryKeyModel, TimeStampedModel):
     content_type = models.CharField(max_length=20, choices=CONTENT_CHOICES)
     video_url = models.URLField(blank=True)
     text_content = models.TextField(blank=True)
+    tags = models.JSONField(default=list, blank=True)
     duration_minutes = models.PositiveIntegerField(null=True, blank=True)
     order = models.PositiveIntegerField()
     is_previewable = models.BooleanField(default=False)

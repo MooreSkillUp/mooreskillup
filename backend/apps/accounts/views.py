@@ -12,6 +12,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from common.permissions import IsAdminUserRole
 
+from apps.courses.models import Course
+
 from .models import PasswordResetToken
 from .password_reset_email import try_send_password_reset_email
 from .serializers import (
@@ -160,6 +162,11 @@ class ChangePasswordView(APIView):
         serializer.is_valid(raise_exception=True)
         request.user.set_password(serializer.validated_data["new_password"])
         request.user.save(update_fields=["password"])
+        if request.user.role == "teacher" and hasattr(request.user, "teacher_profile"):
+            teacher_profile = request.user.teacher_profile
+            if teacher_profile.must_change_password:
+                teacher_profile.must_change_password = False
+                teacher_profile.save(update_fields=["must_change_password", "updated_at"])
         return response.Response({"detail": "Password updated successfully."})
 
 
@@ -177,8 +184,7 @@ class AdminTeacherListView(APIView):
         serializer.is_valid(raise_exception=True)
         teacher = serializer.save()
         payload = TeacherProfileSerializer(teacher).data
-        if settings.DEBUG:
-            payload["temporaryPassword"] = getattr(teacher, "_generated_password", None)
+        payload["temporaryPassword"] = getattr(teacher, "_generated_password", None)
         return response.Response(payload, status=status.HTTP_201_CREATED)
 
 
@@ -204,7 +210,16 @@ class AdminTeacherUpdateView(APIView):
             teacher.program = request.data["program"]
         if "track" in request.data:
             teacher.track = request.data["track"]
+        if "tracks" in request.data:
+            tracks = [str(track).strip() for track in request.data.get("tracks", []) if str(track).strip()]
+            teacher.tracks = tracks
+            if tracks:
+                teacher.track = tracks[0]
+        elif "track" in request.data:
+            teacher.tracks = [request.data["track"]] if request.data["track"] else []
         teacher.save()
+        if teacher.status == "inactive":
+            Course.objects.filter(teacher=teacher).update(teacher=None, updated_at=timezone.now())
         return response.Response(TeacherProfileSerializer(teacher).data)
 
 

@@ -4,12 +4,14 @@ from apps.enrollments.models import Enrollment, Watchlist
 from apps.progress.models import LessonProgress
 
 from .models import Course, CourseTag, Lesson, Section, Task, TeacherActivityLog
+from .video import build_embed_url, validate_video_url
 
 
 class LessonSerializer(serializers.ModelSerializer):
     type = serializers.CharField(source="content_type", read_only=True)
     status = serializers.SerializerMethodField()
     duration = serializers.SerializerMethodField()
+    embedUrl = serializers.SerializerMethodField()
 
     class Meta:
         model = Lesson
@@ -20,8 +22,10 @@ class LessonSerializer(serializers.ModelSerializer):
             "content_type",
             "video_url",
             "text_content",
+            "tags",
             "duration_minutes",
             "duration",
+            "embedUrl",
             "order",
             "is_previewable",
             "is_published",
@@ -30,6 +34,9 @@ class LessonSerializer(serializers.ModelSerializer):
 
     def get_duration(self, obj):
         return f"{obj.duration_minutes} min" if obj.duration_minutes else None
+
+    def get_embedUrl(self, obj):
+        return build_embed_url(obj.video_url)
 
     def get_status(self, obj):
         request = self.context.get("request")
@@ -50,6 +57,13 @@ class LessonSerializer(serializers.ModelSerializer):
             if progress.status == "in_progress":
                 return "in-progress"
         return "unlocked"
+
+    def validate(self, attrs):
+        content_type = attrs.get("content_type", getattr(self.instance, "content_type", None))
+        video_url = attrs.get("video_url", getattr(self.instance, "video_url", ""))
+        if content_type == "video" and video_url:
+            validate_video_url(video_url)
+        return attrs
 
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -147,6 +161,7 @@ class CourseSerializer(serializers.ModelSerializer):
     teacherName = serializers.SerializerMethodField()
     teacherId = serializers.SerializerMethodField()
     ownerType = serializers.SerializerMethodField()
+    ownerId = serializers.SerializerMethodField()
     teacherProgram = serializers.SerializerMethodField()
     teacherTrack = serializers.SerializerMethodField()
     producedBy = serializers.SerializerMethodField()
@@ -183,6 +198,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "teacherName",
             "teacherId",
             "ownerType",
+            "ownerId",
             "teacherProgram",
             "teacherTrack",
             "producedBy",
@@ -212,6 +228,9 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def get_ownerType(self, obj):
         return "teacher" if obj.teacher_id else "admin"
+
+    def get_ownerId(self, obj):
+        return str(obj.teacher_id) if obj.teacher_id else "admin"
 
     def get_teacherProgram(self, obj):
         return obj.teacher.program if obj.teacher else None
@@ -252,13 +271,14 @@ class CourseSerializer(serializers.ModelSerializer):
             completion_rate = round(sum(progress_values) / len(progress_values))
 
         total_lessons = obj.total_lessons or Lesson.objects.filter(section__course=obj, is_published=True).count()
-        synthetic_views = getattr(obj, "synthetic_views", None)
-        if synthetic_views is None:
-            published_lessons_count = Lesson.objects.filter(section__course=obj, is_published=True).count()
-            synthetic_views = enrollments_count * 3 + published_lessons_count * 5 + 24
+        lesson_views = obj.sections.filter(
+            lessons__lesson_progress__first_accessed_at__isnull=False
+        ).values("lessons__lesson_progress").distinct().count()
+        enrollment_views = obj.enrollments.filter(last_accessed_at__isnull=False).count()
+        real_views = max(lesson_views, enrollment_views)
 
         return {
-            "views": synthetic_views,
+            "views": real_views,
             "enrollments": enrollments_count,
             "completionRate": completion_rate,
             "totalLessons": total_lessons,
