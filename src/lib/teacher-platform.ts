@@ -1,16 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { isSupportedEmbeddedVideoUrl } from "@/lib/video";
+import {
+  authenticatedRequest,
+  normalizeListPayload,
+} from "@/lib/authenticated-api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const ACCESS_TOKEN_STORAGE_KEY = "mooreskillup.access-token";
-const REFRESH_TOKEN_STORAGE_KEY = "mooreskillup.refresh-token";
 
-export type TeacherCourseStatus = "draft" | "published" | "archived";
+export type TeacherCourseStatus =
+  | "draft"
+  | "review"
+  | "approved"
+  | "published"
+  | "declined"
+  | "archived";
 export type TeacherCourseVisibility = "visible" | "hidden";
+export type TeacherCourseLevel = "beginner" | "intermediate" | "advanced";
 export type TeacherSectionAccess = "free" | "paid";
-export type TeacherLessonContentType = "video" | "text";
-export type TeacherTaskSubmissionType = "file-upload" | "text-submission";
+export type TeacherLessonContentType = "video" | "text" | "resource";
+export type TeacherTaskSubmissionType = "whatsapp-group" | "google-form" | "external-link";
+export type TeacherResourceType =
+  | "pdf"
+  | "documentation"
+  | "github"
+  | "google_drive"
+  | "zip"
+  | "website";
 export type TeacherActivityType =
   | "create-course"
   | "edit-course"
@@ -33,22 +48,42 @@ export interface TeacherCategory {
   subcategories: TeacherCategorySubcategory[];
 }
 
+export interface TeacherResourceLink {
+  type: TeacherResourceType;
+  title: string;
+  url: string;
+}
+
 export interface TeacherLesson {
   id: string;
   title: string;
   contentType: TeacherLessonContentType;
   videoUrl: string;
   textContent: string;
+  resourceLinks: TeacherResourceLink[];
   tags: string[];
   embedUrl?: string;
 }
 
+/** An assignment. Submission happens off-platform via a link (no uploads/grading). */
 export interface TeacherTask {
   id: string;
   title: string;
   instructions: string;
   submissionType: TeacherTaskSubmissionType;
-  resourceLinks: string[];
+  submissionUrl: string;
+  howToSubmit: string;
+  dueDate?: string | null;
+}
+
+export interface TeacherProject {
+  id: string;
+  title: string;
+  description: string;
+  requirements: string;
+  deliverables: string;
+  submissionUrl: string;
+  howToSubmit: string;
 }
 
 export interface TeacherSection {
@@ -59,6 +94,7 @@ export interface TeacherSection {
   collapsed: boolean;
   lessons: TeacherLesson[];
   tasks: TeacherTask[];
+  projects: TeacherProject[];
 }
 
 export interface TeacherCourseAnalytics {
@@ -80,7 +116,14 @@ export interface TeacherCourse {
   roadmapLink: string;
   overview: string;
   schemeOfWork: string;
+  level: TeacherCourseLevel;
   price: number;
+  discountPrice: number | null;
+  metaTitle: string;
+  metaDescription: string;
+  techStack: string[];
+  certificateEnabled: boolean;
+  pendingDeletion: boolean;
   status: TeacherCourseStatus;
   visibility: TeacherCourseVisibility;
   sections: TeacherSection[];
@@ -95,6 +138,15 @@ export interface TeacherActivity {
   timestamp: string;
   createdAt: string;
   type: TeacherActivityType;
+}
+
+export interface TeacherCourseVersion {
+  id: string;
+  versionNumber: number;
+  note: string;
+  createdBy: string | null;
+  createdAt: string;
+  sectionCount: number;
 }
 
 export interface TeacherProfileSettings {
@@ -114,6 +166,7 @@ export interface TeacherDashboardStats {
 }
 
 interface TeacherDashboardPayload {
+  announcementsEnabled?: boolean;
   teacher: {
     id: string;
     displayName: string;
@@ -127,113 +180,16 @@ interface TeacherDashboardPayload {
   recentCourses?: unknown;
 }
 
-interface PaginatedResponse<T> {
-  results?: T[];
-}
-
 interface AdminEditorDashboardPayload {
+  announcementsEnabled?: boolean;
   teacher: TeacherDashboardPayload["teacher"];
   stats: TeacherDashboardStats;
   recentActivities?: unknown;
   recentCourses?: unknown;
 }
 
-function buildApiUrl(endpoint: string) {
-  return `${API_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
-}
-
-async function parseJsonSafely(response: Response) {
-  const text = await response.text();
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-function extractErrorMessage(payload: unknown, fallback: string) {
-  if (!payload || typeof payload !== "object") return fallback;
-  if ("detail" in payload && typeof payload.detail === "string") return payload.detail;
-  for (const value of Object.values(payload as Record<string, unknown>)) {
-    if (typeof value === "string") return value;
-    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
-  }
-  return fallback;
-}
-
-function normalizeListPayload<T>(payload: unknown): T[] {
-  if (Array.isArray(payload)) return payload as T[];
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "results" in payload &&
-    Array.isArray((payload as PaginatedResponse<T>).results)
-  ) {
-    return (payload as PaginatedResponse<T>).results ?? [];
-  }
-  return [];
-}
-
 function createLocalId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-async function refreshAccessToken() {
-  if (typeof window === "undefined") {
-    throw new Error("Session refresh is unavailable.");
-  }
-  const refreshToken = localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY);
-  if (!refreshToken) {
-    throw new Error("Your session has expired. Please log in again.");
-  }
-  const response = await fetch(buildApiUrl("/api/auth/refresh/"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh: refreshToken }),
-  });
-  const payload = await parseJsonSafely(response);
-  if (!response.ok || !payload || typeof payload.access !== "string") {
-    localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
-    throw new Error(extractErrorMessage(payload, "Your session has expired. Please log in again."));
-  }
-  localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, payload.access);
-  if (typeof payload.refresh === "string") {
-    localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, payload.refresh);
-  }
-  return payload.access as string;
-}
-
-async function authenticatedRequest<T = unknown>(endpoint: string, options?: RequestInit): Promise<T> {
-  if (typeof window === "undefined") {
-    throw new Error("Authenticated requests are unavailable.");
-  }
-
-  const send = async (token: string | null) =>
-    fetch(buildApiUrl(endpoint), {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options?.headers ?? {}),
-      },
-    });
-
-  let accessToken = localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-  let response = await send(accessToken);
-
-  if (response.status === 401) {
-    accessToken = await refreshAccessToken();
-    response = await send(accessToken);
-  }
-
-  const payload = await parseJsonSafely(response);
-  if (!response.ok) {
-    throw new Error(extractErrorMessage(payload, "Request failed."));
-  }
-
-  return payload as T;
 }
 
 function normalizeCategory(category: Record<string, unknown>): TeacherCategory {
@@ -266,7 +222,21 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
     roadmapLink: String(raw.roadmap_link ?? raw.roadmapLink ?? ""),
     overview: String(raw.overview ?? ""),
     schemeOfWork: String(raw.scheme_of_work ?? raw.schemeOfWork ?? ""),
+    level: (String(raw.level ?? "beginner") as TeacherCourseLevel),
     price: Number(raw.price ?? 0),
+    discountPrice:
+      raw.discountPrice ?? raw.discount_price ?? null
+        ? Number(raw.discountPrice ?? raw.discount_price)
+        : null,
+    metaTitle: String(raw.metaTitle ?? raw.meta_title ?? ""),
+    metaDescription: String(raw.metaDescription ?? raw.meta_description ?? ""),
+    techStack: Array.isArray(raw.techStack)
+      ? raw.techStack.map((item) => String(item))
+      : Array.isArray(raw.tech_stack)
+        ? (raw.tech_stack as unknown[]).map((item) => String(item))
+        : [],
+    certificateEnabled: Boolean(raw.certificateEnabled ?? raw.certificate_enabled ?? false),
+    pendingDeletion: Boolean(raw.pendingDeletion ?? raw.pending_deletion ?? false),
     status: (String(raw.status ?? "draft") as TeacherCourseStatus),
     visibility: (String(raw.visibility ?? "hidden") as TeacherCourseVisibility),
     sections: sections.map((section) => {
@@ -280,12 +250,23 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
         lessons: Array.isArray(typedSection.lessons)
           ? typedSection.lessons.map((lesson) => {
               const typedLesson = lesson as Record<string, unknown>;
+              const rawResources = typedLesson.resourceLinks ?? typedLesson.resource_links;
               return {
                 id: String(typedLesson.id ?? ""),
                 title: String(typedLesson.title ?? ""),
                 contentType: (String(typedLesson.content_type ?? typedLesson.type ?? "video") as TeacherLessonContentType),
                 videoUrl: String(typedLesson.video_url ?? typedLesson.videoUrl ?? ""),
                 textContent: String(typedLesson.text_content ?? typedLesson.textContent ?? ""),
+                resourceLinks: Array.isArray(rawResources)
+                  ? rawResources.map((link) => {
+                      const typed = link as Record<string, unknown>;
+                      return {
+                        type: (String(typed.type ?? "website") as TeacherResourceType),
+                        title: String(typed.title ?? ""),
+                        url: String(typed.url ?? ""),
+                      };
+                    })
+                  : [],
                 tags: Array.isArray(typedLesson.tags) ? typedLesson.tags.map((tag: unknown) => String(tag)) : [],
                 embedUrl: String(typedLesson.embedUrl ?? ""),
               };
@@ -294,18 +275,37 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
         tasks: Array.isArray(typedSection.tasks)
           ? typedSection.tasks.map((task) => {
               const typedTask = task as Record<string, unknown>;
-              const submissionType = String(typedTask.submission_type ?? typedTask.submissionType ?? "text_submission");
+              const submissionType = String(
+                typedTask.submissionType ?? typedTask.submission_type ?? "whatsapp_group",
+              ).replace(/_/g, "-");
+              const normalizedType: TeacherTaskSubmissionType =
+                submissionType === "google-form"
+                  ? "google-form"
+                  : submissionType === "external-link"
+                    ? "external-link"
+                    : "whatsapp-group";
               return {
                 id: String(typedTask.id ?? ""),
                 title: String(typedTask.title ?? ""),
                 instructions: String(typedTask.instructions ?? ""),
-                submissionType:
-                  submissionType === "file_upload" ? "file-upload" : "text-submission",
-                resourceLinks: Array.isArray(typedTask.resource_links)
-                  ? typedTask.resource_links.map((link: unknown) => String(link))
-                  : Array.isArray(typedTask.resourceLinks)
-                    ? typedTask.resourceLinks.map((link: unknown) => String(link))
-                  : [],
+                submissionType: normalizedType,
+                submissionUrl: String(typedTask.submissionUrl ?? typedTask.submission_url ?? ""),
+                howToSubmit: String(typedTask.howToSubmit ?? typedTask.how_to_submit ?? ""),
+                dueDate: (typedTask.dueDate ?? typedTask.due_date ?? null) as string | null,
+              };
+            })
+          : [],
+        projects: Array.isArray(typedSection.projects)
+          ? typedSection.projects.map((project) => {
+              const typed = project as Record<string, unknown>;
+              return {
+                id: String(typed.id ?? ""),
+                title: String(typed.title ?? ""),
+                description: String(typed.description ?? ""),
+                requirements: String(typed.requirements ?? ""),
+                deliverables: String(typed.deliverables ?? ""),
+                submissionUrl: String(typed.submissionUrl ?? typed.submission_url ?? ""),
+                howToSubmit: String(typed.howToSubmit ?? typed.how_to_submit ?? ""),
               };
             })
           : [],
@@ -384,6 +384,7 @@ export function useTeacherPlatform(
   const [categories, setCategories] = useState<TeacherCategory[]>([]);
   const [teacherCourses, setTeacherCourses] = useState<TeacherCourse[]>([]);
   const [activities, setActivities] = useState<TeacherActivity[]>([]);
+  const [announcementsEnabled, setAnnouncementsEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -429,6 +430,7 @@ export function useTeacherPlatform(
     const failures: string[] = [];
 
     if (dashboardResult.status === "fulfilled") {
+      setAnnouncementsEnabled(Boolean(dashboardResult.value.announcementsEnabled));
       setProfile({
         displayName: isAdminOwnedMode ? "Admin workspace" : dashboardResult.value.teacher.displayName,
         email: user?.email ?? dashboardResult.value.teacher.email,
@@ -530,7 +532,14 @@ export function useTeacherPlatform(
       roadmapLink: "",
       overview: "",
       schemeOfWork: "",
+      level: "beginner",
       price: 0,
+      discountPrice: null,
+      metaTitle: "",
+      metaDescription: "",
+      techStack: [],
+      certificateEnabled: false,
+      pendingDeletion: false,
       status: "draft",
       visibility: "hidden",
       sections: [
@@ -547,10 +556,12 @@ export function useTeacherPlatform(
               contentType: "video",
               videoUrl: "",
               textContent: "",
+              resourceLinks: [],
               tags: [],
             },
           ],
           tasks: [],
+          projects: [],
         },
       ],
       analytics: {
@@ -610,8 +621,21 @@ export function useTeacherPlatform(
         if (lesson.contentType === "text" && !stripHtml(lesson.textContent)) {
           issues.push(`Text lesson ${lessonIndex + 1} in section ${sectionIndex + 1} needs content.`);
         }
+        if (lesson.contentType === "resource" && !lesson.resourceLinks.some((link) => link.url.trim())) {
+          issues.push(`Resource lesson ${lessonIndex + 1} in section ${sectionIndex + 1} needs at least one link.`);
+        }
+      });
+
+      section.tasks.forEach((task, taskIndex) => {
+        if (task.title.trim() && !task.submissionUrl.trim()) {
+          issues.push(`Assignment ${taskIndex + 1} in section ${sectionIndex + 1} needs a submission link.`);
+        }
       });
     });
+
+    if (normalizedCourse.price > 0 && normalizedCourse.discountPrice !== null && normalizedCourse.discountPrice >= normalizedCourse.price) {
+      issues.push("Discount price must be lower than the regular price.");
+    }
 
     return issues;
   }, [syncCourseClassification]);
@@ -650,6 +674,8 @@ export function useTeacherPlatform(
             lessonDetail: (id: string) => `/api/admin/lessons/${id}/`,
             createTask: (id: string) => `/api/admin/sections/${id}/tasks/`,
             taskDetail: (id: string) => `/api/admin/tasks/${id}/`,
+            createProject: (id: string) => `/api/admin/sections/${id}/projects/`,
+            projectDetail: (id: string) => `/api/admin/projects/${id}/`,
           }
         : {
             courseCollection: "/api/teacher/courses/",
@@ -661,6 +687,8 @@ export function useTeacherPlatform(
             lessonDetail: (id: string) => `/api/teacher/lessons/${id}/`,
             createTask: (id: string) => `/api/teacher/sections/${id}/tasks/`,
             taskDetail: (id: string) => `/api/teacher/tasks/${id}/`,
+            createProject: (id: string) => `/api/teacher/sections/${id}/projects/`,
+            projectDetail: (id: string) => `/api/teacher/projects/${id}/`,
           },
     [isAdminOwnedMode],
   );
@@ -697,17 +725,21 @@ export function useTeacherPlatform(
       const previousSection = previousSections.find((item) => item.id === section.id);
       const previousLessons = previousSection?.lessons ?? [];
       const previousTasks = previousSection?.tasks ?? [];
+      const previousProjects = previousSection?.projects ?? [];
       const previousLessonIds = new Set(previousLessons.map((lesson) => lesson.id));
       const previousTaskIds = new Set(previousTasks.map((task) => task.id));
+      const previousProjectIds = new Set(previousProjects.map((project) => project.id));
       const nextLessonIds = new Set<string>();
       const nextTaskIds = new Set<string>();
+      const nextProjectIds = new Set<string>();
 
       for (const [lessonIndex, lesson] of section.lessons.entries()) {
         const lessonPayload = {
           title: lesson.title,
           content_type: lesson.contentType,
-          video_url: lesson.videoUrl,
-          text_content: lesson.textContent,
+          video_url: lesson.contentType === "video" ? lesson.videoUrl : "",
+          text_content: lesson.contentType === "text" ? lesson.textContent : "",
+          resourceLinks: lesson.contentType === "resource" ? lesson.resourceLinks : [],
           tags: lesson.tags,
           duration_minutes: 0,
           order: lessonIndex + 1,
@@ -741,8 +773,10 @@ export function useTeacherPlatform(
         const taskPayload = {
           title: task.title,
           instructions: task.instructions,
-          submission_type: task.submissionType,
-          resource_links: task.resourceLinks,
+          submissionType: task.submissionType,
+          submissionUrl: task.submissionUrl,
+          howToSubmit: task.howToSubmit,
+          dueDate: task.dueDate || null,
           order: taskIndex + 1,
           is_required: false,
         };
@@ -766,6 +800,41 @@ export function useTeacherPlatform(
       for (const previousTask of previousTasks) {
         if (!nextTaskIds.has(previousTask.id)) {
           await authenticatedRequest(endpoints.taskDetail(previousTask.id), { method: "DELETE" });
+        }
+      }
+
+      // Projects (only when the endpoint set supports them).
+      if (endpoints.createProject && endpoints.projectDetail) {
+        for (const [projectIndex, project] of section.projects.entries()) {
+          const projectPayload = {
+            title: project.title,
+            description: project.description,
+            requirements: project.requirements,
+            deliverables: project.deliverables,
+            submissionUrl: project.submissionUrl,
+            howToSubmit: project.howToSubmit,
+            order: projectIndex + 1,
+            is_required: false,
+          };
+
+          if (!previousProjectIds.has(project.id)) {
+            await authenticatedRequest(endpoints.createProject(savedSectionId), {
+              method: "POST",
+              body: JSON.stringify(projectPayload),
+            });
+          } else {
+            await authenticatedRequest(endpoints.projectDetail(project.id), {
+              method: "PATCH",
+              body: JSON.stringify(projectPayload),
+            });
+            nextProjectIds.add(project.id);
+          }
+        }
+
+        for (const previousProject of previousProjects) {
+          if (!nextProjectIds.has(previousProject.id)) {
+            await authenticatedRequest(endpoints.projectDetail(previousProject.id), { method: "DELETE" });
+          }
         }
       }
     }
@@ -801,7 +870,7 @@ export function useTeacherPlatform(
         price: nextCourse.price,
         status:
           intent === "publish"
-            ? "draft"
+            ? "review"
             : intent === "unpublish" || intent === "restore"
               ? "draft"
               : intent === "archive"
@@ -811,36 +880,46 @@ export function useTeacherPlatform(
         tags: nextCourse.tags,
       };
 
-      let saved = previousCourse
-        ? await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(nextCourse.id), {
-            method: "PATCH",
-            body: JSON.stringify(payload),
-          })
-        : await authenticatedRequest<Record<string, unknown>>(endpoints.courseCollection, {
+      let saved: Record<string, unknown>;
+      try {
+        saved = previousCourse
+          ? await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(nextCourse.id), {
+              method: "PATCH",
+              body: JSON.stringify(payload),
+            })
+          : await authenticatedRequest<Record<string, unknown>>(endpoints.courseCollection, {
+              method: "POST",
+              body: JSON.stringify(payload),
+            });
+
+        await syncSections(String(saved.id), nextCourse, previousCourse);
+
+        if (intent === "publish") {
+          saved = await authenticatedRequest<Record<string, unknown>>(endpoints.publishCourse(String(saved.id)), {
             method: "POST",
-            body: JSON.stringify(payload),
           });
-
-      await syncSections(String(saved.id), nextCourse, previousCourse);
-
-      if (intent === "publish") {
-        saved = await authenticatedRequest<Record<string, unknown>>(endpoints.publishCourse(String(saved.id)), {
-          method: "POST",
-        });
-      } else if (intent === "archive") {
-        saved = await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(String(saved.id)), {
-          method: "PATCH",
-          body: JSON.stringify({ status: "archived", visibility: "hidden" }),
-        });
-      } else if (intent === "unpublish") {
-        saved = await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(String(saved.id)), {
-          method: "PATCH",
-          body: JSON.stringify({ status: "draft", visibility: "hidden" }),
-        });
-      } else {
-        saved = await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(String(saved.id)), {
-          method: "GET",
-        });
+        } else if (intent === "archive") {
+          saved = await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(String(saved.id)), {
+            method: "PATCH",
+            body: JSON.stringify({ status: "archived", visibility: "hidden" }),
+          });
+        } else if (intent === "unpublish") {
+          saved = await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(String(saved.id)), {
+            method: "PATCH",
+            body: JSON.stringify({ status: "draft", visibility: "hidden" }),
+          });
+        } else {
+          saved = await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(String(saved.id)), {
+            method: "GET",
+          });
+        }
+      } catch (error) {
+        await load();
+        throw new Error(
+          error instanceof Error
+            ? `Unable to save course changes safely: ${error.message}`
+            : "Unable to save course changes safely.",
+        );
       }
 
       const normalized = normalizeCourse(saved);
@@ -864,7 +943,7 @@ export function useTeacherPlatform(
 
       await recordActivity(
         intent === "publish"
-          ? `Published course ${normalized.title}`
+          ? `Submitted course ${normalized.title} for admin review`
           : intent === "archive"
             ? `Archived course ${normalized.title}`
           : intent === "unpublish"
@@ -878,19 +957,60 @@ export function useTeacherPlatform(
 
       return { ok: true, course: normalized, issues };
     },
-    [endpoints, getCourseById, recordActivity, syncSections, validateCourse],
+    [endpoints, getCourseById, load, recordActivity, syncCourseClassification, syncSections, validateCourse],
   );
 
   const deleteCourse = useCallback(
     async (courseId: string) => {
-      const course = getCourseById(courseId);
+      // Teachers can't delete directly — this sends a request to admin. The
+      // course stays (flagged pendingDeletion) until an admin approves/aborts.
       await authenticatedRequest(endpoints.courseDetail(courseId), { method: "DELETE" });
-      setTeacherCourses((current) => current.filter((item) => item.id !== courseId));
-      if (course) {
-        await recordActivity(`Deleted course ${course.title}`, "delete-course", courseId);
-      }
+      await load();
     },
-    [endpoints, getCourseById, recordActivity],
+    [endpoints, load],
+  );
+
+  const duplicateCourse = useCallback(
+    async (courseId: string) => {
+      const created = await authenticatedRequest<Record<string, unknown>>(
+        `/api/teacher/courses/${courseId}/duplicate/`,
+        { method: "POST" },
+      );
+      const normalized = normalizeCourse(created);
+      setTeacherCourses((current) => [normalized, ...current]);
+      return normalized;
+    },
+    [],
+  );
+
+  const fetchCourseVersions = useCallback(async (courseId: string) => {
+    return authenticatedRequest<TeacherCourseVersion[]>(`/api/teacher/courses/${courseId}/versions/`);
+  }, []);
+
+  const sendAnnouncement = useCallback(
+    async (input: { title: string; description: string; courseId?: string }) => {
+      return authenticatedRequest<{ detail: string; recipients: number }>(
+        "/api/teacher/announcements/",
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    },
+    [],
+  );
+
+  const restoreCourseVersion = useCallback(
+    async (courseId: string, versionId: string) => {
+      const restored = await authenticatedRequest<Record<string, unknown>>(
+        `/api/teacher/courses/${courseId}/versions/${versionId}/restore/`,
+        { method: "POST" },
+      );
+      const normalized = normalizeCourse(restored);
+      setTeacherCourses((current) => {
+        const without = current.filter((item) => item.id !== normalized.id);
+        return [normalized, ...without];
+      });
+      return normalized;
+    },
+    [],
   );
 
   const updateProfile = useCallback(
@@ -950,6 +1070,8 @@ export function useTeacherPlatform(
     categories,
     allowedCategories,
     allowedTracks,
+    announcementsEnabled,
+    sendAnnouncement,
     isLoading,
     error,
     reload: load,
@@ -959,6 +1081,9 @@ export function useTeacherPlatform(
     archiveCourse,
     restoreCourse,
     deleteCourse,
+    duplicateCourse,
+    fetchCourseVersions,
+    restoreCourseVersion,
     validateCourse,
     recordActivity,
     clearTeacherActivities,

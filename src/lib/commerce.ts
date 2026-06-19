@@ -1,4 +1,5 @@
-export type PaymentMethod = "paystack" | "opay";
+// Paystack is the only payment gateway (OPay removed).
+export type PaymentMethod = "paystack";
 
 const nairaFormatter = new Intl.NumberFormat("en-NG", {
   style: "currency",
@@ -16,19 +17,14 @@ export function getCourseActionLabel(price: number, owned: boolean) {
   return "Unlock Course";
 }
 
-export function getPaymentMethodLabel(method: PaymentMethod) {
-  return method === "paystack" ? "Paystack" : "OPay";
+export function getPaymentMethodLabel(_method: PaymentMethod) {
+  return "Paystack";
 }
 
-export function getPaymentMethodDescription(method: PaymentMethod) {
-  if (method === "paystack") {
-    return "Card, bank transfer, and mobile-ready checkout for Nigerian learners.";
-  }
-
-  return "Fast mobile wallet checkout with a familiar OPay payment experience.";
+export function getPaymentMethodDescription(_method: PaymentMethod) {
+  return "Card, bank transfer, and mobile-ready checkout for Nigerian learners.";
 }
 
-export function buildPaymentReference(method: PaymentMethod) {
-  const prefix = method === "paystack" ? "PSTK" : "OPAY";
-  return `${prefix}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+export function buildPaymentReference(_method: PaymentMethod) {
+  return `PSTK-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 }

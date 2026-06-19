@@ -17,6 +17,8 @@ import {
   type UserRole,
 } from "./mock-data";
 
+export type AdminRole = "super-admin" | "admin" | "moderator";
+
 export interface AuthUser {
   id: string;
   username: string;
@@ -26,6 +28,10 @@ export interface AuthUser {
   avatarUrl?: string;
   plan: UserPlan;
   role: UserRole;
+  /** Admin tier from the backend; only set when role === "admin". */
+  adminRole?: AdminRole | null;
+  /** Effective admin permissions granted by the backend (source of truth). */
+  permissions?: string[];
   interests: Interest[];
   wishlist: string[];
   selectedInterest: Interest;
@@ -34,6 +40,13 @@ export interface AuthUser {
   purchasedCourseIds: string[];
   status?: "active" | "disabled";
   mustChangePassword?: boolean;
+  twoFactorEnabled?: boolean;
+}
+
+/** Returned by login() when the account requires an emailed 2FA code. */
+export interface TwoFactorChallenge {
+  twoFactorRequired: true;
+  userId: string;
 }
 
 interface RegisterPayload {
@@ -68,7 +81,9 @@ interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<AuthUser>;
+  login: (email: string, password: string) => Promise<AuthUser | TwoFactorChallenge>;
+  verifyTwoFactor: (userId: string, code: string) => Promise<AuthUser>;
+  toggleTwoFactor: (enabled: boolean) => Promise<boolean>;
   register: (payload: RegisterPayload) => Promise<AuthUser>;
   requestPasswordReset: (email: string) => Promise<PasswordResetRequestResult>;
   resetPassword: (token: string, nextPassword: string) => Promise<PasswordResetConfirmResult>;
@@ -103,6 +118,21 @@ export function getHomeRouteForRole(role: UserRole = "student") {
 
 export function getHomeRouteForUser(user?: Pick<AuthUser, "role"> | null) {
   return getHomeRouteForRole(user?.role ?? "student");
+}
+
+/** Human label for a user's effective role (admins resolve to their tier). */
+export function getRoleLabel(user?: Pick<AuthUser, "role" | "adminRole"> | null) {
+  if (user?.role === "admin") {
+    if (user.adminRole === "super-admin") return "Super Admin";
+    if (user.adminRole === "moderator") return "Moderator";
+    return "Admin";
+  }
+  if (user?.role === "teacher") return "Teacher";
+  return "Student";
+}
+
+export function getWorkspaceLabel(user?: Pick<AuthUser, "role" | "adminRole"> | null) {
+  return `${getRoleLabel(user)} workspace`;
 }
 
 function buildApiUrl(endpoint: string) {
@@ -146,6 +176,15 @@ function getAvatar(displayName: string, avatar?: string) {
     .toUpperCase();
 }
 
+function normalizeAdminRole(value: unknown): AdminRole | null {
+  if (typeof value !== "string" || !value) return null;
+  // Backend uses snake_case codes (super_admin); the UI uses kebab-case.
+  const normalized = value.replace(/_/g, "-");
+  return normalized === "super-admin" || normalized === "admin" || normalized === "moderator"
+    ? normalized
+    : null;
+}
+
 function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
   if (!raw?.id || !raw.email) return null;
 
@@ -167,6 +206,8 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
     avatarUrl: raw.avatarUrl,
     plan: (raw.plan ?? "free") as UserPlan,
     role: (raw.role ?? "student") as UserRole,
+    adminRole: normalizeAdminRole(raw.adminRole),
+    permissions: Array.isArray(raw.permissions) ? raw.permissions : [],
     interests:
       Array.isArray(raw.interests) && raw.interests.length
         ? (raw.interests as Interest[])
@@ -178,6 +219,7 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
     purchasedCourseIds: Array.isArray(raw.purchasedCourseIds) ? raw.purchasedCourseIds : [],
     status: (raw.status ?? "active") as "active" | "disabled",
     mustChangePassword: Boolean(raw.mustChangePassword),
+    twoFactorEnabled: Boolean(raw.twoFactorEnabled),
   };
 }
 
@@ -342,6 +384,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
       const payload = await parseJsonSafely(response);
+      if (response.ok && payload?.twoFactorRequired && payload?.userId) {
+        return { twoFactorRequired: true as const, userId: payload.userId as string };
+      }
       if (!response.ok || !payload?.user || !payload?.access || !payload?.refresh) {
         throw new Error(extractErrorMessage(payload, "Unable to sign in."));
       }
@@ -354,6 +399,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return nextUser;
     },
     [persistTokens, persistUser],
+  );
+
+  const verifyTwoFactor = useCallback(
+    async (userId: string, code: string) => {
+      const response = await fetch(buildApiUrl("/api/auth/login/verify-2fa/"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, code }),
+      });
+      const payload = await parseJsonSafely(response);
+      if (!response.ok || !payload?.user || !payload?.access || !payload?.refresh) {
+        throw new Error(extractErrorMessage(payload, "That code was not accepted."));
+      }
+      persistTokens(payload.access as string, payload.refresh as string);
+      const nextUser = persistUser(payload.user);
+      if (!nextUser) {
+        throw new Error("Unable to load your account.");
+      }
+      return nextUser;
+    },
+    [persistTokens, persistUser],
+  );
+
+  const toggleTwoFactor = useCallback(
+    async (enabled: boolean) => {
+      const updated = (await authenticatedRequest("/api/auth/two-factor/", {
+        method: "POST",
+        body: JSON.stringify({ enabled }),
+      })) as { twoFactorEnabled: boolean };
+      setUser((current) => (current ? { ...current, twoFactorEnabled: updated.twoFactorEnabled } : current));
+      return updated.twoFactorEnabled;
+    },
+    [authenticatedRequest],
   );
 
   const register = useCallback(
@@ -515,6 +593,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!user,
       isLoading,
       login,
+      verifyTwoFactor,
+      toggleTwoFactor,
       register,
       requestPasswordReset,
       resetPassword,
@@ -526,6 +606,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       isLoading,
       login,
+      verifyTwoFactor,
+      toggleTwoFactor,
       logout,
       refreshCurrentUser,
       register,

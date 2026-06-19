@@ -11,13 +11,12 @@ import { getHomeRouteForUser, useAuth } from "@/lib/auth";
 import { publicEnv } from "@/lib/public-env";
 import { cn } from "@/lib/utils";
 
-const links = [
-  { href: "/courses", label: "Courses" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/quiz-shop", label: "Quiz Shop" },
-  { href: "/faq", label: "FAQ" },
-  { href: "/contact", label: "Contact" },
-];
+type NavLink = {
+  href: string;
+  label: string;
+};
+
+const links: NavLink[] = [];
 
 export function PublicShell({
   children,
@@ -33,31 +32,34 @@ export function PublicShell({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/75 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/70">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <BrandLogo href="/" />
 
-          <nav className="hidden items-center gap-1 lg:flex">
-            {links.map((link) => {
-              const active = pathname === link.href;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "rounded-full px-4 py-2 text-sm font-medium transition",
-                    active
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  {link.label}
-                </Link>
-              );
-            })}
-          </nav>
+          {links.length > 0 && (
+            <nav className="hidden items-center gap-1 lg:flex">
+              {links.map((link) => {
+                const active = pathname === link.href;
 
-          <div className="hidden items-center gap-3 lg:flex">
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={cn(
+                      "rounded-full px-4 py-2 text-sm font-medium transition",
+                      active
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
+
+          <div className="hidden items-center gap-4 lg:flex">
             <ThemeToggle />
             {isAuthenticated ? (
               <Link href={dashboardHref}>
@@ -132,37 +134,6 @@ export function PublicShell({
       </header>
 
       {children}
-
-      {footer ?? (
-        <footer className="border-t border-border/60 bg-card/40">
-          <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-10 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-            <div>
-              <div className="font-display text-lg font-bold">MooreSkillUp</div>
-              <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                Premium learning experiences for builders, designers, and modern product teams.
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Produced by{" "}
-                <a
-                  href={publicEnv.moretechUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-semibold text-primary hover:text-accent"
-                >
-                  MooreTech
-                </a>
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-              {links.map((link) => (
-                <Link key={link.href} href={link.href} className="hover:text-foreground">
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-          </div>
-        </footer>
-      )}
     </div>
   );
 }

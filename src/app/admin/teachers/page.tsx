@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Copy, ShieldCheck, UserPlus } from "lucide-react";
+import { Mail, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
-import { useAdminPlatform } from "@/lib/admin-platform";
+import { PasswordInput } from "@/components/ui-kit/PasswordInput";
+import { useFeedback } from "@/lib/feedback";
+import { useAdminPlatform, type AdminTeacher } from "@/lib/admin-platform";
 import { type Interest, type TrackName } from "@/lib/mock-data";
-import { publicEnv } from "@/lib/public-env";
 import { usePlatformTaxonomy } from "@/lib/taxonomy";
 
 export default function AdminTeachersPage() {
-  const { createTeacher, teachers, isLoading, error } = useAdminPlatform();
+  const { notifyError, notifySuccess } = useFeedback();
+  const { createTeacher, updateTeacher, deleteTeacher, resendTeacherInvite, teachers, isLoading, error } =
+    useAdminPlatform();
   const { interests, trackOptionsByInterest, isLoading: isLoadingTaxonomy, error: taxonomyError } =
     usePlatformTaxonomy();
   const [form, setForm] = useState({
@@ -22,13 +25,13 @@ export default function AdminTeachersPage() {
   });
   const [selectedInterest, setSelectedInterest] = useState<Interest>("Web Development");
   const [selectedTracks, setSelectedTracks] = useState<TrackName[]>(["React and Modern UI"]);
-  const [submitError, setSubmitError] = useState("");
-  const [createdTeacher, setCreatedTeacher] = useState<{
-    email: string;
-    displayName: string;
-    temporaryPassword: string | null;
-  } | null>(null);
-  const [copyStatus, setCopyStatus] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [busyTeacherId, setBusyTeacherId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminTeacher | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const trackOptions = useMemo(
     () => trackOptionsByInterest[selectedInterest] ?? [],
@@ -61,52 +64,43 @@ export default function AdminTeachersPage() {
   }, [interests, selectedInterest, trackOptions, trackOptionsByInterest]);
 
   const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
-  const teacherLoginUrl = `${publicEnv.appUrl.replace(/\/$/, "")}/login`;
+
+  const filteredTeachers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return teachers.filter((teacher) => {
+      if (statusFilter !== "all" && teacher.status !== statusFilter) return false;
+      if (!query) return true;
+      return (
+        teacher.displayName.toLowerCase().includes(query) ||
+        teacher.email.toLowerCase().includes(query) ||
+        (teacher.academicTracks ?? []).some((track) => track.toLowerCase().includes(query)) ||
+        (teacher.academicProgram ?? "").toLowerCase().includes(query)
+      );
+    });
+  }, [teachers, search, statusFilter]);
 
   const resetForm = () => {
-    setForm({
-      displayName: "",
-      email: "",
-      password: "",
-      confirmPassword: "",
-    });
-  };
-
-  const copyCredentials = async () => {
-    if (!createdTeacher) return;
-
-    const lines = [
-      `Teacher Name: ${createdTeacher.displayName}`,
-      `Teacher Email: ${createdTeacher.email}`,
-      createdTeacher.temporaryPassword ? `Temporary Password: ${createdTeacher.temporaryPassword}` : null,
-      `Login URL: ${teacherLoginUrl}`,
-      "Next Step: Teacher should log in and change the password immediately.",
-    ].filter(Boolean);
-
-    try {
-      await navigator.clipboard.writeText(lines.join("\n"));
-      setCopyStatus("Teacher credentials copied.");
-    } catch {
-      setCopyStatus("Unable to copy automatically. Please copy the credentials manually.");
-    }
+    setForm({ displayName: "", email: "", password: "", confirmPassword: "" });
   };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setSubmitError("");
-    setCopyStatus("");
 
     if (!interests.length || !trackOptions.length || !selectedTracks.length) {
-      setSubmitError("Create at least one category and subcategory first so teacher specialization can be assigned.");
+      notifyError(
+        "Teacher setup unavailable",
+        "Create at least one category and subcategory first so teacher specialization can be assigned.",
+      );
       return;
     }
 
     if (form.password && form.password !== form.confirmPassword) {
-      setSubmitError("The password and confirm password fields must match.");
+      notifyError("Password mismatch", "The password and confirm password fields must match.");
       return;
     }
 
     try {
+      setSubmitting(true);
       const teacher = await createTeacher({
         displayName: form.displayName.trim(),
         email: form.email.trim(),
@@ -115,15 +109,78 @@ export default function AdminTeachersPage() {
         tracks: selectedTracks,
         password: form.password.trim() || undefined,
       });
-
-      setCreatedTeacher({
-        email: teacher.email,
-        displayName: teacher.displayName,
-        temporaryPassword: teacher.temporaryPassword ?? null,
-      });
       resetForm();
+      notifySuccess(
+        "Teacher account created",
+        `Sign-in details were emailed to ${teacher.email}.`,
+      );
     } catch (actionError) {
-      setSubmitError(actionError instanceof Error ? actionError.message : "Unable to create teacher account.");
+      notifyError(
+        "Unable to create teacher account",
+        actionError instanceof Error ? actionError.message : "Unable to create teacher account.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resend = async (teacher: AdminTeacher) => {
+    try {
+      setBusyTeacherId(teacher.id);
+      const result = await resendTeacherInvite(teacher.id);
+      notifySuccess("Invite resent", result.detail);
+    } catch (actionError) {
+      notifyError(
+        "Unable to resend invite",
+        actionError instanceof Error ? actionError.message : "Request failed.",
+      );
+    } finally {
+      setBusyTeacherId(null);
+    }
+  };
+
+  const toggleStatus = async (teacher: AdminTeacher) => {
+    const nextStatus = teacher.status === "active" ? "inactive" : "active";
+    try {
+      setBusyTeacherId(teacher.id);
+      await updateTeacher(teacher.id, { status: nextStatus });
+      notifySuccess(
+        nextStatus === "inactive"
+          ? `${teacher.displayName} deactivated`
+          : `${teacher.displayName} reactivated`,
+        nextStatus === "inactive"
+          ? "Their courses are unassigned but kept on the platform."
+          : undefined,
+      );
+    } catch (actionError) {
+      notifyError(
+        "Unable to update teacher",
+        actionError instanceof Error ? actionError.message : "Request failed.",
+      );
+    } finally {
+      setBusyTeacherId(null);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    if (deleteConfirm.trim() !== deleteTarget.displayName) {
+      notifyError("Name does not match", "Type the teacher's exact name to confirm removal.");
+      return;
+    }
+    try {
+      setDeleting(true);
+      await deleteTeacher(deleteTarget.id);
+      notifySuccess(`${deleteTarget.displayName} removed`);
+      setDeleteTarget(null);
+      setDeleteConfirm("");
+    } catch (actionError) {
+      notifyError(
+        "Unable to remove teacher",
+        actionError instanceof Error ? actionError.message : "Request failed.",
+      );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -135,12 +192,13 @@ export default function AdminTeachersPage() {
             <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
               Teacher onboarding
             </div>
-            <h1 className="mt-2 font-display text-4xl font-bold">Create teacher accounts inside admin</h1>
+            <h1 className="mt-2 font-display text-4xl font-bold">Create &amp; manage teachers</h1>
             <p className="mt-2 max-w-3xl text-muted-foreground">
-              Admin creates the teacher, assigns the teacher&apos;s category and track, then copies the temporary credentials for first login.
+              Admin creates the teacher and assigns their category and track. Sign-in details are emailed
+              to the teacher automatically — no manual handoff needed.
             </p>
-            {(error || taxonomyError || submitError) && (
-              <p className="mt-3 text-sm text-destructive">{submitError || taxonomyError || error}</p>
+            {(error || taxonomyError) && (
+              <p className="mt-3 text-sm text-destructive">{taxonomyError || error}</p>
             )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -162,7 +220,8 @@ export default function AdminTeachersPage() {
               <h2 className="font-display text-2xl font-bold">New teacher form</h2>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              The selected category and track here feed the same live taxonomy students see during registration and the same structure teachers use when uploading courses.
+              The selected category and track here feed the same live taxonomy students see during
+              registration and the same structure teachers use when uploading courses.
             </p>
 
             <form onSubmit={onSubmit} className="mt-6 space-y-4">
@@ -185,16 +244,16 @@ export default function AdminTeachersPage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <Input
+                <PasswordInput
                   label="Temporary password"
-                  type="password"
+                  autoComplete="new-password"
                   value={form.password}
                   onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
                   placeholder="Leave blank to auto-generate"
                 />
-                <Input
+                <PasswordInput
                   label="Confirm password"
-                  type="password"
+                  autoComplete="new-password"
                   value={form.confirmPassword}
                   onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))}
                   placeholder="Only if you set one"
@@ -284,73 +343,161 @@ export default function AdminTeachersPage() {
                   isLoading || isLoadingTaxonomy || !form.displayName.trim() || !form.email.trim() || !interests.length || !trackOptions.length
                   || !selectedTracks.length
                 }
+                loading={submitting}
+                loadingText="Creating teacher..."
               >
                 <ShieldCheck className="h-4 w-4" />
-                {isLoading ? "Creating teacher..." : "Create teacher account"}
+                Create teacher account
               </Button>
             </form>
           </section>
 
-          <section className="space-y-5">
-            <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-              <h2 className="font-display text-2xl font-bold">Credential handoff</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                After creation, copy the teacher email and temporary password, send it to the teacher, and have the teacher log in from the normal login page.
-              </p>
+          <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+            <h2 className="font-display text-2xl font-bold">Manage teachers</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Search, resend sign-in details, deactivate, or remove a teacher. Removing a teacher requires
+              typing their name to confirm.
+            </p>
 
-              {createdTeacher ? (
-                <div className="mt-5 space-y-4 rounded-3xl border border-border bg-background p-5">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Teacher name</div>
-                    <div className="mt-1 font-medium">{createdTeacher.displayName}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Teacher email</div>
-                    <div className="mt-1 font-medium">{createdTeacher.email}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Temporary password</div>
-                    <div className="mt-1 font-medium">
-                      {createdTeacher.temporaryPassword ?? "A custom password was set during creation."}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Teacher login</div>
-                    <div className="mt-1 font-medium">{teacherLoginUrl}</div>
-                  </div>
-                  <Button variant="outline" onClick={() => void copyCredentials()}>
-                    <Copy className="h-4 w-4" />
-                    Copy teacher credentials
-                  </Button>
-                  {copyStatus && <p className="text-sm text-success">{copyStatus}</p>}
-                </div>
-              ) : (
-                <div className="mt-5 rounded-3xl border border-dashed border-border bg-background p-5 text-sm text-muted-foreground">
-                  No teacher has been created in this session yet.
-                </div>
-              )}
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search name, email, or track"
+                  className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm"
+                />
+              </div>
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+                className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">All statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
             </div>
 
-            <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-              <h2 className="font-display text-2xl font-bold">First login flow</h2>
-              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Admin creates the teacher account from this page.
+            <div className="mt-5 space-y-3">
+              {isLoading && (
+                <div className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                  Loading teachers...
                 </div>
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Admin copies the credentials and sends them to the teacher.
+              )}
+              {!isLoading && !filteredTeachers.length && (
+                <div className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                  {teachers.length ? "No teachers match your filters." : "No teachers created yet."}
                 </div>
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Teacher logs in through the normal login page and can immediately access the teacher dashboard.
-                </div>
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Password reset remains available from the shared forgot-password flow whenever the teacher needs it.
-                </div>
-              </div>
+              )}
+              {filteredTeachers.map((teacher) => {
+                const busy = busyTeacherId === teacher.id;
+                const tracks = teacher.academicTracks?.length ? teacher.academicTracks : teacher.tracks;
+                return (
+                  <div key={teacher.id} className="rounded-3xl border border-border bg-background p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-display text-lg font-bold">{teacher.displayName}</div>
+                        <div className="text-sm text-muted-foreground">{teacher.email}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {teacher.academicProgram || teacher.program}
+                          {tracks?.length ? ` · ${tracks.join(", ")}` : ""}
+                        </div>
+                      </div>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          teacher.status === "active"
+                            ? "bg-success/10 text-success"
+                            : "bg-destructive/10 text-destructive"
+                        }`}
+                      >
+                        {teacher.status === "active" ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void resend(teacher)}
+                      >
+                        <Mail className="h-4 w-4" /> Resend invite
+                      </Button>
+                      <Button
+                        variant={teacher.status === "active" ? "outline" : "accent"}
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void toggleStatus(teacher)}
+                      >
+                        {teacher.status === "active" ? "Deactivate" : "Reactivate"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                        onClick={() => {
+                          setDeleteTarget(teacher);
+                          setDeleteConfirm("");
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" /> Remove
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
         </div>
       </div>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-xl">
+            <div className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              <h3 className="font-display text-xl font-bold">Remove {deleteTarget.displayName}?</h3>
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              This removes the teacher&apos;s access to MooreSkillUp. Their courses stay on the platform.
+              To confirm, type their full name{" "}
+              <span className="font-semibold text-foreground">{deleteTarget.displayName}</span> below.
+            </p>
+            <Input
+              className="mt-4"
+              value={deleteConfirm}
+              onChange={(event) => setDeleteConfirm(event.target.value)}
+              placeholder={deleteTarget.displayName}
+              autoFocus
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteConfirm("");
+                }}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="accent"
+                className="bg-destructive text-white hover:bg-destructive/90"
+                disabled={deleteConfirm.trim() !== deleteTarget.displayName}
+                loading={deleting}
+                loadingText="Removing..."
+                onClick={() => void confirmDelete()}
+              >
+                Remove teacher
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

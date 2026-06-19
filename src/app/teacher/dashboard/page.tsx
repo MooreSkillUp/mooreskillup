@@ -15,10 +15,13 @@ import {
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
+import { PasswordInput } from "@/components/ui-kit/PasswordInput";
 import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/lib/feedback";
 import { useTeacherPlatform } from "@/lib/teacher-platform";
 
 export default function TeacherDashboardPage() {
+  const { notifyError, notifySuccess } = useFeedback();
   const { user } = useAuth();
   const { profile, stats, activities, teacherCourses, clearTeacherActivities, isLoading, error, changePassword } =
     useTeacherPlatform();
@@ -29,6 +32,7 @@ export default function TeacherDashboardPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [promptMessage, setPromptMessage] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   useEffect(() => {
     if (!user?.mustChangePassword) return;
@@ -40,17 +44,29 @@ export default function TeacherDashboardPage() {
   const submitFirstLoginPassword = async () => {
     if (!newPassword.trim()) {
       setPromptMessage("Enter a new password to continue.");
+      notifyError("Password required", "Enter a new password to continue.");
       return;
     }
     if (newPassword !== confirmPassword) {
       setPromptMessage("New password and confirm password must match.");
+      notifyError("Password mismatch", "New password and confirm password must match.");
       return;
     }
-    await changePassword("", newPassword);
-    setPromptMessage("Password updated successfully.");
-    setPasswordPromptOpen(false);
-    setNewPassword("");
-    setConfirmPassword("");
+    setPasswordSaving(true);
+    try {
+      await changePassword("", newPassword);
+      setPromptMessage("Password updated successfully.");
+      setPasswordPromptOpen(false);
+      setNewPassword("");
+      setConfirmPassword("");
+      notifySuccess("Password updated successfully");
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "Unable to update password.";
+      setPromptMessage(message);
+      notifyError("Unable to update password", message);
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   const skipPasswordPrompt = () => {
@@ -74,21 +90,21 @@ export default function TeacherDashboardPage() {
                 You can replace the temporary password now, or skip and continue using it until you use the forgot-password flow.
               </p>
               <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <Input
+                <PasswordInput
                   label="New password"
-                  type="password"
+                  autoComplete="new-password"
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                 />
-                <Input
+                <PasswordInput
                   label="Confirm password"
-                  type="password"
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                 />
               </div>
               <div className="mt-4 flex flex-wrap gap-3">
-                <Button variant="accent" onClick={submitFirstLoginPassword}>
+                <Button variant="accent" onClick={submitFirstLoginPassword} loading={passwordSaving} loadingText="Saving password...">
                   Save new password
                 </Button>
                 <Button variant="outline" onClick={skipPasswordPrompt}>

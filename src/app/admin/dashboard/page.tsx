@@ -3,55 +3,99 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
-  BellRing,
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
   CreditCard,
+  FolderCheck,
   FolderKanban,
+  LifeBuoy,
   Shield,
+  Trash2,
   UserPlus,
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui-kit/Button";
 import { useAdminPlatform } from "@/lib/admin-platform";
 
-type BroadcastAudience = "students" | "teachers";
+type RangeKey = "7" | "30" | "90" | "all";
+
+const RANGE_OPTIONS: { value: RangeKey; label: string }[] = [
+  { value: "7", label: "Last 7 days" },
+  { value: "30", label: "Last 30 days" },
+  { value: "90", label: "Last 90 days" },
+  { value: "all", label: "All time" },
+];
 
 export default function AdminDashboardPage() {
-  const { teachers, courses, broadcasts, createBroadcast, clearBroadcastHistory, totals, isLoading, error } =
-    useAdminPlatform();
-  const [audience, setAudience] = useState<BroadcastAudience>("students");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [success, setSuccess] = useState("");
+  const {
+    teachers,
+    courses,
+    supportTickets,
+    totals,
+    activityFeed,
+    systemAlerts,
+    isLoading,
+    error,
+  } = useAdminPlatform();
+  const [range, setRange] = useState<RangeKey>("30");
 
   const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
-  const publishedCourses = courses.filter((course) => course.status === "published").length;
+  const reviewCourses = courses.filter((course) => course.status === "review");
+  const deletionRequests = courses.filter((course) => course.pendingDeletion);
+  const openSupportTickets = supportTickets.filter((ticket) => ticket.status === "open");
+  const failedPayments = systemAlerts.failedPayments ?? 0;
 
-  const topTeachers = useMemo(
-    () =>
-      teachers
-        .map((teacher) => ({
-          ...teacher,
-          courseCount: courses.filter((course) => course.teacherId === teacher.id).length,
-        }))
-        .sort((left, right) => right.courseCount - left.courseCount)
-        .slice(0, 8),
-    [courses, teachers],
-  );
+  const rangedActivity = useMemo(() => {
+    if (range === "all") return activityFeed;
+    const cutoff = Date.now() - Number(range) * 24 * 60 * 60 * 1000;
+    return activityFeed.filter((event) => new Date(event.timestamp).getTime() >= cutoff);
+  }, [activityFeed, range]);
 
-  const sendBroadcast = () => {
-    if (!title.trim() || !description.trim()) return;
-    void createBroadcast({ title: title.trim(), description: description.trim(), audience }).then(() => {
-      setSuccess(
-        audience === "students"
-          ? "Notification sent to all students"
-          : "Notification sent to all teachers",
-      );
-      setTitle("");
-      setDescription("");
-    });
-  };
+  const statCards = [
+    { icon: Users, label: "Students", value: `${totals?.students ?? 0}`, href: "/admin/students" },
+    { icon: Shield, label: "Active teachers", value: `${activeTeachers}`, href: "/admin/users" },
+    { icon: FolderKanban, label: "Total courses", value: `${courses.length}`, href: "/admin/courses" },
+    { icon: FolderCheck, label: "Review queue", value: `${reviewCourses.length}`, href: "/admin/reviews" },
+    { icon: CreditCard, label: "Active enrollments", value: `${totals?.activeEnrollments ?? 0}`, href: "/admin/payments" },
+    { icon: CreditCard, label: "Revenue", value: `NGN ${totals?.revenue ?? "0.00"}`, href: "/admin/payments" },
+  ];
+
+  const attention = [
+    {
+      key: "reviews",
+      icon: FolderCheck,
+      label: "Courses awaiting review",
+      count: reviewCourses.length,
+      href: "/admin/reviews",
+      cta: "Open review queue",
+    },
+    {
+      key: "deletions",
+      icon: Trash2,
+      label: "Course deletion requests",
+      count: deletionRequests.length,
+      href: "/admin/courses",
+      cta: "Review requests",
+    },
+    {
+      key: "tickets",
+      icon: LifeBuoy,
+      label: "Open support tickets",
+      count: openSupportTickets.length,
+      href: "/admin/support",
+      cta: "Open support",
+    },
+    {
+      key: "payments",
+      icon: AlertTriangle,
+      label: "Failed payments",
+      count: failedPayments,
+      href: "/admin/payments",
+      cta: "Open payments",
+    },
+  ].filter((item) => item.count > 0);
 
   return (
     <AppShell allowedRoles={["admin"]}>
@@ -63,210 +107,146 @@ export default function AdminDashboardPage() {
             </div>
             <h1 className="mt-2 font-display text-4xl font-bold">Platform control room</h1>
             <p className="mt-2 max-w-3xl text-muted-foreground">
-              Broadcast updates, monitor teacher activity, manage ownership fallback, and keep platform data synchronized from one admin workspace.
+              A quick overview of what needs your attention and shortcuts into every admin area.
             </p>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex flex-wrap gap-3">
             <Link href="/admin/teachers">
               <Button variant="accent">
-                <UserPlus className="h-4 w-4" /> Create teacher account
+                <UserPlus className="h-4 w-4" /> Create teacher
               </Button>
             </Link>
-            <Link href="/admin/users">
-              <Button variant="outline">Manage teachers</Button>
+            <Link href="/admin/broadcast-notifications">
+              <Button variant="outline">Send a broadcast</Button>
             </Link>
           </div>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
-          {[
-            { icon: Users, label: "Students", value: `${totals?.students ?? 0}` },
-            { icon: Shield, label: "Active teachers", value: `${activeTeachers}` },
-            { icon: FolderKanban, label: "Total courses", value: `${courses.length}` },
-            { icon: CreditCard, label: "Transactions", value: `${totals?.transactions ?? totals?.payments ?? 0}` },
-            { icon: CreditCard, label: "Revenue", value: `NGN ${totals?.revenue ?? "0.00"}` },
-          ].map((item) => (
-            <div key={item.label} className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+        {/* Clickable stat cards */}
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-6">
+          {statCards.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              className="group rounded-3xl border border-border bg-card p-6 shadow-sm transition hover:border-primary hover:shadow-md"
+            >
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                 <item.icon className="h-6 w-6" />
               </div>
               <div className="mt-5 font-display text-3xl font-bold">{item.value}</div>
-              <div className="mt-1 text-sm text-muted-foreground">{item.label}</div>
-            </div>
+              <div className="mt-1 text-sm text-muted-foreground group-hover:text-primary">{item.label} →</div>
+            </Link>
           ))}
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-          <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <BellRing className="h-5 w-5 text-accent" />
-              <h2 className="font-display text-2xl font-bold">Broadcast notifications</h2>
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Broadcasts stay synchronized with the same notification system teachers and admins see in the header. Broadcast history auto-expires after 24 hours.
-            </p>
-
-            <div className="mt-5 space-y-4">
-              <input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm text-foreground shadow-sm outline-none"
-                placeholder="Notification title"
-              />
-              <Textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                className="min-h-28 bg-background"
-                placeholder="Notification description"
-              />
-              <div>
-                <div className="text-sm font-medium text-foreground">Target audience</div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(["students", "teachers"] as const).map((option) => {
-                    const active = audience === option;
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => setAudience(option)}
-                        className={`rounded-full border px-4 py-2 text-sm transition ${
-                          active
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background text-muted-foreground"
-                        }`}
-                      >
-                        {option === "students" ? "Students" : "Teachers"}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button variant="accent" onClick={sendBroadcast}>
-                  Send notification
-                </Button>
-                {success && <div className="text-sm font-medium text-success">{success}</div>}
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-                  Notification history
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => void clearBroadcastHistory()}
-                  disabled={!broadcasts.length}
+        {/* Needs attention */}
+        <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-accent" />
+            <h2 className="font-display text-2xl font-bold">Needs attention</h2>
+          </div>
+          <div className="mt-5 space-y-3">
+            {attention.length ? (
+              attention.map((item) => (
+                <div
+                  key={item.key}
+                  className="flex flex-col gap-3 rounded-2xl border border-border bg-background p-4 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  Clear Notification History
-                </Button>
-              </div>
-              <div className="mt-4 space-y-3">
-                {broadcasts.length ? (
-                  broadcasts.map((item) => (
-                    <div key={item.id} className="rounded-2xl border border-border bg-background p-4">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <div className="font-medium">{item.title}</div>
-                          <div className="mt-1 text-sm text-muted-foreground">{item.description}</div>
-                        </div>
-                        <div className="text-sm text-muted-foreground md:text-right">
-                          <div>Audience: {item.audience === "students" ? "Students" : item.audience === "teachers" ? "Teachers" : "All"}</div>
-                          <div>Date sent: {item.sentAt ? new Date(item.sentAt).toLocaleString("en-NG") : "Pending"}</div>
-                          <div className="font-medium text-foreground">Status: {item.status}</div>
-                        </div>
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
+                      <item.icon className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <div className="font-medium">{item.label}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {item.count} item{item.count === 1 ? "" : "s"} waiting
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
-                    {isLoading ? "Loading broadcasts..." : "No broadcasts in the active 24-hour window."}
                   </div>
-                )}
+                  <Link href={item.href}>
+                    <Button variant="outline" size="sm">
+                      {item.cta}
+                    </Button>
+                  </Link>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-center gap-3 rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+                <CheckCircle2 className="h-5 w-5 text-success" />
+                {isLoading ? "Loading platform status..." : "All clear — nothing needs your attention right now."}
               </div>
-            </div>
-          </section>
+            )}
+          </div>
+        </section>
 
-          <section className="space-y-5">
-            <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-              <h2 className="font-display text-2xl font-bold">Teacher continuity</h2>
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-border bg-background p-4">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    Published courses
-                  </div>
-                  <div className="mt-2 font-display text-3xl font-bold">{publishedCourses}</div>
-                </div>
-                <div className="rounded-2xl border border-border bg-background p-4">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    Admin fallback ready
-                  </div>
-                  <div className="mt-2 font-display text-3xl font-bold">Safe</div>
-                </div>
-              </div>
-              <div className="mt-5 space-y-3 text-sm text-muted-foreground">
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Removing a teacher never deletes a course.
-                </div>
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Courses can move to admin ownership immediately or be reassigned to another teacher.
-                </div>
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Ownership changes reflect instantly on teacher dashboards and course management screens.
-                </div>
-              </div>
-            </div>
+        {/* Shortcuts with mini-stats */}
+        <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+          <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
+            Admin shortcuts
+          </div>
+          <h2 className="mt-2 font-display text-2xl font-bold">Jump to where the work is</h2>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { href: "/admin/reviews", label: "Review queue", stat: reviewCourses.length },
+              { href: "/admin/support", label: "Open tickets", stat: openSupportTickets.length },
+              { href: "/admin/courses", label: "Deletion requests", stat: deletionRequests.length },
+              { href: "/admin/users", label: "Active teachers", stat: activeTeachers },
+            ].map((shortcut) => (
+              <Link
+                key={shortcut.href}
+                href={shortcut.href}
+                className="flex items-center justify-between rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium transition hover:border-primary hover:text-primary"
+              >
+                <span>{shortcut.label}</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-primary">{shortcut.stat}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
 
-            <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="font-display text-2xl font-bold">Teacher snapshot</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Current teaching roster and course load.
-                  </p>
-                </div>
-                <Link href="/admin/users" className="text-sm font-semibold text-primary">
-                  Open teacher management
-                </Link>
-              </div>
-              <div className="mt-5 max-h-[28rem] space-y-3 overflow-y-auto pr-1">
-                {topTeachers.map((teacher) => (
-                  <div key={teacher.id} className="rounded-2xl border border-border bg-background p-4">
-                    <div className="font-medium">{teacher.displayName}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {teacher.academicProgram} | {teacher.courseCount} courses
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {teacher.academicTracks.slice(0, 3).map((track) => (
-                        <span
-                          key={`${teacher.id}-${track}`}
-                          className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-muted-foreground"
-                        >
-                          {track}
-                        </span>
-                      ))}
-                      {teacher.academicTracks.length > 3 && (
-                        <span className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-muted-foreground">
-                          +{teacher.academicTracks.length - 3} more
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                      {teacher.status === "active" ? "Active" : "Inactive"}
-                    </div>
-                  </div>
+        {/* Trimmed activity feed with date-range filter */}
+        <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-accent" />
+              <h2 className="font-display text-2xl font-bold">Recent activity</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={range}
+                onChange={(event) => setRange(event.target.value as RangeKey)}
+                className="h-10 rounded-xl border border-border bg-background px-3 text-sm"
+              >
+                {RANGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
                 ))}
-                {!topTeachers.length && (
-                  <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
-                    {isLoading ? "Loading teacher snapshot..." : "No teachers yet."}
-                  </div>
-                )}
-              </div>
+              </select>
+              <Link href="/admin/activity-logs" className="text-sm font-semibold text-primary">
+                View all →
+              </Link>
             </div>
-          </section>
-        </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            {rangedActivity.length ? (
+              rangedActivity.slice(0, 6).map((event) => (
+                <div key={event.id} className="rounded-2xl border border-border bg-background p-4">
+                  <div className="font-medium">{event.title}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">{event.message}</div>
+                  <div className="mt-2 text-xs uppercase tracking-[0.2em] text-primary">
+                    {new Date(event.timestamp).toLocaleString("en-NG")}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+                {isLoading ? "Loading activity feed..." : "No activity in this range."}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </AppShell>
   );

@@ -5,20 +5,36 @@ import { Save } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
+import { useFeedback } from "@/lib/feedback";
 import { useTeacherPlatform } from "@/lib/teacher-platform";
 
 export default function TeacherSettingsPage() {
+  const { notifyError, notifySuccess } = useFeedback();
   const { profile, updateProfile, error } = useTeacherPlatform();
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setDisplayName(profile.displayName);
   }, [profile.displayName]);
 
   const saveSettings = async () => {
-    await updateProfile({ displayName });
-    setMessage("Teacher settings saved");
+    setSaving(true);
+    try {
+      await updateProfile({ displayName });
+      setMessage("Teacher settings saved");
+      setMessageTone("success");
+      notifySuccess("Teacher settings saved");
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "Unable to save settings.";
+      setMessage(message);
+      setMessageTone("error");
+      notifyError("Unable to save settings", message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -65,10 +81,14 @@ export default function TeacherSettingsPage() {
               </div>
             </div>
 
-            <Button variant="accent" onClick={saveSettings}>
+            <Button variant="accent" onClick={saveSettings} loading={saving} loadingText="Saving settings...">
               <Save className="h-4 w-4" /> Save settings
             </Button>
-            {message && <div className="text-sm text-success">{message}</div>}
+            {message && (
+              <div className={`text-sm ${messageTone === "success" ? "text-success" : "text-destructive"}`}>
+                {message}
+              </div>
+            )}
           </div>
         </section>
       </div>

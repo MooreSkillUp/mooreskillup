@@ -8,10 +8,14 @@ import { Shield, UserPlus } from "lucide-react";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
+import { PasswordInput } from "@/components/ui-kit/PasswordInput";
 import { getHomeRouteForUser, useAuth } from "@/lib/auth";
+import { useFeedback } from "@/lib/feedback";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 
 export default function AdminRegisterPage() {
   const { register } = useAuth();
+  const { notifyError, notifySuccess } = useFeedback();
   const router = useRouter();
   const [form, setForm] = useState({
     username: "",
@@ -20,7 +24,6 @@ export default function AdminRegisterPage() {
     confirm: "",
     adminRegistrationToken: "",
   });
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const setField =
@@ -29,9 +32,9 @@ export default function AdminRegisterPage() {
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setError("");
     if (form.password !== form.confirm) {
-      setError("Passwords do not match.");
+      const message = "Passwords do not match.";
+      notifyError("Password mismatch", message);
       return;
     }
     setLoading(true);
@@ -48,9 +51,12 @@ export default function AdminRegisterPage() {
         plan: "premium",
         adminRegistrationToken: form.adminRegistrationToken,
       });
+      notifySuccess("Admin account created", "Redirecting to the admin dashboard.");
       router.push(getHomeRouteForUser(nextUser));
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to create admin account.");
+      const message =
+        submitError instanceof Error ? submitError.message : "Unable to create admin account.";
+      notifyError("Admin registration failed", message);
     } finally {
       setLoading(false);
     }
@@ -61,13 +67,7 @@ export default function AdminRegisterPage() {
       <div className="relative hidden overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(11,100,244,0.25),transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(245,130,32,0.22),transparent_24%)] p-10 text-foreground lg:flex lg:flex-col lg:justify-between">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary-glow to-accent text-primary-foreground">
-              <Shield className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="font-display text-xl font-bold">MooreSkillUp</div>
-              <div className="text-sm text-muted-foreground">Admin onboarding</div>
-            </div>
+          <BrandLogo href="/" />
           </Link>
           <ThemeToggle />
         </div>
@@ -86,7 +86,7 @@ export default function AdminRegisterPage() {
         </div>
 
         <div className="rounded-3xl border border-border bg-card/70 p-5 text-sm text-muted-foreground">
-          Admin accounts land on `/admin/dashboard` and use the real backend auth session.
+          Admin accounts land on admin dashboard.
         </div>
       </div>
 
@@ -98,10 +98,7 @@ export default function AdminRegisterPage() {
         >
           <div className="mb-6 flex items-center justify-between lg:hidden">
             <Link href="/" className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-                <Shield className="h-5 w-5" />
-              </div>
-              <span className="font-display text-lg font-bold">MooreSkillUp</span>
+            <BrandLogo href="/" />
             </Link>
             <ThemeToggle />
           </div>
@@ -114,19 +111,18 @@ export default function AdminRegisterPage() {
           <form onSubmit={onSubmit} className="mt-8 space-y-4">
             <Input label="Username" value={form.username} onChange={setField("username")} required />
             <Input label="Email" type="email" value={form.email} onChange={setField("email")} required />
-            <Input label="Password" type="password" value={form.password} onChange={setField("password")} required />
-            <Input label="Confirm password" type="password" value={form.confirm} onChange={setField("confirm")} required />
-            <Input
+            <PasswordInput label="Password" autoComplete="new-password" value={form.password} onChange={setField("password")} required />
+            <PasswordInput label="Confirm password" autoComplete="new-password" value={form.confirm} onChange={setField("confirm")} required />
+            <PasswordInput
               label="Admin setup token"
-              type="password"
+              autoComplete="one-time-code"
               value={form.adminRegistrationToken}
               onChange={setField("adminRegistrationToken")}
               required
             />
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" variant="accent" size="lg" className="w-full" disabled={loading}>
+            <Button type="submit" variant="accent" size="lg" className="w-full" loading={loading} loadingText="Creating admin...">
               <UserPlus className="h-4 w-4" />
-              {loading ? "Creating admin..." : "Create admin account"}
+              Create admin account
             </Button>
           </form>
         </motion.div>

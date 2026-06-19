@@ -1,84 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const ACCESS_TOKEN_STORAGE_KEY = "mooreskillup.access-token";
-const REFRESH_TOKEN_STORAGE_KEY = "mooreskillup.refresh-token";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { authenticatedRequest, normalizeListPayload } from "@/lib/authenticated-api";
 
 export interface PlatformNotificationItem {
   id: string;
   title: string;
   body: string;
   createdAt: string;
-}
-
-function buildApiUrl(endpoint: string) {
-  return `${API_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
-}
-
-async function parseJsonSafely(response: Response) {
-  const text = await response.text();
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-async function refreshAccessToken() {
-  if (typeof window === "undefined") {
-    throw new Error("Session refresh is unavailable.");
-  }
-  const refreshToken = localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY);
-  if (!refreshToken) {
-    throw new Error("Your session has expired. Please log in again.");
-  }
-  const response = await fetch(buildApiUrl("/api/auth/refresh/"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh: refreshToken }),
-  });
-  const payload = await parseJsonSafely(response);
-  if (!response.ok || !payload || typeof payload.access !== "string") {
-    localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
-    throw new Error("Your session has expired. Please log in again.");
-  }
-  localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, payload.access);
-  if (typeof payload.refresh === "string") {
-    localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, payload.refresh);
-  }
-  return payload.access as string;
-}
-
-async function authenticatedRequest<T = unknown>(endpoint: string, options?: RequestInit): Promise<T> {
-  if (typeof window === "undefined") {
-    throw new Error("Authenticated requests are unavailable.");
-  }
-
-  const send = async (token: string | null) =>
-    fetch(buildApiUrl(endpoint), {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options?.headers ?? {}),
-      },
-    });
-
-  let accessToken = localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-  let response = await send(accessToken);
-  if (response.status === 401) {
-    accessToken = await refreshAccessToken();
-    response = await send(accessToken);
-  }
-
-  const payload = await parseJsonSafely(response);
-  if (!response.ok) {
-    throw new Error("Request failed.");
-  }
-
-  return payload as T;
+  sender: string;
+  isRead: boolean;
 }
 
 export function usePlatformNotifications(enabled = true) {
@@ -91,14 +20,32 @@ export function usePlatformNotifications(enabled = true) {
     }
     try {
       const payload = await authenticatedRequest<
-        Array<{ id: string; title: string; body: string; created_at?: string; createdAt?: string }>
+        Array<{
+          id: string;
+          title: string;
+          body: string;
+          created_at?: string;
+          createdAt?: string;
+          sender?: string;
+          is_read?: boolean;
+        }>
       >("/api/notifications/");
       setNotifications(
-        (Array.isArray(payload) ? payload : []).map((item) => ({
+        normalizeListPayload<{
+          id: string;
+          title: string;
+          body: string;
+          created_at?: string;
+          createdAt?: string;
+          sender?: string;
+          is_read?: boolean;
+        }>(payload).map((item) => ({
           id: item.id,
           title: item.title,
           body: item.body,
           createdAt: item.createdAt ?? item.created_at ?? new Date().toISOString(),
+          sender: item.sender ?? "MooreSkillUp",
+          isRead: Boolean(item.is_read),
         })),
       );
     } catch {
@@ -110,19 +57,51 @@ export function usePlatformNotifications(enabled = true) {
     void load();
   }, [load]);
 
+  const unreadCount = useMemo(
+    () => notifications.filter((item) => !item.isRead).length,
+    [notifications],
+  );
+
   const markAllAsRead = useCallback(async () => {
     if (!enabled) return;
     try {
       await authenticatedRequest("/api/notifications/mark-all-read/", { method: "POST" });
-      setNotifications([]);
+      setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
     } catch {
-      // ignore for now, page-level error handling covers admin surfaces
+      // ignore for now, page-level error handling covers role dashboards
     }
+  }, [enabled]);
+
+  const markAsRead = useCallback(async (notificationId: string) => {
+    if (!enabled) return;
+    await authenticatedRequest(`/api/notifications/${notificationId}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_read: true }),
+    });
+    setNotifications((current) =>
+      current.map((item) => (item.id === notificationId ? { ...item, isRead: true } : item)),
+    );
+  }, [enabled]);
+
+  const clearAll = useCallback(async () => {
+    if (!enabled) return;
+    await authenticatedRequest("/api/notifications/clear/", { method: "DELETE" });
+    setNotifications([]);
+  }, [enabled]);
+
+  const deleteNotification = useCallback(async (notificationId: string) => {
+    if (!enabled) return;
+    await authenticatedRequest(`/api/notifications/${notificationId}/`, { method: "DELETE" });
+    setNotifications((current) => current.filter((item) => item.id !== notificationId));
   }, [enabled]);
 
   return {
     notifications,
+    unreadCount,
     markAllAsRead,
+    markAsRead,
+    clearAll,
+    deleteNotification,
     reload: load,
   };
 }

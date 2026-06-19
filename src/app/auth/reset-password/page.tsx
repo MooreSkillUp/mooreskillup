@@ -8,8 +8,11 @@ import { motion } from "framer-motion";
 import { GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
+import { PasswordInput } from "@/components/ui-kit/PasswordInput";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/lib/feedback";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 
 export default function ResetPasswordPage() {
   return (
@@ -26,6 +29,7 @@ function ResetPasswordContent() {
 
 function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
   const { resetPassword } = useAuth();
+  const { notifyError, notifySuccess } = useFeedback();
   const router = useRouter();
   const [token, setToken] = useState(initialToken);
   const [password, setPassword] = useState("");
@@ -40,11 +44,13 @@ function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
     if (password !== confirm) {
       setMessageTone("error");
       setMessage("Passwords do not match.");
+      notifyError("Password mismatch", "Passwords do not match.");
       return;
     }
     if (!token.trim()) {
       setMessageTone("error");
       setMessage("Reset link is missing or invalid. Open the link from your email again.");
+      notifyError("Reset link invalid", "Open the reset link from your email again.");
       return;
     }
     setLoading(true);
@@ -52,6 +58,11 @@ function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
     const result = await resetPassword(token.trim(), password);
     setMessageTone(result.ok ? "success" : "error");
     setMessage(result.message);
+    if (result.ok) {
+      notifySuccess("Password reset complete", result.message);
+    } else {
+      notifyError("Password reset failed", result.message);
+    }
     if (result.ok) {
       setTimeout(() => router.push("/auth/login"), 2000);
     }
@@ -67,10 +78,7 @@ function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
       >
         <div className="mb-8 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-              <GraduationCap className="h-5 w-5" />
-            </div>
-            <span className="font-display text-lg font-bold">MooreSkillUp</span>
+          <BrandLogo href="/" />
           </Link>
           <ThemeToggle />
         </div>
@@ -92,22 +100,22 @@ function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
               required
             />
           ) : null}
-          <Input
+          <PasswordInput
             label="New Password"
-            type="password"
+            autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required
           />
-          <Input
+          <PasswordInput
             label="Confirm Password"
-            type="password"
+            autoComplete="new-password"
             value={confirm}
             onChange={(event) => setConfirm(event.target.value)}
             required
           />
-          <Button type="submit" variant="accent" size="lg" className="w-full" disabled={loading}>
-            {loading ? "Resetting..." : "Reset password"}
+          <Button type="submit" variant="accent" size="lg" className="w-full" loading={loading} loadingText="Resetting...">
+            Reset password
           </Button>
         </form>
 

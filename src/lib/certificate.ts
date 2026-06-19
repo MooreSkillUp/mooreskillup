@@ -3,103 +3,180 @@ import { jsPDF } from "jspdf";
 interface CertParams {
   recipientName: string;
   courseTitle: string;
-  instructor: string;
   date: string;
   certId: string;
+  institution?: string;
+  signatoryName?: string;
+  signatoryTitle?: string;
+  accentColor?: string;
+  sealText?: string;
+  verificationUrl?: string;
+}
+
+function hexToRgb(hex?: string): [number, number, number] {
+  if (!hex) return [79, 70, 229];
+  const clean = hex.replace("#", "");
+  const value = clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean;
+  const int = parseInt(value, 16);
+  if (Number.isNaN(int)) return [79, 70, 229];
+  return [(int >> 16) & 255, (int >> 8) & 255, int & 255];
+}
+
+/** Auto-shrink a string to fit a max width by stepping the font size down. */
+function fitFontSize(doc: jsPDF, text: string, maxWidth: number, startSize: number, minSize = 14) {
+  let size = startSize;
+  doc.setFontSize(size);
+  while (doc.getTextWidth(text) > maxWidth && size > minSize) {
+    size -= 1;
+    doc.setFontSize(size);
+  }
+  return size;
 }
 
 export function generateCertificatePdf({
   recipientName,
   courseTitle,
-  instructor,
   date,
   certId,
+  institution = "MooreSkillUp",
+  signatoryName = "MooreSkillUp Team",
+  signatoryTitle = "Director of Learning",
+  accentColor,
+  sealText = "MooreSkillUp · Verified",
+  verificationUrl,
 }: CertParams) {
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const w = doc.internal.pageSize.getWidth();
   const h = doc.internal.pageSize.getHeight();
+  const cx = w / 2;
+  const [ar, ag, ab] = hexToRgb(accentColor);
+  const gold: [number, number, number] = [196, 145, 47];
 
-  // Background
-  doc.setFillColor(255, 255, 255);
+  // Background — soft ivory so the frame reads as premium paper.
+  doc.setFillColor(252, 251, 248);
   doc.rect(0, 0, w, h, "F");
 
-  // Outer border (deep blue)
-  doc.setDrawColor(11, 100, 244);
-  doc.setLineWidth(8);
-  doc.rect(20, 20, w - 40, h - 40);
+  // Outer accent frame + inner hairline gold frame.
+  doc.setDrawColor(ar, ag, ab);
+  doc.setLineWidth(10);
+  doc.rect(22, 22, w - 44, h - 44);
 
-  // Inner border (orange)
-  doc.setDrawColor(245, 130, 32);
-  doc.setLineWidth(1.5);
-  doc.rect(36, 36, w - 72, h - 72);
+  doc.setDrawColor(...gold);
+  doc.setLineWidth(1.2);
+  doc.rect(40, 40, w - 80, h - 80);
 
-  // Header band
-  doc.setFillColor(11, 100, 244);
-  doc.rect(36, 36, w - 72, 60, "F");
+  // Decorative corner flourishes (short right-angle ticks in gold).
+  const corner = 26;
+  const drawCorner = (x: number, y: number, dx: number, dy: number) => {
+    doc.line(x, y, x + dx * corner, y);
+    doc.line(x, y, x, y + dy * corner);
+  };
+  drawCorner(40, 40, 1, 1);
+  drawCorner(w - 40, 40, -1, 1);
+  drawCorner(40, h - 40, 1, -1);
+  drawCorner(w - 40, h - 40, -1, -1);
+
+  // Institution band.
+  doc.setFillColor(ar, ag, ab);
+  doc.rect(40, 40, w - 80, 56, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
-  doc.text("MOORESKILLUP", w / 2, 75, { align: "center" });
+  doc.setFontSize(20);
+  doc.text(institution.toUpperCase(), cx, 76, { align: "center", charSpace: 2 });
 
-  // Title
-  doc.setTextColor(11, 100, 244);
-  doc.setFontSize(36);
-  doc.setFont("helvetica", "bold");
-  doc.text("Certificate of Completion", w / 2, 160, { align: "center" });
+  // Title.
+  doc.setTextColor(ar, ag, ab);
+  doc.setFont("times", "bold");
+  doc.setFontSize(38);
+  doc.text("Certificate of Completion", cx, 168, { align: "center" });
 
-  // Subtitle
-  doc.setTextColor(80, 80, 80);
-  doc.setFontSize(14);
+  // Gold divider under the title.
+  doc.setDrawColor(...gold);
+  doc.setLineWidth(1.5);
+  doc.line(cx - 130, 182, cx + 130, 182);
+
+  // Presented-to line.
+  doc.setTextColor(90, 90, 90);
   doc.setFont("helvetica", "normal");
-  doc.text("This is proudly presented to", w / 2, 200, { align: "center" });
+  doc.setFontSize(13);
+  doc.text("This certificate is proudly presented to", cx, 214, { align: "center" });
 
-  // Recipient name
-  doc.setTextColor(20, 20, 20);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(40);
-  doc.text(recipientName, w / 2, 260, { align: "center" });
+  // Recipient name (serif, auto-fit).
+  doc.setTextColor(24, 24, 27);
+  doc.setFont("times", "bolditalic");
+  fitFontSize(doc, recipientName, w - 240, 44, 22);
+  doc.text(recipientName, cx, 268, { align: "center" });
 
-  // Decorative line under name
-  doc.setDrawColor(245, 130, 32);
-  doc.setLineWidth(2);
-  const nameWidth = Math.min(420, doc.getTextWidth(recipientName) + 80);
-  doc.line(w / 2 - nameWidth / 2, 280, w / 2 + nameWidth / 2, 280);
+  doc.setDrawColor(...gold);
+  doc.setLineWidth(1.5);
+  const nameWidth = Math.min(460, doc.getTextWidth(recipientName) + 90);
+  doc.line(cx - nameWidth / 2, 286, cx + nameWidth / 2, 286);
 
-  // Body text
-  doc.setTextColor(60, 60, 60);
+  // Course line.
+  doc.setTextColor(70, 70, 70);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(14);
-  doc.text("for successfully completing the course", w / 2, 320, { align: "center" });
+  doc.setFontSize(13);
+  doc.text("for successfully completing the course", cx, 320, { align: "center" });
 
-  // Course title
-  doc.setTextColor(11, 100, 244);
+  doc.setTextColor(ar, ag, ab);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
-  doc.text(`"${courseTitle}"`, w / 2, 360, { align: "center" });
+  fitFontSize(doc, courseTitle, w - 220, 22, 14);
+  doc.text(courseTitle, cx, 352, { align: "center" });
 
-  // Footer area: instructor / date
-  const footerY = h - 90;
-  doc.setDrawColor(180, 180, 180);
+  // Footer: signature (left) · seal (center) · date (right).
+  const footerY = h - 96;
+
+  doc.setDrawColor(150, 150, 150);
   doc.setLineWidth(0.7);
-  doc.line(100, footerY, 280, footerY);
-  doc.line(w - 280, footerY, w - 100, footerY);
+  doc.line(110, footerY, 300, footerY);
+  doc.line(w - 300, footerY, w - 110, footerY);
+
+  doc.setFont("times", "italic");
+  doc.setFontSize(18);
+  doc.setTextColor(24, 24, 27);
+  doc.text(signatoryName, 205, footerY - 6, { align: "center" });
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(20, 20, 20);
-  doc.text(instructor, 190, footerY + 18, { align: "center" });
-  doc.text(date, w - 190, footerY + 18, { align: "center" });
+  doc.setFontSize(11);
+  doc.setTextColor(70, 70, 70);
+  doc.text(signatoryTitle, 205, footerY + 18, { align: "center" });
 
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(24, 24, 27);
+  doc.text(date, w - 205, footerY - 6, { align: "center" });
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(120, 120, 120);
-  doc.text("Platform", 190, footerY + 34, { align: "center" });
-  doc.text("Date Issued", w - 190, footerY + 34, { align: "center" });
+  doc.setFontSize(11);
+  doc.setTextColor(70, 70, 70);
+  doc.text("Date Issued", w - 205, footerY + 18, { align: "center" });
 
-  // Certificate ID
+  // Seal — concentric gold/accent rings with a check mark.
+  const sealY = footerY - 2;
+  doc.setDrawColor(...gold);
+  doc.setLineWidth(2);
+  doc.circle(cx, sealY, 30, "S");
+  doc.setDrawColor(ar, ag, ab);
+  doc.setLineWidth(1);
+  doc.circle(cx, sealY, 24, "S");
+  // Check mark drawn with two strokes (core PDF fonts can't render ✓).
+  doc.setDrawColor(ar, ag, ab);
+  doc.setLineWidth(2.4);
+  doc.line(cx - 9, sealY + 1, cx - 2, sealY + 8);
+  doc.line(cx - 2, sealY + 8, cx + 10, sealY - 7);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.setTextColor(120, 120, 120);
+  doc.text(sealText, cx, sealY + 44, { align: "center", maxWidth: 120 });
+
+  // Certificate ID + verification line.
+  doc.setFont("courier", "normal");
   doc.setFontSize(9);
-  doc.setTextColor(150, 150, 150);
-  doc.text(`Certificate ID: ${certId}`, w / 2, h - 30, { align: "center" });
+  doc.setTextColor(120, 120, 120);
+  doc.text(`Certificate ID: ${certId}`, cx, h - 40, { align: "center" });
+  if (verificationUrl) {
+    doc.setFont("helvetica", "normal");
+    doc.text(`Verify at ${verificationUrl}`, cx, h - 28, { align: "center" });
+  }
 
   doc.save(`MooreSkillUp-Certificate-${certId}.pdf`);
 }

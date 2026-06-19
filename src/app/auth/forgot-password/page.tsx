@@ -8,20 +8,21 @@ import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/lib/feedback";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 
 export default function ForgotPasswordPage() {
   const { requestPasswordReset } = useAuth();
+  const { notifyError, notifySuccess } = useFeedback();
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [token, setToken] = useState("");
   const [resetUrl, setResetUrl] = useState("");
   const [emailHint, setEmailHint] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setError("");
     setMessage("");
     setToken("");
     setResetUrl("");
@@ -33,8 +34,11 @@ export default function ForgotPasswordPage() {
       setToken(result.debugToken ?? "");
       setResetUrl(result.debugResetUrl ?? "");
       setEmailHint(result.emailHint ?? "");
+      notifySuccess("Reset email processed", result.message);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to send reset email.");
+      const message =
+        submitError instanceof Error ? submitError.message : "Unable to send reset email.";
+      notifyError("Reset request failed", message);
     } finally {
       setLoading(false);
     }
@@ -49,10 +53,7 @@ export default function ForgotPasswordPage() {
       >
         <div className="mb-8 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-              <GraduationCap className="h-5 w-5" />
-            </div>
-            <span className="font-display text-lg font-bold">MooreSkillUp</span>
+          <BrandLogo href="/" />
           </Link>
           <ThemeToggle />
         </div>
@@ -71,12 +72,11 @@ export default function ForgotPasswordPage() {
             placeholder="teacher@mooreskillup.com"
             required
           />
-          <Button type="submit" variant="accent" size="lg" className="w-full" disabled={loading}>
-            {loading ? "Sending..." : "Send reset email"}
+          <Button type="submit" variant="accent" size="lg" className="w-full" loading={loading} loadingText="Sending...">
+            Send reset email
           </Button>
         </form>
 
-        {error && <div className="mt-6 text-sm text-destructive">{error}</div>}
 
         {message && (
           <div className="mt-6 rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">

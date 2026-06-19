@@ -5,17 +5,28 @@ import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, UserPlus, Users } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
+import { useFeedback } from "@/lib/feedback";
 import { useAdminPlatform } from "@/lib/admin-platform";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { type Interest, type TrackName } from "@/lib/mock-data";
 import { usePlatformTaxonomy } from "@/lib/taxonomy";
 
 export default function AdminUsersPage() {
+  const { notifyError, notifySuccess } = useFeedback();
   const { interests, trackOptionsByInterest } = usePlatformTaxonomy();
   const {
     teachers,
     courses,
     createTeacher,
     updateTeacher,
+    deleteTeacher,
     reassignCourse,
     isLoading,
     error,
@@ -28,6 +39,9 @@ export default function AdminUsersPage() {
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
   const [createdTeacherMessage, setCreatedTeacherMessage] = useState("");
+  const [actionState, setActionState] = useState<string | null>(null);
+  const [deleteTeacherId, setDeleteTeacherId] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [newTeacherForm, setNewTeacherForm] = useState({
     displayName: "",
     email: "",
@@ -60,6 +74,7 @@ export default function AdminUsersPage() {
   const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
   const inactiveTeachers = teachers.filter((teacher) => teacher.status === "inactive").length;
   const selectedCourse = courses.find((course) => course.id === selectedCourseId);
+  const deleteTarget = teachers.find((teacher) => teacher.id === deleteTeacherId) ?? null;
 
   const teacherRows = useMemo(
     () =>
@@ -82,38 +97,56 @@ export default function AdminUsersPage() {
     );
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editingTeacherId) return;
-    void updateTeacher(editingTeacherId, {
-      displayName: draftName.trim() || undefined,
-      email: draftEmail.trim() || undefined,
-      program: draftProgram,
-      track: draftTracks[0],
-      tracks: draftTracks,
-    });
-    setEditingTeacherId(null);
+    setActionState("save-teacher");
+    try {
+      await updateTeacher(editingTeacherId, {
+        displayName: draftName.trim() || undefined,
+        email: draftEmail.trim() || undefined,
+        program: draftProgram,
+        track: draftTracks[0],
+        tracks: draftTracks,
+      });
+      setEditingTeacherId(null);
+      notifySuccess("Teacher updated successfully");
+    } catch (actionError) {
+      notifyError("Unable to update teacher", actionError instanceof Error ? actionError.message : "Request failed.");
+    } finally {
+      setActionState(null);
+    }
   };
 
-  const assignToExistingTeacher = () => {
+  const assignToExistingTeacher = async () => {
     if (!selectedCourseId || !selectedOwnerId) return;
-    void reassignCourse({ courseId: selectedCourseId, newTeacherId: selectedOwnerId });
+    setActionState("reassign-existing");
+    try {
+      await reassignCourse({ courseId: selectedCourseId, newTeacherId: selectedOwnerId });
+      notifySuccess("Course reassigned successfully");
+    } catch (actionError) {
+      notifyError("Unable to reassign course", actionError instanceof Error ? actionError.message : "Request failed.");
+    } finally {
+      setActionState(null);
+    }
   };
 
-  const createTeacherAndAssign = () => {
+  const createTeacherAndAssign = async () => {
     if (!selectedCourseId || !newTeacherForm.displayName.trim() || !newTeacherForm.email.trim()) return;
-    void createTeacher({
+    setActionState("create-assign");
+    try {
+      const nextTeacher = await createTeacher({
       displayName: newTeacherForm.displayName.trim(),
       email: newTeacherForm.email.trim(),
         program: newTeacherForm.program,
         track: newTeacherForm.tracks[0],
         tracks: newTeacherForm.tracks,
-      }).then((nextTeacher) => {
+      });
       setCreatedTeacherMessage(
         nextTeacher.temporaryPassword
           ? `Teacher created: ${nextTeacher.email} | Temporary password: ${nextTeacher.temporaryPassword}`
           : `Teacher created: ${nextTeacher.email}`,
       );
-      void reassignCourse({ courseId: selectedCourseId, newTeacherId: nextTeacher.id });
+      await reassignCourse({ courseId: selectedCourseId, newTeacherId: nextTeacher.id });
       setSelectedOwnerId(nextTeacher.id);
         setNewTeacherForm({
           displayName: "",
@@ -121,7 +154,12 @@ export default function AdminUsersPage() {
           program: "Web Development",
           tracks: ["React and Modern UI"],
         });
-      });
+      notifySuccess("Teacher created and assigned", "The course ownership has been updated.");
+    } catch (actionError) {
+      notifyError("Unable to create and assign teacher", actionError instanceof Error ? actionError.message : "Request failed.");
+    } finally {
+      setActionState(null);
+    }
   };
 
   return (
@@ -216,14 +254,41 @@ export default function AdminUsersPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() =>
-                              void updateTeacher(teacher.id, {
-                                status: teacher.status === "active" ? "inactive" : "active",
-                              })
-                            }
+                            onClick={async () => {
+                              setActionState(`${teacher.id}:status`);
+                              try {
+                                await updateTeacher(teacher.id, {
+                                  status: teacher.status === "active" ? "inactive" : "active",
+                                });
+                                notifySuccess(
+                                  teacher.status === "active" ? "Teacher deactivated" : "Teacher activated",
+                                );
+                              } catch (actionError) {
+                                notifyError(
+                                  "Unable to update teacher",
+                                  actionError instanceof Error ? actionError.message : "Request failed.",
+                                );
+                              } finally {
+                                setActionState(null);
+                              }
+                            }}
                             className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
                           >
-                            {teacher.status === "active" ? "Deactivate" : "Activate"}
+                            {actionState === `${teacher.id}:status`
+                              ? "Updating..."
+                              : teacher.status === "active"
+                                ? "Deactivate"
+                                : "Activate"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteTeacherId(teacher.id);
+                              setDeleteConfirmation("");
+                            }}
+                            className="rounded-full border border-destructive/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-destructive"
+                          >
+                            Delete
                           </button>
                           <button
                             type="button"
@@ -316,7 +381,7 @@ export default function AdminUsersPage() {
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <Button variant="accent" onClick={saveEdit}>
+                    <Button variant="accent" onClick={() => void saveEdit()} loading={actionState === "save-teacher"} loadingText="Saving...">
                       Save changes
                     </Button>
                     <Button variant="outline" onClick={() => setEditingTeacherId(null)}>
@@ -367,14 +432,24 @@ export default function AdminUsersPage() {
                 </select>
 
                 <div className="flex flex-wrap gap-3">
-                  <Button variant="accent" onClick={assignToExistingTeacher} disabled={!selectedCourseId || !selectedOwnerId}>
+                  <Button variant="accent" onClick={() => void assignToExistingTeacher()} loading={actionState === "reassign-existing"} loadingText="Reassigning..." disabled={!selectedCourseId || !selectedOwnerId}>
                     Reassign to selected teacher
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => {
+                    loading={actionState === "move-admin"}
+                    loadingText="Moving..."
+                    onClick={async () => {
                       if (!selectedCourseId) return;
-                      void reassignCourse({ courseId: selectedCourseId, newTeacherId: "admin-owned" });
+                      setActionState("move-admin");
+                      try {
+                        await reassignCourse({ courseId: selectedCourseId, newTeacherId: "admin-owned" });
+                        notifySuccess("Course moved to admin ownership");
+                      } catch (actionError) {
+                        notifyError("Unable to move course", actionError instanceof Error ? actionError.message : "Request failed.");
+                      } finally {
+                        setActionState(null);
+                      }
                     }}
                     disabled={!selectedCourseId}
                   >
@@ -461,7 +536,9 @@ export default function AdminUsersPage() {
                   </div>
                   <Button
                     variant="outline"
-                    onClick={createTeacherAndAssign}
+                    onClick={() => void createTeacherAndAssign()}
+                    loading={actionState === "create-assign"}
+                    loadingText="Creating + assigning..."
                     disabled={!selectedCourseId || !interests.length || isLoading}
                   >
                     Create teacher account + assign course
@@ -483,6 +560,59 @@ export default function AdminUsersPage() {
           </div>
         </div>
       </div>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => (!open ? setDeleteTeacherId(null) : null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete teacher account</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. Type the teacher&apos;s full name exactly to confirm permanent deletion.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+            Type <span className="font-semibold">{deleteTarget?.displayName}</span> to continue.
+          </div>
+          <input
+            value={deleteConfirmation}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
+            className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm text-foreground shadow-sm outline-none"
+            placeholder={deleteTarget?.displayName}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTeacherId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="accent"
+              loading={actionState === "delete-teacher"}
+              loadingText="Deleting teacher..."
+              disabled={deleteConfirmation !== deleteTarget?.displayName}
+              onClick={async () => {
+                if (!deleteTarget) return;
+                setActionState("delete-teacher");
+                try {
+                  await deleteTeacher(deleteTarget.id);
+                  notifySuccess("Teacher deleted successfully");
+                  setDeleteTeacherId(null);
+                  setDeleteConfirmation("");
+                  if (editingTeacherId === deleteTarget.id) {
+                    setEditingTeacherId(null);
+                  }
+                } catch (actionError) {
+                  notifyError(
+                    "Unable to delete teacher",
+                    actionError instanceof Error ? actionError.message : "Request failed.",
+                  );
+                } finally {
+                  setActionState(null);
+                }
+              }}
+            >
+              Delete teacher
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

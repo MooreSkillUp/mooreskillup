@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  authenticatedRequest,
+  extractErrorMessage,
+  normalizeListPayload,
+} from "./authenticated-api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const ACCESS_TOKEN_STORAGE_KEY = "mooreskillup.access-token";
-const REFRESH_TOKEN_STORAGE_KEY = "mooreskillup.refresh-token";
 
 export interface AdminTeacher {
   id: string;
@@ -19,6 +21,22 @@ export interface AdminTeacher {
   temporaryPassword?: string | null;
 }
 
+export interface AdminStudent {
+  id: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  selectedInterest: string;
+  selectedTrack: string;
+  selectedTracks: string[];
+  plan: string;
+  status: "active" | "disabled";
+  lastActiveAt?: string | null;
+  enrolledCourses: number;
+  completedCourses: number;
+  totalPayments: number;
+}
+
 export interface AdminSubcategory {
   id: string;
   categoryId?: string;
@@ -29,6 +47,9 @@ export interface AdminCategory {
   id: string;
   name: string;
   program: string;
+  communityUrl?: string;
+  communityLabel?: string;
+  displayOrder?: number;
   subcategories: AdminSubcategory[];
 }
 
@@ -51,15 +72,19 @@ export interface AdminCourse {
   ownerType: "admin" | "teacher";
   ownerId?: string;
   featured?: boolean;
+  isRecommended?: boolean;
+  pendingDeletion?: boolean;
+  deletionReason?: string;
 }
 
 export interface AdminBroadcast {
   id: string;
   title: string;
   description: string;
-  audience: "students" | "teachers" | "all";
+  audience: "students" | "teachers" | "admins" | "moderators" | "all";
   status: string;
   sentAt?: string;
+  scheduledAt?: string | null;
 }
 
 export interface AdminTotals {
@@ -71,6 +96,29 @@ export interface AdminTotals {
   transactions: number;
   payingStudents: number;
   revenue: string;
+  publishedCourses?: number;
+  pendingCourses?: number;
+  activeEnrollments?: number;
+  completedEnrollments?: number;
+  monthlyRevenue?: string;
+  courseCompletionRate?: number;
+  activeUsersToday?: number;
+}
+
+export interface AdminAnalytics {
+  registrations: Array<{ label: string; students: number; teachers: number }>;
+  revenue: Array<{ label: string; revenue: number }>;
+  engagement: Array<{ courseId: string; title: string; enrollments: number; completionRate: number }>;
+  weeklyEnrollments?: number;
+  monthlyEnrollments?: number;
+}
+
+export interface AdminActivityEvent {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  type: string;
 }
 
 export interface AdminTransaction {
@@ -81,50 +129,30 @@ export interface AdminTransaction {
   amount: string | number;
   currency: string;
   verified_at?: string | null;
+  created_at?: string;
+  payment_id?: string;
+  payment__status?: string;
+  payment__course__title?: string;
+  payment__student__user__display_name?: string;
+  payment__student__user__email?: string;
+  refundEligible?: boolean;
+  refundReason?: string;
 }
 
-interface PaginatedResponse<T> {
-  results?: T[];
+export interface AdminSupportTicket {
+  id: string;
+  category: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  admin_notes: string;
+  created_at: string;
+  updated_at: string;
+  createdBy: string;
+  createdByRole: string;
 }
 
-function buildApiUrl(endpoint: string) {
-  return `${API_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
-}
-
-async function parseJsonSafely(response: Response) {
-  const text = await response.text();
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-function extractErrorMessage(payload: unknown, fallback: string) {
-  if (!payload || typeof payload !== "object") return fallback;
-  if ("detail" in payload && typeof payload.detail === "string") return payload.detail;
-
-  for (const value of Object.values(payload as Record<string, unknown>)) {
-    if (typeof value === "string") return value;
-    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
-  }
-
-  return fallback;
-}
-
-function normalizeListPayload<T>(payload: unknown): T[] {
-  if (Array.isArray(payload)) return payload as T[];
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "results" in payload &&
-    Array.isArray((payload as PaginatedResponse<T>).results)
-  ) {
-    return (payload as PaginatedResponse<T>).results ?? [];
-  }
-  return [];
-}
 
 function normalizeTeacherPayload(payload: unknown): AdminTeacher[] {
   return normalizeListPayload<AdminTeacher>(payload).map((teacher) => ({
@@ -149,10 +177,26 @@ function normalizeTeacherPayload(payload: unknown): AdminTeacher[] {
   }));
 }
 
+function normalizeStudentPayload(payload: unknown): AdminStudent[] {
+  return normalizeListPayload<AdminStudent>(payload).map((student) => ({
+    ...student,
+    selectedTracks:
+      Array.isArray(student.selectedTracks) && student.selectedTracks.length
+        ? student.selectedTracks
+        : student.selectedTrack
+          ? [student.selectedTrack]
+          : [],
+    lastActiveAt: student.lastActiveAt ?? null,
+  }));
+}
+
 function normalizeCategoryPayload(payload: unknown): AdminCategory[] {
   return normalizeListPayload<AdminCategory>(payload).map((category) => ({
     ...category,
     program: category.program ?? category.name,
+    communityUrl: category.communityUrl ?? "",
+    communityLabel: category.communityLabel ?? "",
+    displayOrder: category.displayOrder ?? 0,
     subcategories: Array.isArray(category.subcategories)
       ? category.subcategories.map((subcategory) => ({
           ...subcategory,
@@ -175,95 +219,53 @@ function normalizeBroadcastPayload(payload: unknown): AdminBroadcast[] {
   return normalizeListPayload<AdminBroadcast>(payload);
 }
 
-async function refreshAccessToken() {
-  if (typeof window === "undefined") {
-    throw new Error("Session refresh is unavailable on the server.");
-  }
-
-  const refreshToken = localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY);
-  if (!refreshToken) {
-    throw new Error("Your session has expired. Please log in again.");
-  }
-
-  const response = await fetch(buildApiUrl("/api/auth/refresh/"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh: refreshToken }),
-  });
-  const payload = await parseJsonSafely(response);
-  if (!response.ok || !payload || typeof payload.access !== "string") {
-    localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
-    throw new Error(extractErrorMessage(payload, "Your session has expired. Please log in again."));
-  }
-
-  localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, payload.access);
-  if (typeof payload.refresh === "string") {
-    localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, payload.refresh);
-  }
-
-  return payload.access as string;
-}
-
-async function authenticatedRequest<T = unknown>(endpoint: string, options?: RequestInit): Promise<T> {
-  if (typeof window === "undefined") {
-    throw new Error("Authenticated requests are unavailable on the server.");
-  }
-
-  const send = async (token: string | null) =>
-    fetch(buildApiUrl(endpoint), {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options?.headers ?? {}),
-      },
-    });
-
-  let accessToken = localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-  let response = await send(accessToken);
-
-  if (response.status === 401) {
-    accessToken = await refreshAccessToken();
-    response = await send(accessToken);
-  }
-
-  const payload = (await parseJsonSafely(response)) as T | { detail?: string };
-  if (!response.ok) {
-    throw new Error(extractErrorMessage(payload, "Request failed."));
-  }
-
-  return payload as T;
+function normalizeSupportTicketPayload(payload: unknown): AdminSupportTicket[] {
+  return normalizeListPayload<AdminSupportTicket>(payload);
 }
 
 export function useAdminPlatform(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true;
   const [teachers, setTeachers] = useState<AdminTeacher[]>([]);
+  const [students, setStudents] = useState<AdminStudent[]>([]);
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [courses, setCourses] = useState<AdminCourse[]>([]);
   const [broadcasts, setBroadcasts] = useState<AdminBroadcast[]>([]);
   const [transactions, setTransactions] = useState<AdminTransaction[]>([]);
+  const [supportTickets, setSupportTickets] = useState<AdminSupportTicket[]>([]);
   const [totals, setTotals] = useState<AdminTotals | null>(null);
+  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
+  const [activityFeed, setActivityFeed] = useState<AdminActivityEvent[]>([]);
+  const [systemAlerts, setSystemAlerts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setError("");
-    const [dashboardResult, teacherResult, categoryResult, courseResult, broadcastResult, transactionResult] =
+    const [dashboardResult, teacherResult, studentResult, categoryResult, courseResult, broadcastResult, transactionResult, supportTicketResult] =
       await Promise.allSettled([
-        authenticatedRequest<{ totals: AdminTotals }>("/api/dashboard/admin/"),
+        authenticatedRequest<{
+          totals: AdminTotals;
+          analytics?: AdminAnalytics;
+          activityFeed?: AdminActivityEvent[];
+          systemAlerts?: Record<string, number>;
+        }>("/api/dashboard/admin/"),
         authenticatedRequest<AdminTeacher[]>("/api/admin/teachers/"),
+        authenticatedRequest<AdminStudent[]>("/api/admin/students/"),
         authenticatedRequest<AdminCategory[]>("/api/admin/categories/"),
         authenticatedRequest<AdminCourse[]>("/api/admin/courses/"),
         authenticatedRequest<AdminBroadcast[]>("/api/admin/broadcasts/"),
         authenticatedRequest<AdminTransaction[]>("/api/admin/transactions/"),
+        authenticatedRequest<AdminSupportTicket[]>("/api/admin/support-tickets/"),
       ]);
 
     const failures: string[] = [];
 
     if (dashboardResult.status === "fulfilled") {
       setTotals(dashboardResult.value.totals);
+      setAnalytics(dashboardResult.value.analytics ?? null);
+      setActivityFeed(dashboardResult.value.activityFeed ?? []);
+      setSystemAlerts(dashboardResult.value.systemAlerts ?? {});
     } else {
       failures.push(dashboardResult.reason instanceof Error ? dashboardResult.reason.message : "Dashboard totals failed to load.");
     }
@@ -272,6 +274,12 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
       setTeachers(normalizeTeacherPayload(teacherResult.value));
     } else {
       failures.push(teacherResult.reason instanceof Error ? teacherResult.reason.message : "Teachers failed to load.");
+    }
+
+    if (studentResult.status === "fulfilled") {
+      setStudents(normalizeStudentPayload(studentResult.value));
+    } else {
+      failures.push(studentResult.reason instanceof Error ? studentResult.reason.message : "Students failed to load.");
     }
 
     if (categoryResult.status === "fulfilled") {
@@ -296,6 +304,12 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
       setTransactions(normalizeListPayload<AdminTransaction>(transactionResult.value));
     } else {
       failures.push(transactionResult.reason instanceof Error ? transactionResult.reason.message : "Transactions failed to load.");
+    }
+
+    if (supportTicketResult.status === "fulfilled") {
+      setSupportTickets(normalizeSupportTicketPayload(supportTicketResult.value));
+    } else {
+      failures.push(supportTicketResult.reason instanceof Error ? supportTicketResult.reason.message : "Support tickets failed to load.");
     }
 
     setError(failures.join(" | "));
@@ -355,6 +369,53 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     return normalizedTeacher;
   }, [load, runAction]);
 
+  const deleteTeacher = useCallback(async (teacherId: string) => {
+    await runAction(() => authenticatedRequest(`/api/admin/teachers/${teacherId}/`, { method: "DELETE" }));
+    setTeachers((current) => current.filter((teacher) => teacher.id !== teacherId));
+    await load();
+  }, [load, runAction]);
+
+  const resendTeacherInvite = useCallback(
+    async (teacherId: string) =>
+      authenticatedRequest<{ detail: string }>(`/api/admin/teachers/${teacherId}/resend-invite/`, {
+        method: "POST",
+      }),
+    [],
+  );
+
+  const updateStudent = useCallback(async (studentId: string, patch: Record<string, unknown>) => {
+    const student = await runAction(() =>
+      authenticatedRequest<AdminStudent>(`/api/admin/students/${studentId}/`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    );
+    const normalized = normalizeStudentPayload([student])[0] ?? student;
+    setStudents((current) => current.map((item) => (item.id === studentId ? normalized : item)));
+    await load();
+    return normalized;
+  }, [load, runAction]);
+
+  const deleteStudent = useCallback(async (studentId: string) => {
+    await runAction(() => authenticatedRequest(`/api/admin/students/${studentId}/`, { method: "DELETE" }));
+    setStudents((current) => current.filter((student) => student.id !== studentId));
+    await load();
+  }, [load, runAction]);
+
+  const grantStudentAccess = useCallback(
+    async (studentId: string, courseId: string) => {
+      const result = await runAction(() =>
+        authenticatedRequest<{ detail: string }>(`/api/admin/students/${studentId}/grant-access/`, {
+          method: "POST",
+          body: JSON.stringify({ courseId }),
+        }),
+      );
+      await load();
+      return result;
+    },
+    [load, runAction],
+  );
+
   const addCategory = useCallback(async (input: { name: string; description?: string }) => {
       const category = await runAction(() =>
         authenticatedRequest<AdminCategory>("/api/admin/categories/", {
@@ -370,7 +431,7 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     return normalizedCategory;
   }, [runAction]);
 
-  const updateCategory = useCallback(async (categoryId: string, patch: { name?: string; description?: string }) => {
+  const updateCategory = useCallback(async (categoryId: string, patch: { name?: string; description?: string; communityUrl?: string; communityLabel?: string; displayOrder?: number }) => {
     const category = await runAction(() =>
       authenticatedRequest<AdminCategory>(`/api/admin/categories/${categoryId}/`, {
         method: "PATCH",
@@ -465,7 +526,12 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
   }, [runAction]);
 
   const createBroadcast = useCallback(
-    async (input: { title: string; description: string; audience: "students" | "teachers" }) => {
+    async (input: {
+      title: string;
+      description: string;
+      audience: "students" | "teachers" | "admins" | "moderators" | "all";
+      scheduledAt?: string | null;
+    }) => {
       const broadcast = await runAction(() =>
         authenticatedRequest<AdminBroadcast>("/api/admin/broadcasts/", {
           method: "POST",
@@ -483,6 +549,27 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     setBroadcasts([]);
   }, [runAction]);
 
+  const deleteBroadcast = useCallback(async (broadcastId: string) => {
+    await runAction(() => authenticatedRequest(`/api/admin/broadcasts/${broadcastId}/`, { method: "DELETE" }));
+    setBroadcasts((current) => current.filter((broadcast) => broadcast.id !== broadcastId));
+  }, [runAction]);
+
+  const updateSupportTicket = useCallback(async (ticketId: string, patch: Record<string, unknown>) => {
+    const ticket = await runAction(() =>
+      authenticatedRequest<AdminSupportTicket>(`/api/admin/support-tickets/${ticketId}/`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    );
+    setSupportTickets((current) => current.map((item) => (item.id === ticketId ? ticket : item)));
+    return ticket;
+  }, [runAction]);
+
+  const deleteSupportTicket = useCallback(async (ticketId: string) => {
+    await runAction(() => authenticatedRequest(`/api/admin/support-tickets/${ticketId}/`, { method: "DELETE" }));
+    setSupportTickets((current) => current.filter((ticket) => ticket.id !== ticketId));
+  }, [runAction]);
+
   const reassignCourse = useCallback(async (input: { courseId: string; newTeacherId: string }) => {
     await runAction(() =>
       authenticatedRequest(`/api/admin/courses/${input.courseId}/reassign/`, {
@@ -491,6 +578,20 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
           new_teacher_profile_id: input.newTeacherId,
         }),
       }),
+    );
+    await load();
+  }, [load, runAction]);
+
+  const deleteCourse = useCallback(async (courseId: string) => {
+    await runAction(() =>
+      authenticatedRequest(`/api/admin/courses/${courseId}/delete/`, { method: "POST" }),
+    );
+    setCourses((current) => current.filter((course) => course.id !== courseId));
+  }, [runAction]);
+
+  const abortCourseDeletion = useCallback(async (courseId: string) => {
+    await runAction(() =>
+      authenticatedRequest(`/api/admin/courses/${courseId}/abort-deletion/`, { method: "POST" }),
     );
     await load();
   }, [load, runAction]);
@@ -518,19 +619,44 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     return normalizedCourse;
   }, [runAction]);
 
+  const moderateCourse = useCallback(
+    async (courseId: string, action: "approve" | "decline" | "archive" | "restore", reason?: string) => {
+      const course = await runAction(() =>
+        authenticatedRequest<AdminCourse>(`/api/admin/courses/${courseId}/${action}/`, {
+          method: "POST",
+          body: reason ? JSON.stringify({ reason }) : undefined,
+        }),
+      );
+      const normalizedCourse = normalizeCoursePayload([course])[0] ?? course;
+      setCourses((current) => current.map((item) => (item.id === courseId ? normalizedCourse : item)));
+      return normalizedCourse;
+    },
+    [runAction],
+  );
+
   return {
     teachers,
+    students,
     activeTeachers,
     categories,
     courses,
     broadcasts,
     transactions,
+    supportTickets,
     totals,
+    analytics,
+    activityFeed,
+    systemAlerts,
     isLoading,
     error,
     reload: load,
     createTeacher,
     updateTeacher,
+    deleteTeacher,
+    resendTeacherInvite,
+    updateStudent,
+    deleteStudent,
+    grantStudentAccess,
     addCategory,
     updateCategory,
     deleteCategory,
@@ -539,7 +665,13 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     deleteSubcategory,
     createBroadcast,
     clearBroadcastHistory,
+    deleteBroadcast,
+    updateSupportTicket,
+    deleteSupportTicket,
     reassignCourse,
+    deleteCourse,
+    abortCourseDeletion,
+    moderateCourse,
     updateCourseCatalog,
     publishAdminOwnedCourse,
   };

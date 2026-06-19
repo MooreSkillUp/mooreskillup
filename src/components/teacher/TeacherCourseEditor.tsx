@@ -17,21 +17,78 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
+import { TagInput } from "@/components/ui-kit/TagInput";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/teacher/RichTextEditor";
+import { useFeedback } from "@/lib/feedback";
 import {
   useTeacherPlatform,
   type TeacherCourse,
+  type TeacherCourseLevel,
   type TeacherLesson,
   type TeacherLessonContentType,
+  type TeacherProject,
+  type TeacherResourceLink,
+  type TeacherResourceType,
   type TeacherSection,
   type TeacherTask,
+  type TeacherCourseVersion,
   type TeacherTaskSubmissionType,
 } from "@/lib/teacher-platform";
 import { getEmbeddedVideoUrl, getVideoRenderMode } from "@/lib/video";
 
+const LEVEL_OPTIONS: { value: TeacherCourseLevel; label: string }[] = [
+  { value: "beginner", label: "Beginner" },
+  { value: "intermediate", label: "Intermediate" },
+  { value: "advanced", label: "Advanced" },
+];
+
+const CONTENT_TYPE_OPTIONS: { value: TeacherLessonContentType; label: string }[] = [
+  { value: "video", label: "Video" },
+  { value: "text", label: "Text" },
+  { value: "resource", label: "Resource" },
+];
+
+const SUBMISSION_OPTIONS: { value: TeacherTaskSubmissionType; label: string; hint: string }[] = [
+  { value: "whatsapp-group", label: "WhatsApp group", hint: "Paste the group invite link" },
+  { value: "google-form", label: "Google Form", hint: "Paste the form link" },
+  { value: "external-link", label: "External link", hint: "Any submission page link" },
+];
+
+const RESOURCE_TYPE_OPTIONS: { value: TeacherResourceType; label: string }[] = [
+  { value: "pdf", label: "PDF" },
+  { value: "documentation", label: "Documentation" },
+  { value: "github", label: "GitHub repo" },
+  { value: "google_drive", label: "Google Drive" },
+  { value: "zip", label: "ZIP download" },
+  { value: "website", label: "Website" },
+];
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
+}
+
+/**
+ * Keep the user's current (possibly still-being-edited) course content but adopt
+ * the real server IDs (by position) from a just-completed save. This lets
+ * autosave sync IDs without ever overwriting in-progress edits.
+ */
+function withServerIds(local: TeacherCourse, server: TeacherCourse): TeacherCourse {
+  return {
+    ...local,
+    id: server.id,
+    sections: local.sections.map((section, si) => {
+      const s = server.sections[si];
+      if (!s) return section;
+      return {
+        ...section,
+        id: s.id,
+        lessons: section.lessons.map((lesson, li) => ({ ...lesson, id: s.lessons[li]?.id ?? lesson.id })),
+        tasks: section.tasks.map((task, ti) => ({ ...task, id: s.tasks[ti]?.id ?? task.id })),
+        projects: section.projects.map((project, pi) => ({ ...project, id: s.projects[pi]?.id ?? project.id })),
+      };
+    }),
+  };
 }
 
 function createLocalId(prefix: string) {
@@ -49,8 +106,13 @@ function buildLesson(): TeacherLesson {
     contentType: "video",
     videoUrl: "",
     textContent: "",
+    resourceLinks: [],
     tags: [],
   };
+}
+
+function buildResourceLink(): TeacherResourceLink {
+  return { type: "website", title: "", url: "" };
 }
 
 function buildTask(): TeacherTask {
@@ -58,8 +120,22 @@ function buildTask(): TeacherTask {
     id: createLocalId("task"),
     title: "",
     instructions: "",
-    submissionType: "text-submission",
-    resourceLinks: [],
+    submissionType: "whatsapp-group",
+    submissionUrl: "",
+    howToSubmit: "",
+    dueDate: null,
+  };
+}
+
+function buildProject(): TeacherProject {
+  return {
+    id: createLocalId("project"),
+    title: "",
+    description: "",
+    requirements: "",
+    deliverables: "",
+    submissionUrl: "",
+    howToSubmit: "",
   };
 }
 
@@ -72,6 +148,7 @@ function buildSection(index: number): TeacherSection {
     collapsed: false,
     lessons: [buildLesson()],
     tasks: [],
+    projects: [],
   };
 }
 
@@ -85,6 +162,7 @@ export function TeacherCourseEditor({
   platformMode?: "teacher" | "admin-owned";
 }) {
   const router = useRouter();
+  const { notifyError, notifySuccess } = useFeedback();
   const {
     profile,
     buildEmptyCourse,
@@ -92,18 +170,33 @@ export function TeacherCourseEditor({
     saveCourse,
     validateCourse,
     recordActivity,
+    fetchCourseVersions,
+    restoreCourseVersion,
   } = useTeacherPlatform({ platformMode, courseId });
   const source = courseId ? getCourseById(courseId) : undefined;
   const [course, setCourse] = useState<TeacherCourse>(() => clone(source ?? buildEmptyCourse()));
   const [autosaveMessage, setAutosaveMessage] = useState("Waiting for changes");
   const [manualMessage, setManualMessage] = useState("");
   const [manualMessageTone, setManualMessageTone] = useState<"success" | "warning">("success");
+  const [activeAction, setActiveAction] = useState<
+    "draft" | "preview" | "publish" | "unpublish" | "archive" | "restore" | null
+  >(null);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(course.sections[0]?.id ?? null);
   const lastSnapshot = useRef(JSON.stringify(source ?? buildEmptyCourse()));
+  const autosaveBusy = useRef(false);
   const dragSectionId = useRef<string | null>(null);
   const dragLessonRef = useRef<{ sectionId: string; lessonId: string } | null>(null);
 
+  // Initialize the editor ONCE per course. Without this guard, every background
+  // save updates the cached source, which would re-run this effect and wipe the
+  // teacher's in-progress edits (the "studio resets while I type" bug).
+  const initializedKey = useRef<string | null>(null);
   useEffect(() => {
+    const key = courseId ?? "new-course";
+    // For an existing course, wait until its data has actually loaded.
+    if (courseId && !source) return;
+    if (initializedKey.current === key) return;
+    initializedKey.current = key;
     const nextSource = clone(source ?? buildEmptyCourse());
     setCourse(nextSource);
     setActiveSectionId(nextSource.sections[0]?.id ?? null);
@@ -121,6 +214,9 @@ export function TeacherCourseEditor({
             section.lessons.some((lesson) => {
               if (!lesson.title.trim()) return true;
               if (lesson.contentType === "video") return !lesson.videoUrl.trim();
+              if (lesson.contentType === "resource") {
+                return !lesson.resourceLinks.some((link) => link.url.trim());
+              }
               return !stripHtml(lesson.textContent);
             }),
         )
@@ -130,15 +226,26 @@ export function TeacherCourseEditor({
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      const nextSnapshot = JSON.stringify(course);
-      if (nextSnapshot === lastSnapshot.current) return;
-      void saveCourse(course, "draft", { autosave: true }).then((result) => {
-        if (result.ok) {
-          lastSnapshot.current = JSON.stringify(result.course);
-          setCourse(result.course);
+      if (autosaveBusy.current) return;
+      const startSnapshot = JSON.stringify(course);
+      if (startSnapshot === lastSnapshot.current) return;
+      autosaveBusy.current = true;
+      void saveCourse(course, "draft", { autosave: true })
+        .then((result) => {
+          if (!result.ok) return;
+          setCourse((current) => {
+            // If the user kept typing while we saved, keep their current edits and
+            // only adopt the server's real IDs — never overwrite their work.
+            const merged =
+              JSON.stringify(current) === startSnapshot ? result.course : withServerIds(current, result.course);
+            lastSnapshot.current = JSON.stringify(merged);
+            return merged;
+          });
           setAutosaveMessage(`Auto-saved ${result.course.lastUpdated}`);
-        }
-      });
+        })
+        .finally(() => {
+          autosaveBusy.current = false;
+        });
     }, 12000);
 
     return () => window.clearInterval(interval);
@@ -149,18 +256,25 @@ export function TeacherCourseEditor({
   };
 
   const openPreview = async () => {
-    const result = await saveCourse(course, "draft");
-    if (!result.ok) {
-      setManualMessage("Save the course as a draft before previewing.");
-      return;
-    }
+    setActiveAction("preview");
+    try {
+      const result = await saveCourse(course, "draft");
+      if (!result.ok) {
+        setManualMessage("Save the course as a draft before previewing.");
+        notifyError("Preview unavailable", "Save the course as a draft before previewing.");
+        return;
+      }
 
-    persistAndNavigateIfNeeded(result.course);
-    const href =
-      platformMode === "admin-owned"
-        ? `/admin/owned-courses/${result.course.id}/preview`
-        : `/teacher/courses/${result.course.id}/preview`;
-    window.open(href, "_blank", "noopener,noreferrer");
+      persistAndNavigateIfNeeded(result.course);
+      notifySuccess("Preview opened", "A learner-style preview has opened in a new tab.");
+      const href =
+        platformMode === "admin-owned"
+          ? `/admin/owned-courses/${result.course.id}/preview`
+          : `/teacher/courses/${result.course.id}/preview`;
+      window.open(href, "_blank", "noopener,noreferrer");
+    } finally {
+      setActiveAction(null);
+    }
   };
 
   const updateSection = (sectionId: string, updater: (section: TeacherSection) => TeacherSection) => {
@@ -220,7 +334,16 @@ export function TeacherCourseEditor({
       ...current,
       tasks: [...current.tasks, buildTask()],
     }));
-    void recordActivity(`Added a task to ${section?.title || "a section"}`, "edit-course");
+    void recordActivity(`Added an assignment to ${section?.title || "a section"}`, "edit-course");
+  };
+
+  const addProject = (sectionId: string) => {
+    const section = course.sections.find((item) => item.id === sectionId);
+    updateSection(sectionId, (current) => ({
+      ...current,
+      projects: [...current.projects, buildProject()],
+    }));
+    void recordActivity(`Added a project to ${section?.title || "a section"}`, "edit-course");
   };
 
   const moveSection = (fromId: string, toId: string) => {
@@ -268,46 +391,87 @@ export function TeacherCourseEditor({
   };
 
   const saveDraft = async () => {
-    const result = await saveCourse({ ...course, status: "draft" }, "draft");
-    if (!result.ok) return;
-    persistAndNavigateIfNeeded(result.course);
-    showManualMessage("Course saved as draft.");
+    setActiveAction("draft");
+    try {
+      const result = await saveCourse({ ...course, status: "draft" }, "draft");
+      if (!result.ok) return;
+      persistAndNavigateIfNeeded(result.course);
+      showManualMessage("Course saved as draft.");
+      notifySuccess("Draft saved", "You can continue editing this course later from My Courses.");
+    } finally {
+      setActiveAction(null);
+    }
   };
 
   const publish = async () => {
-    const result = await saveCourse({ ...course, status: "published" }, "publish");
-    if (!result.ok) {
-      showManualMessage("Fix validation issues before publishing.", "warning");
-      return;
+    setActiveAction("publish");
+    try {
+      const result = await saveCourse({ ...course, status: "published" }, "publish");
+      if (!result.ok) {
+        showManualMessage("Fix validation issues before submitting for review.", "warning");
+        notifyError("Course not ready", "Fix validation issues before submitting for review.");
+        return;
+      }
+      persistAndNavigateIfNeeded(result.course);
+      showManualMessage(
+        platformMode === "admin-owned"
+          ? "Course published successfully."
+          : "Course submitted for admin review.",
+      );
+      notifySuccess(
+        platformMode === "admin-owned" ? "Course published" : "Course submitted for review",
+        platformMode === "admin-owned"
+          ? "The course is now visible to learners."
+          : "An admin can now approve or decline the course.",
+      );
+    } finally {
+      setActiveAction(null);
     }
-    persistAndNavigateIfNeeded(result.course);
-    showManualMessage("Course published successfully.");
   };
 
   const unpublish = async () => {
-    const result = await saveCourse({ ...course, status: "draft" }, "unpublish");
-    if (!result.ok) return;
-    persistAndNavigateIfNeeded(result.course);
-    showManualMessage("Course moved back to draft.");
+    setActiveAction("unpublish");
+    try {
+      const result = await saveCourse({ ...course, status: "draft" }, "unpublish");
+      if (!result.ok) return;
+      persistAndNavigateIfNeeded(result.course);
+      showManualMessage("Course moved back to draft.");
+      notifySuccess("Course moved to draft");
+    } finally {
+      setActiveAction(null);
+    }
   };
 
   const archive = async () => {
-    const result = await saveCourse({ ...course, status: "archived", visibility: "hidden" }, "archive");
-    if (!result.ok) return;
-    persistAndNavigateIfNeeded(result.course);
-    showManualMessage("Course archived.");
+    setActiveAction("archive");
+    try {
+      const result = await saveCourse({ ...course, status: "archived", visibility: "hidden" }, "archive");
+      if (!result.ok) return;
+      persistAndNavigateIfNeeded(result.course);
+      showManualMessage("Course archived.");
+      notifySuccess("Course archived");
+    } finally {
+      setActiveAction(null);
+    }
   };
 
   const restore = async () => {
-    const result = await saveCourse({ ...course, status: "draft", visibility: "hidden" }, "restore");
-    if (!result.ok) return;
-    persistAndNavigateIfNeeded(result.course);
-    showManualMessage("Course restored to draft.");
+    setActiveAction("restore");
+    try {
+      const result = await saveCourse({ ...course, status: "draft", visibility: "hidden" }, "restore");
+      if (!result.ok) return;
+      persistAndNavigateIfNeeded(result.course);
+      showManualMessage("Course restored to draft.");
+      notifySuccess("Draft restored");
+    } finally {
+      setActiveAction(null);
+    }
   };
 
-  const progressLabel = `${course.sections.length} section${course.sections.length === 1 ? "" : "s"} | ${
-    course.sections.reduce((sum, section) => sum + section.lessons.length, 0)
-  } lessons | ${course.sections.reduce((sum, section) => sum + section.tasks.length, 0)} tasks`;
+  const lessonCount = course.sections.reduce((sum, section) => sum + section.lessons.length, 0);
+  const assignmentCount = course.sections.reduce((sum, section) => sum + section.tasks.length, 0);
+  const projectCount = course.sections.reduce((sum, section) => sum + section.projects.length, 0);
+  const progressLabel = `${course.sections.length} section${course.sections.length === 1 ? "" : "s"} | ${lessonCount} lessons | ${assignmentCount} assignments | ${projectCount} projects`;
 
   return (
     <div className="space-y-8">
@@ -329,27 +493,27 @@ export function TeacherCourseEditor({
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Button variant="outline" onClick={saveDraft}>
+              <Button variant="outline" onClick={saveDraft} loading={activeAction === "draft"} loadingText="Saving draft...">
                 <Save className="h-4 w-4" /> Save as Draft
               </Button>
-              <Button variant="outline" onClick={openPreview}>
+              <Button variant="outline" onClick={openPreview} loading={activeAction === "preview"} loadingText="Opening preview...">
                 <Eye className="h-4 w-4" /> Preview
               </Button>
               {course.status === "published" ? (
-                <Button variant="outline" onClick={unpublish}>
+                <Button variant="outline" onClick={unpublish} loading={activeAction === "unpublish"} loadingText="Updating...">
                   Unpublish
                 </Button>
               ) : course.status === "archived" ? (
-                <Button variant="outline" onClick={restore}>
+                <Button variant="outline" onClick={restore} loading={activeAction === "restore"} loadingText="Restoring...">
                   Restore to Draft
                 </Button>
               ) : (
-                <Button variant="accent" onClick={publish}>
+                <Button variant="accent" onClick={publish} loading={activeAction === "publish"} loadingText={platformMode === "admin-owned" ? "Publishing..." : "Submitting..."}>
                   <Upload className="h-4 w-4" /> Publish
                 </Button>
               )}
               {course.status !== "archived" && (
-                <Button variant="outline" onClick={archive}>
+                <Button variant="outline" onClick={archive} loading={activeAction === "archive"} loadingText="Archiving...">
                   Archive
                 </Button>
               )}
@@ -417,29 +581,90 @@ export function TeacherCourseEditor({
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Input
-              label="Course Price"
-              type="number"
-              min="0"
-              value={String(course.price)}
-              onChange={(event) => updateCourse("price", Number(event.target.value || 0))}
-              hint="Set 0 for a fully free course. Any value above 0 unlocks the full course after one payment."
-            />
-            <Input
-              label="Tags"
-              value={course.tags.join(", ")}
-              onChange={(event) =>
-                updateCourse(
-                  "tags",
-                  event.target.value
-                    .split(",")
-                    .map((tag) => tag.trim())
-                    .filter(Boolean),
-                )
-              }
-              hint="Separate tags with commas."
-            />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Level</label>
+              <select
+                value={course.level}
+                onChange={(event) => updateCourse("level", event.target.value as TeacherCourseLevel)}
+                className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
+              >
+                {LEVEL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <Input label="Roadmap Link" value={course.roadmapLink} onChange={(event) => updateCourse("roadmapLink", event.target.value)} />
+          </div>
+
+          {/* Pricing */}
+          <div className="rounded-2xl border border-border bg-background p-5">
+            <div className="text-sm font-medium text-foreground">Pricing</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {([
+                { value: 0, label: "Free" },
+                { value: 1, label: "Paid" },
+              ] as const).map((option) => {
+                const isPaid = option.value === 1;
+                const active = isPaid ? course.price > 0 : course.price === 0;
+                return (
+                  <button
+                    key={option.label}
+                    type="button"
+                    onClick={() =>
+                      updateCourse("price", isPaid ? (course.price > 0 ? course.price : 10000) : 0)
+                    }
+                    className={`rounded-full border px-4 py-2 text-sm transition ${
+                      active
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            {course.price > 0 && (
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <Input
+                  label="Price (NGN)"
+                  type="number"
+                  min="0"
+                  value={String(course.price)}
+                  onChange={(event) => updateCourse("price", Number(event.target.value || 0))}
+                />
+                <Input
+                  label="Discount price (optional)"
+                  type="number"
+                  min="0"
+                  value={course.discountPrice === null ? "" : String(course.discountPrice)}
+                  onChange={(event) =>
+                    updateCourse(
+                      "discountPrice",
+                      event.target.value === "" ? null : Number(event.target.value),
+                    )
+                  }
+                  hint="Shown as a slashed original price next to the discounted one."
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <TagInput
+              label="Tech stack"
+              value={course.techStack}
+              onChange={(value) => updateCourse("techStack", value)}
+              hint="Tools the course teaches, e.g. React, Python, Figma. Shown as chips on the course card."
+            />
+            <TagInput
+              label="Tags"
+              value={course.tags}
+              onChange={(value) => updateCourse("tags", value)}
+              hint="Search keywords. Separate with commas or Enter."
+            />
           </div>
 
           <RichTextEditor
@@ -457,6 +682,41 @@ export function TeacherCourseEditor({
               className="min-h-28 bg-background"
               placeholder="Break down the delivery plan, milestones, and pacing."
             />
+          </div>
+
+          {/* SEO + certification */}
+          <div className="rounded-2xl border border-border bg-background p-5 space-y-4">
+            <div className="text-sm font-medium text-foreground">Discoverability & certification</div>
+            <Input
+              label="SEO meta title"
+              value={course.metaTitle}
+              onChange={(event) => updateCourse("metaTitle", event.target.value)}
+              hint="Title shown in search engines and shared links (defaults to the course title)."
+            />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">SEO meta description</label>
+              <Textarea
+                value={course.metaDescription}
+                onChange={(event) => updateCourse("metaDescription", event.target.value)}
+                className="min-h-20 bg-background"
+                placeholder="One or two sentences describing the course for search results."
+              />
+            </div>
+            <label className="flex items-start justify-between gap-4 rounded-2xl border border-border bg-card p-4">
+              <span>
+                <span className="font-medium">Ready for certification</span>
+                <span className="mt-1 block text-sm text-muted-foreground">
+                  When on, students who complete this course are automatically issued a MooreSkillUp
+                  certificate.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={course.certificateEnabled}
+                onChange={(event) => updateCourse("certificateEnabled", event.target.checked)}
+                className="mt-1 h-5 w-5 accent-primary"
+              />
+            </label>
           </div>
 
           <div className="rounded-[1.75rem] border border-border bg-background p-5">
@@ -529,7 +789,10 @@ export function TeacherCourseEditor({
                           <Plus className="h-4 w-4" /> Add Lesson
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => addTask(section.id)}>
-                          <Plus className="h-4 w-4" /> Add Task
+                          <Plus className="h-4 w-4" /> Add Assignment
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => addProject(section.id)}>
+                          <Plus className="h-4 w-4" /> Add Project
                         </Button>
                         <button
                           type="button"
@@ -680,8 +943,11 @@ export function TeacherCourseEditor({
                                     }
                                     className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
                                   >
-                                    <option value="video">Video</option>
-                                    <option value="text">Text</option>
+                                    {CONTENT_TYPE_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
                                   </select>
                                 </div>
                               </div>
@@ -702,10 +968,14 @@ export function TeacherCourseEditor({
                                     hint="Use a YouTube, Vimeo, or direct hosted video link. Learners will only see the player inside the lesson view."
                                   />
                                   {lesson.videoUrl.trim() && (
-                                    <div className="rounded-2xl border border-border bg-card p-4">
-                                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                                    <details className="group rounded-2xl border border-border bg-card p-4">
+                                      <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-primary">
                                         Learner video preview
-                                      </div>
+                                        <span className="text-[10px] font-normal normal-case text-muted-foreground">
+                                          <span className="group-open:hidden">Show ▸</span>
+                                          <span className="hidden group-open:inline">Hide ▾</span>
+                                        </span>
+                                      </summary>
                                       {getVideoRenderMode(lesson.videoUrl) === "iframe" ? (
                                         <div className="mt-3 overflow-hidden rounded-2xl border border-border">
                                           <div className="aspect-video w-full bg-black">
@@ -734,10 +1004,10 @@ export function TeacherCourseEditor({
                                           This link cannot be embedded yet. Use a valid YouTube, Vimeo, or direct video file URL.
                                         </div>
                                       )}
-                                    </div>
+                                    </details>
                                   )}
                                 </div>
-                              ) : (
+                              ) : lesson.contentType === "text" ? (
                                 <div className="mt-4">
                                   <RichTextEditor
                                     label="Text Content"
@@ -753,27 +1023,29 @@ export function TeacherCourseEditor({
                                     placeholder="Write the lesson content learners will read."
                                   />
                                 </div>
+                              ) : (
+                                <ResourceLinksEditor
+                                  links={lesson.resourceLinks}
+                                  onChange={(resourceLinks) =>
+                                    updateLesson(section.id, lesson.id, { resourceLinks }, setCourse)
+                                  }
+                                />
                               )}
 
                               <div className="mt-4">
-                                <Input
+                                <TagInput
                                   label="Lesson Tags"
                                   placeholder="Example: intro, variables, assignment"
-                                  value={lesson.tags.join(", ")}
-                                  onChange={(event) =>
+                                  value={lesson.tags}
+                                  onChange={(value) =>
                                     updateLesson(
                                       section.id,
                                       lesson.id,
-                                      {
-                                        tags: event.target.value
-                                          .split(",")
-                                          .map((tag) => tag.trim())
-                                          .filter(Boolean),
-                                      },
+                                      { tags: value },
                                       setCourse,
                                     )
                                   }
-                                  hint="Use short labels that describe the lesson topic or purpose."
+                                  hint="Use comma-separated short labels for the lesson topic or purpose."
                                 />
                               </div>
                             </div>
@@ -782,9 +1054,9 @@ export function TeacherCourseEditor({
 
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
-                            <div className="font-medium">Tasks</div>
+                            <div className="font-medium">Assignments</div>
                             <div className="text-sm text-muted-foreground">
-                              Add assignment instructions and optional submission resources.
+                              Students submit off-platform — no uploads or grading.
                             </div>
                           </div>
 
@@ -792,7 +1064,7 @@ export function TeacherCourseEditor({
                             section.tasks.map((task) => (
                               <div key={task.id} className="rounded-2xl border border-border bg-background p-4">
                                 <div className="mb-4 flex items-center justify-between">
-                                  <div className="font-medium">Task</div>
+                                  <div className="font-medium">Assignment</div>
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -802,14 +1074,14 @@ export function TeacherCourseEditor({
                                       }))
                                     }
                                     className="rounded-lg border border-border p-2 text-muted-foreground"
-                                    aria-label="Delete task"
+                                    aria-label="Delete assignment"
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </button>
                                 </div>
 
                                 <Input
-                                  label="Task Title"
+                                  label="Assignment title"
                                   value={task.title}
                                   onChange={(event) =>
                                     updateTask(section.id, task.id, { title: event.target.value }, setCourse)
@@ -823,13 +1095,13 @@ export function TeacherCourseEditor({
                                     onChange={(value) =>
                                       updateTask(section.id, task.id, { instructions: value }, setCourse)
                                     }
-                                    placeholder="Explain the task, expectations, and submission details."
+                                    placeholder="Explain the assignment and what learners should produce."
                                   />
                                 </div>
 
                                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                                   <div className="space-y-2">
-                                    <label className="text-sm font-medium text-foreground">Submission Type</label>
+                                    <label className="text-sm font-medium text-foreground">Submission method</label>
                                     <select
                                       value={task.submissionType}
                                       onChange={(event) =>
@@ -845,35 +1117,153 @@ export function TeacherCourseEditor({
                                       }
                                       className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
                                     >
-                                      <option value="file-upload">File upload</option>
-                                      <option value="text-submission">Text submission</option>
+                                      {SUBMISSION_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
                                     </select>
                                   </div>
                                   <Input
-                                    label="Resource Links"
-                                    placeholder="Example: submission form, GitHub repo, Google Drive folder"
-                                    value={task.resourceLinks.join(", ")}
+                                    label="Submission link"
+                                    placeholder="https://chat.whatsapp.com/..."
+                                    value={task.submissionUrl}
+                                    onChange={(event) =>
+                                      updateTask(section.id, task.id, { submissionUrl: event.target.value }, setCourse)
+                                    }
+                                    hint={
+                                      SUBMISSION_OPTIONS.find((option) => option.value === task.submissionType)?.hint
+                                    }
+                                  />
+                                </div>
+
+                                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                                  <Input
+                                    label="How to submit (shown to students)"
+                                    placeholder="e.g. Post your repo link in the WhatsApp group"
+                                    value={task.howToSubmit}
+                                    onChange={(event) =>
+                                      updateTask(section.id, task.id, { howToSubmit: event.target.value }, setCourse)
+                                    }
+                                  />
+                                  <Input
+                                    label="Due date (optional)"
+                                    type="date"
+                                    value={task.dueDate ?? ""}
                                     onChange={(event) =>
                                       updateTask(
                                         section.id,
                                         task.id,
-                                        {
-                                          resourceLinks: event.target.value
-                                            .split(",")
-                                            .map((item) => item.trim())
-                                            .filter(Boolean),
-                                        },
+                                        { dueDate: event.target.value || null },
                                         setCourse,
                                       )
                                     }
-                                    hint="Add the links learners will use to submit or access task resources."
                                   />
                                 </div>
                               </div>
                             ))
                           ) : (
                             <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-                              No tasks in this section yet.
+                              No assignments in this section yet.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="font-medium">Projects</div>
+                            <div className="text-sm text-muted-foreground">
+                              Larger build tasks completed off-platform.
+                            </div>
+                          </div>
+
+                          {section.projects.length ? (
+                            section.projects.map((project) => (
+                              <div key={project.id} className="rounded-2xl border border-border bg-background p-4">
+                                <div className="mb-4 flex items-center justify-between">
+                                  <div className="font-medium">Project</div>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateSection(section.id, (current) => ({
+                                        ...current,
+                                        projects: current.projects.filter((item) => item.id !== project.id),
+                                      }))
+                                    }
+                                    className="rounded-lg border border-border p-2 text-muted-foreground"
+                                    aria-label="Delete project"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+
+                                <Input
+                                  label="Project title"
+                                  value={project.title}
+                                  onChange={(event) =>
+                                    updateProject(section.id, project.id, { title: event.target.value }, setCourse)
+                                  }
+                                />
+
+                                <div className="mt-4 space-y-2">
+                                  <label className="text-sm font-medium text-foreground">Description</label>
+                                  <Textarea
+                                    value={project.description}
+                                    onChange={(event) =>
+                                      updateProject(section.id, project.id, { description: event.target.value }, setCourse)
+                                    }
+                                    className="min-h-20 bg-background"
+                                    placeholder="What the project is about."
+                                  />
+                                </div>
+
+                                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                                  <div className="space-y-2">
+                                    <label className="text-sm font-medium text-foreground">Requirements</label>
+                                    <Textarea
+                                      value={project.requirements}
+                                      onChange={(event) =>
+                                        updateProject(section.id, project.id, { requirements: event.target.value }, setCourse)
+                                      }
+                                      className="min-h-20 bg-background"
+                                      placeholder="What learners must include."
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-sm font-medium text-foreground">Deliverables</label>
+                                    <Textarea
+                                      value={project.deliverables}
+                                      onChange={(event) =>
+                                        updateProject(section.id, project.id, { deliverables: event.target.value }, setCourse)
+                                      }
+                                      className="min-h-20 bg-background"
+                                      placeholder="What learners must hand in."
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                                  <Input
+                                    label="Submission link"
+                                    placeholder="https://forms.gle/..."
+                                    value={project.submissionUrl}
+                                    onChange={(event) =>
+                                      updateProject(section.id, project.id, { submissionUrl: event.target.value }, setCourse)
+                                    }
+                                  />
+                                  <Input
+                                    label="How to submit (shown to students)"
+                                    value={project.howToSubmit}
+                                    onChange={(event) =>
+                                      updateProject(section.id, project.id, { howToSubmit: event.target.value }, setCourse)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+                              No projects in this section yet.
                             </div>
                           )}
                         </div>
@@ -990,6 +1380,19 @@ export function TeacherCourseEditor({
             </div>
           </details>
 
+          {platformMode === "teacher" && mode === "edit" && (
+            <VersionHistoryPanel
+              courseId={course.id}
+              fetchCourseVersions={fetchCourseVersions}
+              onRestore={async (versionId) => {
+                const restored = await restoreCourseVersion(course.id, versionId);
+                setCourse(clone(restored));
+                lastSnapshot.current = JSON.stringify(restored);
+                setActiveSectionId(restored.sections[0]?.id ?? null);
+              }}
+            />
+          )}
+
           <details className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
             <summary className="cursor-pointer list-none font-display text-2xl font-bold">Preview workflow</summary>
             <div className="mt-4 space-y-3 text-sm text-muted-foreground">
@@ -1015,6 +1418,152 @@ function MetricCard({ label, value }: { label: string; value: string }) {
     <div className="rounded-2xl border border-border bg-background p-4">
       <div className="text-sm text-muted-foreground">{label}</div>
       <div className="mt-1 font-display text-2xl font-bold">{value}</div>
+    </div>
+  );
+}
+
+function VersionHistoryPanel({
+  courseId,
+  fetchCourseVersions,
+  onRestore,
+}: {
+  courseId: string;
+  fetchCourseVersions: (courseId: string) => Promise<TeacherCourseVersion[]>;
+  onRestore: (versionId: string) => Promise<void>;
+}) {
+  const { notifyError, notifySuccess } = useFeedback();
+  const [versions, setVersions] = useState<TeacherCourseVersion[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      setVersions(await fetchCourseVersions(courseId));
+      setLoaded(true);
+    } catch (error) {
+      notifyError("Unable to load versions", error instanceof Error ? error.message : "Request failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <details
+      className="rounded-[2rem] border border-border bg-card p-6 shadow-sm"
+      onToggle={(event) => {
+        if ((event.currentTarget as HTMLDetailsElement).open && !loaded) void load();
+      }}
+    >
+      <summary className="cursor-pointer list-none font-display text-2xl font-bold">Version history</summary>
+      <p className="mt-2 text-sm text-muted-foreground">
+        A snapshot is saved each time you submit for review. Restore brings the course structure back to
+        that point (current work is snapshotted first, so nothing is lost).
+      </p>
+      <div className="mt-4 space-y-3">
+        {loading && <div className="text-sm text-muted-foreground">Loading versions...</div>}
+        {loaded && !versions.length && (
+          <div className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+            No saved versions yet. Submit the course for review to create your first snapshot.
+          </div>
+        )}
+        {versions.map((version) => (
+          <div key={version.id} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background p-4">
+            <div>
+              <div className="font-medium">Version {version.versionNumber}</div>
+              <div className="text-xs text-muted-foreground">
+                {version.note || "Snapshot"} · {version.sectionCount} sections ·{" "}
+                {new Date(version.createdAt).toLocaleString("en-NG")}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              loading={restoringId === version.id}
+              loadingText="Restoring..."
+              onClick={async () => {
+                setRestoringId(version.id);
+                try {
+                  await onRestore(version.id);
+                  notifySuccess("Course restored", `Restored to version ${version.versionNumber}.`);
+                  await load();
+                } catch (error) {
+                  notifyError("Restore failed", error instanceof Error ? error.message : "Request failed.");
+                } finally {
+                  setRestoringId(null);
+                }
+              }}
+            >
+              Restore
+            </Button>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function ResourceLinksEditor({
+  links,
+  onChange,
+}: {
+  links: TeacherResourceLink[];
+  onChange: (links: TeacherResourceLink[]) => void;
+}) {
+  const update = (index: number, patch: Partial<TeacherResourceLink>) => {
+    onChange(links.map((link, i) => (i === index ? { ...link, ...patch } : link)));
+  };
+  const add = () => onChange([...links, buildResourceLink()]);
+  const remove = (index: number) => onChange(links.filter((_, i) => i !== index));
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-medium text-foreground">Resources</label>
+        <Button variant="outline" size="sm" onClick={add}>
+          <Plus className="h-4 w-4" /> Add resource
+        </Button>
+      </div>
+      {links.length ? (
+        links.map((link, index) => (
+          <div key={index} className="grid gap-3 rounded-2xl border border-border bg-card p-3 md:grid-cols-[160px_1fr_1fr_auto]">
+            <select
+              value={link.type}
+              onChange={(event) => update(index, { type: event.target.value as TeacherResourceType })}
+              className="h-11 rounded-lg border border-input bg-background px-3 text-sm"
+            >
+              {RESOURCE_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <Input
+              placeholder="Title (e.g. Starter repo)"
+              value={link.title}
+              onChange={(event) => update(index, { title: event.target.value })}
+            />
+            <Input
+              placeholder="https://..."
+              value={link.url}
+              onChange={(event) => update(index, { url: event.target.value })}
+            />
+            <button
+              type="button"
+              onClick={() => remove(index)}
+              className="rounded-lg border border-border p-2 text-muted-foreground"
+              aria-label="Remove resource"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ))
+      ) : (
+        <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+          Add downloadable files or links: PDFs, GitHub repos, Google Drive, docs, ZIP, or websites.
+        </div>
+      )}
     </div>
   );
 }
@@ -1053,6 +1602,27 @@ function updateTask(
         ? {
             ...section,
             tasks: section.tasks.map((task) => (task.id === taskId ? { ...task, ...patch } : task)),
+          }
+        : section,
+    ),
+  }));
+}
+
+function updateProject(
+  sectionId: string,
+  projectId: string,
+  patch: Partial<TeacherProject>,
+  setCourse: Dispatch<SetStateAction<TeacherCourse>>,
+) {
+  setCourse((current) => ({
+    ...current,
+    sections: current.sections.map((section) =>
+      section.id === sectionId
+        ? {
+            ...section,
+            projects: section.projects.map((project) =>
+              project.id === projectId ? { ...project, ...patch } : project,
+            ),
           }
         : section,
     ),

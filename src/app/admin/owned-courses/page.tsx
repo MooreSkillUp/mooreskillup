@@ -1,15 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Eye, PencilLine, Upload } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
+import { useFeedback } from "@/lib/feedback";
 import { useAdminPlatform } from "@/lib/admin-platform";
 import { formatNaira } from "@/lib/commerce";
 
 export default function AdminOwnedCoursesPage() {
-  const { courses, isLoading, error, updateCourseCatalog, publishAdminOwnedCourse } = useAdminPlatform();
+  const { notifyError, notifySuccess } = useFeedback();
+  const { courses, isLoading, error, moderateCourse, updateCourseCatalog, publishAdminOwnedCourse } =
+    useAdminPlatform();
   const adminOwnedCourses = courses.filter((course) => course.ownerType === "admin");
+  const [actionKey, setActionKey] = useState<string | null>(null);
 
   return (
     <AppShell allowedRoles={["admin"]}>
@@ -72,7 +77,22 @@ export default function AdminOwnedCoursesPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => void updateCourseCatalog(course.id, { status: "draft", visibility: "hidden" })}
+                      loading={actionKey === `${course.id}:unpublish`}
+                      loadingText="Updating..."
+                      onClick={async () => {
+                        setActionKey(`${course.id}:unpublish`);
+                        try {
+                          await updateCourseCatalog(course.id, { status: "draft", visibility: "hidden" });
+                          notifySuccess("Course moved to draft");
+                        } catch (actionError) {
+                          notifyError(
+                            "Unable to update course",
+                            actionError instanceof Error ? actionError.message : "Request failed.",
+                          );
+                        } finally {
+                          setActionKey(null);
+                        }
+                      }}
                     >
                       Unpublish
                     </Button>
@@ -80,7 +100,22 @@ export default function AdminOwnedCoursesPage() {
                     <Button
                       variant="accent"
                       size="sm"
-                      onClick={() => void publishAdminOwnedCourse(course.id)}
+                      loading={actionKey === `${course.id}:publish`}
+                      loadingText="Publishing..."
+                      onClick={async () => {
+                        setActionKey(`${course.id}:publish`);
+                        try {
+                          await publishAdminOwnedCourse(course.id);
+                          notifySuccess("Course published", "The admin-owned course is now visible to students.");
+                        } catch (actionError) {
+                          notifyError(
+                            "Unable to publish course",
+                            actionError instanceof Error ? actionError.message : "Request failed.",
+                          );
+                        } finally {
+                          setActionKey(null);
+                        }
+                      }}
                     >
                       <Upload className="h-4 w-4" /> Publish
                     </Button>
@@ -89,7 +124,22 @@ export default function AdminOwnedCoursesPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => void updateCourseCatalog(course.id, { status: "draft", visibility: "hidden" })}
+                      loading={actionKey === `${course.id}:restore`}
+                      loadingText="Restoring..."
+                      onClick={async () => {
+                        setActionKey(`${course.id}:restore`);
+                        try {
+                          await moderateCourse(course.id, "restore");
+                          notifySuccess("Course restored to draft");
+                        } catch (actionError) {
+                          notifyError(
+                            "Unable to restore course",
+                            actionError instanceof Error ? actionError.message : "Request failed.",
+                          );
+                        } finally {
+                          setActionKey(null);
+                        }
+                      }}
                     >
                       Restore
                     </Button>
@@ -97,7 +147,22 @@ export default function AdminOwnedCoursesPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => void updateCourseCatalog(course.id, { status: "archived", visibility: "hidden" })}
+                      loading={actionKey === `${course.id}:archive`}
+                      loadingText="Archiving..."
+                      onClick={async () => {
+                        setActionKey(`${course.id}:archive`);
+                        try {
+                          await moderateCourse(course.id, "archive");
+                          notifySuccess("Course archived");
+                        } catch (actionError) {
+                          notifyError(
+                            "Unable to archive course",
+                            actionError instanceof Error ? actionError.message : "Request failed.",
+                          );
+                        } finally {
+                          setActionKey(null);
+                        }
+                      }}
                     >
                       Archive
                     </Button>

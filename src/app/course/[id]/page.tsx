@@ -1,294 +1,378 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { BookOpen, Heart, Lock, Sparkles } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  Award,
+  BadgeCheck,
+  ChevronDown,
+  ChevronUp,
+  ClipboardCheck,
+  FileText,
+  FolderGit2,
+  Heart,
+  Lock,
+  PlayCircle,
+  ScrollText,
+  Star,
+  Users,
+} from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
-import { formatNaira, getCourseActionLabel } from "@/lib/commerce";
+import { formatNaira } from "@/lib/commerce";
 import { useAuth } from "@/lib/auth";
-import { useTeacherWorkspace } from "@/lib/teacher-workspace";
+import { useFeedback } from "@/lib/feedback";
+import { enrollFree, submitReview, useCourse, useCourseReviews } from "@/lib/student";
+
+const LEVEL_LABEL = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" } as const;
 
 export default function CoursePage() {
   const params = useParams();
+  const router = useRouter();
+  const courseId = params.id as string;
   const { user, toggleWishlist } = useAuth();
-  const {
-    getCourseById,
-    brandLabel,
-    getStudentCourseProgress,
-    getStudentCourseSections,
-    isCourseOwnedByStudent,
-    getContinueLearningLessonId,
-    markLessonComplete,
-  } = useTeacherWorkspace();
-  const course = getCourseById(params.id as string);
+  const { notifyError, notifySuccess } = useFeedback();
+  const { course, isLoading, error, refresh } = useCourse(courseId);
+  const { reviews, refresh: refreshReviews } = useCourseReviews(courseId);
+  const [openSections, setOpenSections] = useState<string[]>([]);
+  const [enrolling, setEnrolling] = useState(false);
+  const [myRating, setMyRating] = useState(0);
+  const [myComment, setMyComment] = useState("");
+  const [reviewSaving, setReviewSaving] = useState(false);
 
-  if (!course) {
+  if (isLoading) {
     return (
-      <AppShell>
-        <div className="mx-auto max-w-md text-center">
+      <AppShell allowedRoles={["student"]}>
+        <div className="h-96 animate-pulse rounded-[2rem] bg-muted/40" />
+      </AppShell>
+    );
+  }
+
+  if (error || !course) {
+    return (
+      <AppShell allowedRoles={["student"]}>
+        <div className="mx-auto max-w-md py-20 text-center">
           <h1 className="font-display text-2xl font-bold">Course not found</h1>
-          <Link href="/dashboard/courses">
-            <Button variant="outline" className="mt-4">
-              Back to courses
-            </Button>
+          <p className="mt-2 text-muted-foreground">{error || "This course may have been unpublished."}</p>
+          <Link href="/dashboard/courses" className="mt-4 inline-block font-semibold text-primary">
+            Back to courses
           </Link>
         </div>
       </AppShell>
     );
   }
 
-  const sections = getStudentCourseSections(course.id);
-  const owned = isCourseOwnedByStudent(course.id);
-  const progress = getStudentCourseProgress(course.id);
-  const continueLessonId = getContinueLearningLessonId(course.id);
-  const firstLessonId = sections[0]?.lessons[0]?.id;
-  const inWatchlist = (user?.wishlist ?? []).includes(course.id);
+  const isFree = course.price === 0;
+  const showDiscount = course.discountPrice !== null && course.discountPrice < course.price;
+  const firstLesson = course.sections.flatMap((s) => s.lessons)[0];
+  const totalLessons = course.sections.reduce((sum, s) => sum + s.lessons.length, 0);
+
+  const onEnroll = async () => {
+    if (course.isOwned) {
+      router.push(firstLesson ? `/lesson/${firstLesson.id}` : "/dashboard/courses");
+      return;
+    }
+    if (isFree) {
+      try {
+        setEnrolling(true);
+        await enrollFree(course.id);
+        notifySuccess("Enrolled!", "You now have access. Happy learning.");
+        await refresh();
+        router.push(firstLesson ? `/lesson/${firstLesson.id}` : "/dashboard/courses");
+      } catch (e) {
+        notifyError("Unable to enroll", e instanceof Error ? e.message : "Request failed.");
+      } finally {
+        setEnrolling(false);
+      }
+    } else {
+      router.push(`/payment/${course.id}`);
+    }
+  };
+
+  const ctaLabel = course.isOwned ? "Go to course" : isFree ? "Enroll for free" : "Buy this course";
 
   return (
-    <AppShell>
-      <div className="space-y-6">
-        <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary via-primary-glow to-accent p-6 text-white shadow-lg sm:p-8">
-          <BookOpen className="absolute right-6 top-6 h-20 w-20 text-white/15" />
-          <div className="text-xs font-medium uppercase tracking-[0.25em] text-white/80">
-            {course.program} | {course.track}
-          </div>
-          <h1 className="mt-2 font-display text-3xl font-bold sm:text-4xl">{course.title}</h1>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <div className="rounded-2xl bg-white/15 px-4 py-3 text-sm backdrop-blur">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70">
-                Full Course Access
-              </div>
-              <div className="mt-1 font-display text-2xl font-bold">
-                {course.price === 0 ? "₦0" : formatNaira(course.price)}
-              </div>
-            </div>
-            <div className="rounded-2xl bg-white/15 px-4 py-3 text-sm backdrop-blur">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70">
-                Course Status
-              </div>
-              <div className="mt-1 font-semibold">
-                {owned ? "Unlocked" : course.price === 0 ? "Free course" : "Preview mode"}
-              </div>
-            </div>
-          </div>
-          <p className="mt-3 max-w-2xl text-sm uppercase tracking-[0.2em] text-white/75">{brandLabel}</p>
-          <p className="mt-3 max-w-2xl text-white/85">{course.subtitle}</p>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            {owned && continueLessonId ? (
-              <Link href={`/lesson/${continueLessonId}`}>
-                <Button variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20">
-                  Continue Learning
-                </Button>
-              </Link>
-            ) : course.price === 0 && firstLessonId ? (
-              <Link href={`/lesson/${firstLessonId}`}>
-                <Button variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20">
-                  {getCourseActionLabel(course.price, owned)}
-                </Button>
-              </Link>
-            ) : (
-              <Link href={course.price === 0 ? `/course/${course.id}` : `/payment/${course.id}`}>
-                <Button variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20">
-                  {getCourseActionLabel(course.price, owned)}
-                </Button>
-              </Link>
-            )}
-            <Button
-              variant="outline"
-              className="border-white/30 bg-white/10 text-white hover:bg-white/20"
-              onClick={() => toggleWishlist(course.id)}
-            >
-              <Heart className={`h-4 w-4 ${inWatchlist ? "fill-current" : ""}`} />
-              {inWatchlist ? "Saved to Watchlist" : "Add to Watchlist"}
-            </Button>
-            <div className="rounded-2xl bg-white/15 px-4 py-3 text-sm backdrop-blur">
-              {progress}% completion
-            </div>
-          </div>
-        </section>
-
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-6">
-            <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-                Course Overview
-              </div>
-              <div
-                className="prose prose-sm mt-4 max-w-none text-muted-foreground dark:prose-invert"
-                dangerouslySetInnerHTML={{ __html: course.overview || "<p>No overview yet.</p>" }}
-              />
-            </section>
-
-            <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-                    Sections
-                  </div>
-                  <h2 className="mt-2 font-display text-2xl font-bold">
-                    Course &gt; Sections &gt; Lessons &gt; Tasks
-                  </h2>
-                </div>
-                {!owned && course.price > 0 && (
-                  <Link href={`/payment/${course.id}`}>
-                    <Button variant="accent">Unlock Course</Button>
-                  </Link>
+    <AppShell allowedRoles={["student"]}>
+      <div className="space-y-8">
+        {/* Hero */}
+        <div className="overflow-hidden rounded-[2rem] border border-border bg-gradient-to-br from-primary/10 via-background to-accent-soft">
+          <div className="grid gap-6 p-6 lg:grid-cols-[1.6fr_1fr] lg:p-8">
+            <div>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em]">
+                <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">{LEVEL_LABEL[course.level]}</span>
+                <span className="rounded-full bg-card px-3 py-1 text-muted-foreground shadow-sm">
+                  {course.program} · {course.track}
+                </span>
+                {course.certificateEnabled && (
+                  <span className="flex items-center gap-1 rounded-full bg-success/10 px-3 py-1 text-success">
+                    <Award className="h-3.5 w-3.5" /> Certificate
+                  </span>
                 )}
               </div>
+              <h1 className="mt-4 font-display text-4xl font-bold leading-tight">{course.title}</h1>
+              <p className="mt-3 text-lg text-muted-foreground">{course.subtitle}</p>
 
-              <div className="mt-6 space-y-5">
-                {sections.map((section, index) => (
-                  <div key={section.id} className="rounded-[1.5rem] border border-border bg-background p-5">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <div className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">
-                          Section {index + 1}
-                        </div>
-                        <h3 className="mt-2 font-display text-xl font-bold">{section.title}</h3>
-                        <p className="mt-2 text-sm text-muted-foreground">{section.description}</p>
-                      </div>
-                      <div className="rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                        {section.status}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 space-y-3">
-                      {section.lessons.map((lesson) => (
-                        <div key={lesson.id} className="rounded-2xl border border-border bg-card p-4">
-                          <div className="font-medium">{lesson.title}</div>
-                          <div className="mt-1 text-sm text-muted-foreground">
-                            Type: {lesson.type === "video" ? "Video" : "Text"} | {lesson.status}
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {lesson.status === "locked" ? (
-                              <div className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                                <Lock className="h-3.5 w-3.5" /> Locked
-                              </div>
-                            ) : (
-                              <>
-                                <Link href={`/lesson/${lesson.id}`}>
-                                  <Button variant="outline" size="sm">
-                                    {lesson.status === "in-progress" ? "Next Lesson" : "Start Lesson"}
-                                  </Button>
-                                </Link>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => markLessonComplete(course.id, lesson.id)}
-                                >
-                                  Mark Complete
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-4 rounded-2xl border border-border bg-card p-4">
-                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-                        Section task
-                      </div>
-                      {section.tasks.map((task) => (
-                        <div key={task.id} className="mt-3">
-                          <div className="font-medium">{task.title}</div>
-                          <div className="mt-1 text-sm text-muted-foreground">{task.instructions}</div>
-                          <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                            <span className="font-semibold text-foreground">{task.submissionGuide}</span>
-                            <a
-                              href={task.watchGuideUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="font-semibold text-primary"
-                            >
-                              Watch Section Guide
-                            </a>
-                            <a
-                              href={task.sectionChannelUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="font-semibold text-primary"
-                            >
-                              Open Section Channel
-                            </a>
-                            <a
-                              href={task.submissionChannelUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="font-semibold text-primary"
-                            >
-                              Open Submission Channel
-                            </a>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {section.isLocked && (
-                      <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50/80 p-4 text-sm text-amber-900">
-                        <div className="font-semibold">Locked</div>
-                        <div className="mt-1">
-                          Unlock Course to access this section and the rest of the learning flow.
-                        </div>
-                        <Link href={`/payment/${course.id}`} className="mt-3 inline-flex">
-                          <Button size="sm" variant="accent">
-                            Unlock Full Course
-                          </Button>
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                ))}
+              <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                {course.reviewCount > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                    <strong className="text-foreground">{course.averageRating}</strong> ({course.reviewCount} reviews)
+                  </span>
+                )}
+                <span className="flex items-center gap-1">
+                  <Users className="h-4 w-4" /> {course.enrollments} enrolled
+                </span>
+                <span>{totalLessons} lessons</span>
               </div>
-            </section>
+
+              <div className="mt-4 text-sm text-muted-foreground">
+                Produced by <strong className="text-foreground">MooreSkillUp</strong> · Instructor {course.teacherName}
+              </div>
+
+              {course.techStack.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {course.techStack.map((tech) => (
+                    <span key={tech} className="rounded-full bg-card px-3 py-1 text-xs font-medium text-foreground shadow-sm">
+                      {tech}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Pricing card */}
+            <div className="self-start rounded-[1.5rem] border border-border bg-card p-6 shadow-lg lg:sticky lg:top-6">
+              <div className="font-display text-3xl font-bold">
+                {isFree ? (
+                  <span className="text-success">Free</span>
+                ) : showDiscount ? (
+                  <span className="flex items-baseline gap-2">
+                    {formatNaira(course.discountPrice as number)}
+                    <span className="text-base font-normal text-muted-foreground line-through">
+                      {formatNaira(course.price)}
+                    </span>
+                  </span>
+                ) : (
+                  formatNaira(course.price)
+                )}
+              </div>
+              {course.isOwned && (
+                <div className="mt-2 flex items-center gap-1 text-sm font-medium text-success">
+                  <BadgeCheck className="h-4 w-4" /> You own this course
+                </div>
+              )}
+              <Button
+                variant="accent"
+                size="lg"
+                className="mt-4 w-full"
+                onClick={() => void onEnroll()}
+                loading={enrolling}
+                loadingText="Enrolling..."
+              >
+                {ctaLabel}
+              </Button>
+              {user?.role === "student" && (
+                <Button variant="outline" className="mt-2 w-full" onClick={() => void toggleWishlist(course.id)}>
+                  <Heart className={`h-4 w-4 ${course.isInWatchlist ? "fill-current" : ""}`} />
+                  {course.isInWatchlist ? "In your wishlist" : "Add to wishlist"}
+                </Button>
+              )}
+              <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
+                <li>✓ Full lifetime access</li>
+                <li>✓ Learn at your own pace</li>
+                {course.certificateEnabled && <li>✓ Certificate of completion</li>}
+                <li>✓ Free preview lessons below</li>
+              </ul>
+            </div>
           </div>
+        </div>
 
-          <div className="space-y-6">
-            <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-accent" />
-                <h2 className="font-display text-2xl font-bold">Roadmap</h2>
-              </div>
-              <div className="mt-4 whitespace-pre-wrap text-sm text-muted-foreground">
-                {course.schemeOfWork}
-              </div>
+        <div className="grid gap-8 lg:grid-cols-[1.6fr_1fr]">
+          <div className="space-y-8">
+            {/* About */}
+            <section>
+              <h2 className="font-display text-2xl font-bold">About this course</h2>
+              <div
+                className="prose prose-sm mt-3 max-w-none text-muted-foreground dark:prose-invert"
+                dangerouslySetInnerHTML={{ __html: course.overview || "<p>No description yet.</p>" }}
+              />
               {course.roadmapLink && (
-                <a
-                  href={course.roadmapLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 inline-flex text-sm font-semibold text-primary"
-                >
-                  Open roadmap
+                <a href={course.roadmapLink} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm font-semibold text-primary">
+                  View the learning roadmap →
                 </a>
               )}
             </section>
 
-            {!owned && course.price > 0 && (
-              <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-                <h2 className="font-display text-2xl font-bold">Unlock Full Course</h2>
-                <div className="mt-4 rounded-2xl border border-border bg-background p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                    Full Course Access
+            {/* Curriculum */}
+            <section>
+              <h2 className="font-display text-2xl font-bold">Course content</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {course.sections.length} sections · {totalLessons} lessons
+              </p>
+              <div className="mt-4 space-y-3">
+                {course.sections.map((section, index) => {
+                  const isOpen = openSections.includes(section.id);
+                  const locked = section.isLocked;
+                  return (
+                    <div key={section.id} className="overflow-hidden rounded-2xl border border-border bg-card">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenSections((cur) =>
+                            cur.includes(section.id) ? cur.filter((id) => id !== section.id) : [...cur, section.id],
+                          )
+                        }
+                        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+                      >
+                        <div className="flex items-center gap-3">
+                          {locked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <PlayCircle className="h-4 w-4 text-primary" />}
+                          <div>
+                            <div className="font-semibold">
+                              Section {index + 1}: {section.title || "Untitled"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {section.lessons.length} lessons
+                              {section.isFree ? " · Free preview" : " · Paid"}
+                            </div>
+                          </div>
+                        </div>
+                        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </button>
+                      {isOpen && (
+                        <div className="border-t border-border">
+                          {section.lessons.map((lesson) => {
+                            const canPreview = !locked || lesson.isPreviewable || section.isFree;
+                            return (
+                              <div key={lesson.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                                <div className="flex items-center gap-3">
+                                  {lesson.type === "video" ? (
+                                    <PlayCircle className="h-4 w-4 text-muted-foreground" />
+                                  ) : lesson.type === "resource" ? (
+                                    <FileText className="h-4 w-4 text-muted-foreground" />
+                                  ) : (
+                                    <ScrollText className="h-4 w-4 text-muted-foreground" />
+                                  )}
+                                  <span>{lesson.title || "Untitled lesson"}</span>
+                                </div>
+                                {canPreview ? (
+                                  <Link href={`/lesson/${lesson.id}`} className="font-medium text-primary">
+                                    {course.isOwned ? "Open" : "Preview"}
+                                  </Link>
+                                ) : (
+                                  <Lock className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </div>
+                            );
+                          })}
+                          {section.assignments.map((a) => (
+                            <div key={a.id} className="flex items-center gap-3 px-5 py-3 text-sm text-muted-foreground">
+                              <ClipboardCheck className="h-4 w-4" /> Assignment: {a.title || "Untitled"}
+                            </div>
+                          ))}
+                          {section.projects.map((p) => (
+                            <div key={p.id} className="flex items-center gap-3 px-5 py-3 text-sm text-muted-foreground">
+                              <FolderGit2 className="h-4 w-4" /> Project: {p.title || "Untitled"}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Reviews */}
+            <section>
+              <h2 className="font-display text-2xl font-bold">
+                Reviews {course.reviewCount > 0 && <span className="text-muted-foreground">· {course.averageRating} ★ ({course.reviewCount})</span>}
+              </h2>
+
+              {course.isOwned && (
+                <div className="mt-4 rounded-2xl border border-border bg-card p-5">
+                  <div className="text-sm font-medium">Rate this course</div>
+                  <div className="mt-2 flex items-center gap-1">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <button key={i} type="button" onClick={() => setMyRating(i + 1)} aria-label={`${i + 1} stars`}>
+                        <Star className={`h-6 w-6 ${i < myRating ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+                      </button>
+                    ))}
                   </div>
-                  <div className="mt-2 font-medium">{course.title}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    Price: {formatNaira(course.price)}
-                  </div>
-                  <div className="mt-3 text-sm text-muted-foreground">
-                    Unlock all sections, lessons, tasks, and progress tracking in one payment.
-                  </div>
-                </div>
-                <Link href={`/payment/${course.id}`} className="mt-4 block">
-                  <Button variant="accent" className="w-full">
-                    Proceed to Payment
+                  <textarea
+                    value={myComment}
+                    onChange={(e) => setMyComment(e.target.value)}
+                    placeholder="Share what you thought (optional)"
+                    className="mt-3 min-h-20 w-full rounded-xl border border-input bg-background p-3 text-sm outline-none"
+                    style={{ direction: "ltr" }}
+                  />
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    className="mt-2"
+                    disabled={myRating === 0}
+                    loading={reviewSaving}
+                    loadingText="Submitting..."
+                    onClick={async () => {
+                      try {
+                        setReviewSaving(true);
+                        await submitReview(course.id, myRating, myComment.trim());
+                        notifySuccess("Thanks for your review!");
+                        setMyComment("");
+                        setMyRating(0);
+                        await refreshReviews();
+                        await refresh();
+                      } catch (e) {
+                        notifyError(
+                          "Couldn't submit review",
+                          e instanceof Error ? e.message : "You can review after completing at least half the course.",
+                        );
+                      } finally {
+                        setReviewSaving(false);
+                      }
+                    }}
+                  >
+                    Submit review
                   </Button>
-                </Link>
-              </section>
-            )}
+                </div>
+              )}
+
+              {!reviews.length ? (
+                <p className="mt-2 text-sm text-muted-foreground">No reviews yet. Be the first after you start learning.</p>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  {reviews.map((review) => (
+                    <div key={review.id} className="rounded-2xl border border-border bg-card p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{review.studentName}</span>
+                        <span className="flex items-center gap-0.5">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`h-3.5 w-3.5 ${i < review.rating ? "fill-amber-400 text-amber-400" : "text-muted"}`}
+                            />
+                          ))}
+                        </span>
+                      </div>
+                      {review.comment && <p className="mt-2 text-sm text-muted-foreground">{review.comment}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
+
+          <aside className="space-y-4">
+            <div className="rounded-2xl border border-border bg-card p-5">
+              <h3 className="font-display text-lg font-bold">This course includes</h3>
+              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                <li>{totalLessons} lessons across {course.sections.length} sections</li>
+                <li>Video, reading, and resource lessons</li>
+                <li>Assignments &amp; projects</li>
+                {course.certificateEnabled && <li>Certificate of completion</li>}
+              </ul>
+            </div>
+          </aside>
         </div>
       </div>
     </AppShell>

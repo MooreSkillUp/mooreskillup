@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Bold, Italic, List, ListOrdered } from "lucide-react";
 
 export function RichTextEditor({
@@ -15,6 +15,17 @@ export function RichTextEditor({
   placeholder?: string;
 }) {
   const editorRef = useRef<HTMLDivElement | null>(null);
+
+  // Only push `value` into the DOM when it differs from what the editor already
+  // shows. Writing innerHTML on every keystroke (the old bug) reset the caret to
+  // the start, so each typed character landed in front of the last — text came
+  // out reversed. Syncing only on external changes keeps the caret in place.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (editor && editor.innerHTML !== value) {
+      editor.innerHTML = value || "";
+    }
+  }, [value]);
 
   const runCommand = (command: "bold" | "italic" | "insertUnorderedList" | "insertOrderedList") => {
     editorRef.current?.focus();
@@ -43,11 +54,12 @@ export function RichTextEditor({
         <div
           ref={editorRef}
           contentEditable
+          dir="ltr"
+          style={{ direction: "ltr", textAlign: "left", unicodeBidi: "plaintext" }}
           suppressContentEditableWarning
           onInput={(event) => onChange(event.currentTarget.innerHTML)}
-          className="min-h-32 px-4 py-3 text-sm outline-none"
+          className="min-h-32 px-4 py-3 text-sm leading-7 outline-none [&:empty]:before:text-muted-foreground [&:empty]:before:content-[attr(data-placeholder)]"
           data-placeholder={placeholder}
-          dangerouslySetInnerHTML={{ __html: value || "" }}
         />
       </div>
     </div>

@@ -1,137 +1,101 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Award, Download, Lock } from "lucide-react";
 import Link from "next/link";
-import { AppShell } from "../../components/dashboard/AppShell";
-import { Button } from "../../components/ui-kit/Button";
-import { useAuth } from "../../lib/auth";
-import { generateCertificatePdf } from "../../lib/certificate";
-import { useTeacherWorkspace } from "../../lib/teacher-workspace";
+import { Award, Download, ExternalLink, GraduationCap, ShieldCheck } from "lucide-react";
+import { AppShell } from "@/components/dashboard/AppShell";
+import { Button } from "@/components/ui-kit/Button";
+import { useAuth } from "@/lib/auth";
+import { generateCertificatePdf } from "@/lib/certificate";
+import { useMyCertificates } from "@/lib/student";
 
 export default function CertificatesPage() {
   const { user } = useAuth();
-  const {
-    brandLabel,
-    getCategoryName,
-    getMyLearningCourses,
-    getStudentCourseProgress,
-    getSubcategoryName,
-  } = useTeacherWorkspace();
+  const { certificates, template, isLoading } = useMyCertificates(user?.role === "student");
 
-  const certificateCourses = getMyLearningCourses();
+  const active = certificates.filter((c) => !c.isRevoked);
+
+  const download = (cert: (typeof certificates)[number]) => {
+    generateCertificatePdf({
+      recipientName: user?.displayName ?? "Learner",
+      courseTitle: cert.courseTitle,
+      date: cert.issuedAt ? new Date(cert.issuedAt).toLocaleDateString("en-NG") : "",
+      certId: cert.certificateCode,
+      institution: template?.institutionName,
+      signatoryName: template?.signatoryName,
+      signatoryTitle: template?.signatoryTitle,
+      accentColor: template?.accentColor,
+      sealText: template?.sealText,
+      verificationUrl: cert.verificationUrl,
+    });
+  };
 
   return (
-    <AppShell>
-      <div className="space-y-8">
-        <div className="rounded-2xl bg-gradient-to-br from-primary via-primary-glow to-accent p-6 text-primary-foreground shadow-lg sm:p-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
-              <Award className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wider text-white/80">
-                Certificates
-              </div>
-              <h1 className="font-display text-3xl font-bold sm:text-4xl">Your accomplishments</h1>
-            </div>
-          </div>
-          <p className="mt-3 max-w-2xl text-white/85">
-            Certificates now reflect the actual courses you complete, including the category and specialization you finished.
+    <AppShell allowedRoles={["student"]}>
+      <div className="space-y-6">
+        <div>
+          <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Certificates</div>
+          <h1 className="mt-2 font-display text-4xl font-bold">Your achievements</h1>
+          <p className="mt-2 max-w-3xl text-muted-foreground">
+            Earn a MooreSkillUp certificate by completing a certificate-enabled course. Each one has a
+            unique ID and a public verification link.
           </p>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
-          {certificateCourses.map((course, i) => {
-            const progress = getStudentCourseProgress(course.id);
-            const eligible = progress === 100;
-            const specialization = `${getCategoryName(course.categoryId)} - ${getSubcategoryName(
-              course.categoryId,
-              course.subcategoryId,
-            )}`;
-            const certId = `MSU-${course.id.toUpperCase().slice(0, 6)}-${(user?.id ?? "00000").slice(-4)}`;
-            const date = new Date().toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            });
-
-            return (
-              <motion.div
-                key={course.id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.08 }}
-                className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
-              >
-                <div className="relative aspect-[1.4/1] border-b border-border bg-white p-6">
-                  <div className="absolute inset-3 rounded-lg border-[6px] border-primary/90">
-                    <div className="absolute inset-2 border border-accent" />
+        {isLoading ? (
+          <div className="grid gap-5 sm:grid-cols-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="h-48 animate-pulse rounded-[2rem] bg-muted/40" />
+            ))}
+          </div>
+        ) : !active.length ? (
+          <div className="rounded-[2rem] border border-dashed border-border bg-card p-12 text-center">
+            <GraduationCap className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h2 className="mt-4 font-display text-2xl font-bold">No certificates yet</h2>
+            <p className="mt-2 text-muted-foreground">
+              Finish a certificate-enabled course and it will appear here, ready to download.
+            </p>
+            <Link href="/dashboard/courses" className="mt-4 inline-block">
+              <Button variant="accent">Browse courses</Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2">
+            {active.map((cert) => (
+              <div key={cert.id} className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
+                <div className="bg-gradient-to-br from-primary via-primary-glow to-accent p-6 text-white">
+                  <Award className="h-10 w-10" />
+                  <div className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
+                    Certificate of Completion
                   </div>
-                  <div className="relative flex h-full flex-col items-center justify-center text-center text-foreground">
-                    <div className="font-display text-[10px] font-bold uppercase tracking-[0.25em] text-primary">
-                      More SkillUp
-                    </div>
-                    <div className="mt-2 font-display text-base font-bold text-primary sm:text-lg">
-                      Certificate of Completion
-                    </div>
-                    <div className="mt-3 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Awarded to
-                    </div>
-                    <div className="mt-1 font-display text-lg font-bold sm:text-xl">
-                      {user?.displayName ?? "Your name"}
-                    </div>
-                    <div className="mt-3 text-[10px] text-muted-foreground">for completing</div>
-                    <div className="mt-0.5 text-sm font-semibold text-primary">{course.title}</div>
-                    <div className="mt-2 text-[11px] text-muted-foreground">{specialization}</div>
-                  </div>
-                  {!eligible && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-card/80 backdrop-blur-sm">
-                      <div className="flex flex-col items-center gap-2 text-center">
-                        <Lock className="h-7 w-7 text-muted-foreground" />
-                        <div className="text-sm font-semibold text-foreground">
-                          Complete the course to unlock
-                        </div>
-                        <div className="text-xs text-muted-foreground">{progress}% complete</div>
-                      </div>
-                    </div>
-                  )}
+                  <div className="mt-1 font-display text-2xl font-bold">{cert.courseTitle}</div>
                 </div>
-
-                <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="font-display text-base font-bold">{course.title}</div>
-                    <div className="text-xs text-muted-foreground">{brandLabel}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{specialization}</div>
+                <div className="space-y-3 p-5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Certificate ID</span>
+                    <span className="font-mono font-semibold">{cert.certificateCode}</span>
                   </div>
-                  <Button
-                    variant={eligible ? "accent" : "outline"}
-                    disabled={!eligible}
-                    onClick={() =>
-                      generateCertificatePdf({
-                        recipientName: user?.displayName ?? "Learner",
-                        courseTitle: `${course.title} (${specialization})`,
-                        instructor: "More SkillUp",
-                        date,
-                        certId,
-                      })
-                    }
-                  >
-                    <Download className="h-4 w-4" />
-                    {eligible ? "Download PDF" : "Locked"}
-                  </Button>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Issued</span>
+                    <span>{cert.issuedAt ? new Date(cert.issuedAt).toLocaleDateString("en-NG") : "—"}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <Button variant="accent" size="sm" onClick={() => download(cert)}>
+                      <Download className="h-4 w-4" /> Download PDF
+                    </Button>
+                    {cert.verificationUrl && (
+                      <a href={cert.verificationUrl} target="_blank" rel="noopener noreferrer">
+                        <Button variant="outline" size="sm">
+                          <ShieldCheck className="h-4 w-4" /> Verify
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Button>
+                      </a>
+                    )}
+                  </div>
                 </div>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
-          Certificates unlock when course progress reaches 100%.{" "}
-          <Link href="/dashboard/courses" className="font-semibold text-primary hover:text-accent">
-            Open your courses
-          </Link>
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </AppShell>
   );

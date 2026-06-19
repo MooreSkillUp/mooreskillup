@@ -1,13 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PencilLine, Plus, Sparkles, Star, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, PencilLine, Plus, Sparkles, Star, ThumbsUp, Trash2, Users } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
+import { useAuth } from "@/lib/auth";
+import { useFeedback } from "@/lib/feedback";
 import { useAdminPlatform } from "@/lib/admin-platform";
 
 export default function AdminCoursesPage() {
+  const { user } = useAuth();
+  const { notifyError, notifySuccess } = useFeedback();
   const {
     categories,
     courses,
@@ -18,14 +22,100 @@ export default function AdminCoursesPage() {
     updateSubcategory,
     deleteSubcategory,
     updateCourseCatalog,
+    deleteCourse,
+    abortCourseDeletion,
     isLoading,
     error,
   } = useAdminPlatform();
+  const canDelete = user?.permissions?.includes("courses:delete") ?? false;
+  const [busyCourseId, setBusyCourseId] = useState<string | null>(null);
+
+  const deletionRequests = useMemo(() => courses.filter((course) => course.pendingDeletion), [courses]);
+
+  const approveDeletion = async (courseId: string, title: string) => {
+    if (!window.confirm(`Permanently delete "${title}"? This cannot be undone.`)) return;
+    setBusyCourseId(courseId);
+    try {
+      await deleteCourse(courseId);
+      notifySuccess("Course deleted");
+    } catch (e) {
+      notifyError("Delete failed", e instanceof Error ? e.message : "Request failed.");
+    } finally {
+      setBusyCourseId(null);
+    }
+  };
+
+  const abortDeletion = async (courseId: string) => {
+    setBusyCourseId(courseId);
+    try {
+      await abortCourseDeletion(courseId);
+      notifySuccess("Deletion aborted", "The course stays live and the teacher was notified.");
+    } catch (e) {
+      notifyError("Abort failed", e instanceof Error ? e.message : "Request failed.");
+    } finally {
+      setBusyCourseId(null);
+    }
+  };
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newSubcategoryByCategory, setNewSubcategoryByCategory] = useState<Record<string, string>>({});
   const [courseSearch, setCourseSearch] = useState("");
   const [selectedProgramId, setSelectedProgramId] = useState("all");
   const [selectedTrackId, setSelectedTrackId] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [selectedTeacherId, setSelectedTeacherId] = useState("all");
+  const [communityDrafts, setCommunityDrafts] = useState<Record<string, { url: string; label: string }>>({});
+
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)),
+    [categories],
+  );
+
+  const teacherOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    courses.forEach((course) => {
+      if (course.ownerType === "teacher" && course.teacherId && course.teacherName) {
+        map.set(course.teacherId, course.teacherName);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [courses]);
+
+  const reorderCategory = async (categoryId: string, direction: "up" | "down") => {
+    const index = sortedCategories.findIndex((category) => category.id === categoryId);
+    const swapIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || swapIndex < 0 || swapIndex >= sortedCategories.length) return;
+    const current = sortedCategories[index];
+    const neighbour = sortedCategories[swapIndex];
+    const currentOrder = current.displayOrder ?? index;
+    const neighbourOrder = neighbour.displayOrder ?? swapIndex;
+    try {
+      await Promise.all([
+        updateCategory(current.id, { displayOrder: neighbourOrder }),
+        updateCategory(neighbour.id, { displayOrder: currentOrder }),
+      ]);
+    } catch (e) {
+      notifyError("Reorder failed", e instanceof Error ? e.message : "Request failed.");
+    }
+  };
+
+  const saveCommunity = async (categoryId: string) => {
+    const draft = communityDrafts[categoryId];
+    if (!draft) return;
+    try {
+      await updateCategory(categoryId, { communityUrl: draft.url.trim(), communityLabel: draft.label.trim() });
+      notifySuccess("Community link saved", "Students on this program will see the join link.");
+    } catch (e) {
+      notifyError("Could not save community link", e instanceof Error ? e.message : "Request failed.");
+    }
+  };
+
+  const toggleRecommended = async (courseId: string, next: boolean) => {
+    try {
+      await updateCourseCatalog(courseId, { isRecommended: next });
+    } catch (e) {
+      notifyError("Update failed", e instanceof Error ? e.message : "Request failed.");
+    }
+  };
 
   const featuredCourses = useMemo(() => courses.filter((course) => course.featured), [courses]);
   const totalTracks = useMemo(
@@ -61,9 +151,13 @@ export default function AdminCoursesPage() {
           .some((value) => value.toLowerCase().includes(query));
       const matchesProgram = selectedProgramId === "all" || course.categoryId === selectedProgramId;
       const matchesTrack = selectedTrackId === "all" || course.subcategoryId === selectedTrackId;
-      return matchesSearch && matchesProgram && matchesTrack;
+      const matchesStatus = selectedStatus === "all" || course.status === selectedStatus;
+      const matchesTeacher =
+        selectedTeacherId === "all" ||
+        (selectedTeacherId === "admin" ? course.ownerType === "admin" : course.teacherId === selectedTeacherId);
+      return matchesSearch && matchesProgram && matchesTrack && matchesStatus && matchesTeacher;
     });
-  }, [courseSearch, courses, selectedProgramId, selectedTrackId]);
+  }, [courseSearch, courses, selectedProgramId, selectedTrackId, selectedStatus, selectedTeacherId]);
 
   return (
     <AppShell allowedRoles={["admin"]}>
@@ -123,11 +217,33 @@ export default function AdminCoursesPage() {
             </div>
 
             <div className="space-y-4">
-              {categories.map((category) => (
+              {sortedCategories.map((category, categoryIndex) => (
                 <div key={category.id} className="rounded-2xl border border-border bg-background p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                      <div className="font-display text-xl font-bold">{category.name}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex flex-col">
+                          <button
+                            type="button"
+                            disabled={categoryIndex === 0}
+                            onClick={() => void reorderCategory(category.id, "up")}
+                            className="text-muted-foreground disabled:opacity-30"
+                            aria-label="Move program up"
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={categoryIndex === sortedCategories.length - 1}
+                            onClick={() => void reorderCategory(category.id, "down")}
+                            className="text-muted-foreground disabled:opacity-30"
+                            aria-label="Move program down"
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="font-display text-xl font-bold">{category.name}</div>
+                      </div>
                       <div className="mt-3 space-y-2">
                         {category.subcategories.length ? (
                           category.subcategories.map((subcategory) => (
@@ -221,6 +337,50 @@ export default function AdminCoursesPage() {
                       <Plus className="h-4 w-4" /> Add Track
                     </Button>
                   </div>
+
+                  <div className="mt-4 rounded-2xl border border-border bg-card p-3">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                      <Users className="h-3.5 w-3.5" /> Community link
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Students in {category.name} see a &quot;Join community&quot; link on their dashboard and settings.
+                    </p>
+                    <div className="mt-3 grid gap-2 md:grid-cols-[0.7fr_1.3fr]">
+                      <input
+                        value={communityDrafts[category.id]?.label ?? category.communityLabel ?? ""}
+                        onChange={(event) =>
+                          setCommunityDrafts((current) => ({
+                            ...current,
+                            [category.id]: {
+                              url: current[category.id]?.url ?? category.communityUrl ?? "",
+                              label: event.target.value,
+                            },
+                          }))
+                        }
+                        className="h-10 rounded-lg border border-input bg-background px-3 text-sm"
+                        placeholder="Label (WhatsApp, Discord)"
+                      />
+                      <input
+                        value={communityDrafts[category.id]?.url ?? category.communityUrl ?? ""}
+                        onChange={(event) =>
+                          setCommunityDrafts((current) => ({
+                            ...current,
+                            [category.id]: {
+                              label: current[category.id]?.label ?? category.communityLabel ?? "",
+                              url: event.target.value,
+                            },
+                          }))
+                        }
+                        className="h-10 rounded-lg border border-input bg-background px-3 text-sm"
+                        placeholder="https://chat.whatsapp.com/..."
+                      />
+                    </div>
+                    <div className="mt-2 flex justify-end">
+                      <Button variant="outline" size="sm" onClick={() => void saveCommunity(category.id)}>
+                        Save community link
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -262,7 +422,7 @@ export default function AdminCoursesPage() {
             </div>
 
             <div className="space-y-3">
-              <div className="grid gap-4 rounded-2xl border border-border bg-background p-4 lg:grid-cols-[1.3fr_0.8fr_0.8fr]">
+              <div className="grid gap-4 rounded-2xl border border-border bg-background p-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Input
                   label="Search courses"
                   value={courseSearch}
@@ -302,26 +462,99 @@ export default function AdminCoursesPage() {
                     ))}
                   </select>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Status</label>
+                  <select
+                    value={selectedStatus}
+                    onChange={(event) => setSelectedStatus(event.target.value)}
+                    className="h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="published">Published</option>
+                    <option value="review">In review</option>
+                    <option value="draft">Draft</option>
+                    <option value="declined">Declined</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Owner</label>
+                  <select
+                    value={selectedTeacherId}
+                    onChange={(event) => setSelectedTeacherId(event.target.value)}
+                    className="h-11 w-full rounded-lg border border-input bg-card px-3.5 text-sm"
+                  >
+                    <option value="all">All owners</option>
+                    <option value="admin">Admin-owned</option>
+                    {teacherOptions.map((teacher) => (
+                      <option key={teacher.id} value={teacher.id}>
+                        {teacher.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              {deletionRequests.length > 0 && (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50/70 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-100">
+                  <strong>{deletionRequests.length}</strong> course
+                  {deletionRequests.length === 1 ? "" : "s"} awaiting your deletion decision below
+                  (Delete to approve, or Abort to keep it).
+                </div>
+              )}
 
               {filteredCourses.length ? (
                 filteredCourses.map((course) => (
                   <div key={course.id} className="rounded-2xl border border-border bg-background p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div>
-                        <div className="font-medium">{course.title}</div>
+                        <div className="flex items-center gap-2 font-medium">
+                          {course.title}
+                          {course.pendingDeletion && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:bg-amber-500/15 dark:text-amber-100">
+                              Deletion requested
+                            </span>
+                          )}
+                        </div>
                         <div className="mt-1 text-sm text-muted-foreground">
                           {course.program} / {course.track} | {course.ownerType === "admin" ? "Admin-owned" : course.teacherName}
                         </div>
                       </div>
-                      <Button
-                        variant={course.featured ? "accent" : "outline"}
-                        onClick={() => void updateCourseCatalog(course.id, { featured: !course.featured })}
-                        disabled={isLoading}
-                      >
-                        <Star className="h-4 w-4" />
-                        {course.featured ? "Featured" : "Mark Featured"}
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant={course.featured ? "accent" : "outline"}
+                          size="sm"
+                          onClick={() => void updateCourseCatalog(course.id, { featured: !course.featured })}
+                          disabled={isLoading}
+                        >
+                          <Star className="h-4 w-4" />
+                          {course.featured ? "Featured" : "Mark Featured"}
+                        </Button>
+                        <Button
+                          variant={course.isRecommended ? "accent" : "outline"}
+                          size="sm"
+                          onClick={() => void toggleRecommended(course.id, !course.isRecommended)}
+                          disabled={isLoading}
+                        >
+                          <ThumbsUp className="h-4 w-4" />
+                          {course.isRecommended ? "Recommended" : "Recommend"}
+                        </Button>
+                        {course.pendingDeletion && (
+                          <Button variant="outline" size="sm" loading={busyCourseId === course.id} onClick={() => void abortDeletion(course.id)}>
+                            Abort
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            loading={busyCourseId === course.id}
+                            onClick={() => void approveDeletion(course.id, course.title)}
+                          >
+                            <Trash2 className="h-4 w-4" /> Delete
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))

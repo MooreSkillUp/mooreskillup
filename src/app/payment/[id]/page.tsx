@@ -2,268 +2,131 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BadgeCheck, CreditCard, LoaderCircle, Smartphone } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, BadgeCheck, CreditCard, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
-import {
-  formatNaira,
-  getPaymentMethodDescription,
-  getPaymentMethodLabel,
-  type PaymentMethod,
-} from "@/lib/commerce";
-import { useTeacherWorkspace } from "@/lib/teacher-workspace";
-
-type CheckoutPhase = "select" | "processing" | "success";
-
-const paymentMethods: PaymentMethod[] = ["paystack", "opay"];
+import { formatNaira } from "@/lib/commerce";
+import { useFeedback } from "@/lib/feedback";
+import { publicEnv } from "@/lib/public-env";
+import { initializePayment, useCourse } from "@/lib/student";
 
 export default function PaymentPage() {
   const params = useParams();
   const router = useRouter();
-  const { getCourseById, isCourseOwnedByStudent, purchaseCourse, getContinueLearningLessonId } =
-    useTeacherWorkspace();
-  const course = getCourseById(params.id as string);
-  const owned = course ? isCourseOwnedByStudent(course.id) : false;
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("paystack");
-  const [phase, setPhase] = useState<CheckoutPhase>(owned ? "success" : "select");
-  const [error, setError] = useState("");
+  const courseId = params.id as string;
+  const { notifyError, notifySuccess } = useFeedback();
+  const { course, isLoading } = useCourse(courseId);
+  const [processing, setProcessing] = useState(false);
 
-  const paymentResult = useMemo(() => {
-    if (!course) return null;
-    return {
-      amount: formatNaira(course.price),
-      title: course.title,
-      description: course.subtitle,
-    };
-  }, [course]);
-
-  useEffect(() => {
-    if (owned) {
-      setPhase("success");
-    }
-  }, [owned]);
-
-  useEffect(() => {
-    if (phase !== "processing" || !course) return;
-
-    const timer = window.setTimeout(() => {
-      const result = purchaseCourse(course.id, selectedMethod);
-      if (!result.ok) {
-        setError(result.message);
-        setPhase("select");
-        return;
-      }
-
-      setError("");
-      setPhase("success");
-    }, 1800);
-
-    return () => window.clearTimeout(timer);
-  }, [course, phase, purchaseCourse, selectedMethod]);
+  if (isLoading) {
+    return (
+      <AppShell allowedRoles={["student"]}>
+        <div className="mx-auto max-w-2xl">
+          <div className="h-80 animate-pulse rounded-[2rem] bg-muted/40" />
+        </div>
+      </AppShell>
+    );
+  }
 
   if (!course) {
     return (
-      <AppShell>
-        <div className="mx-auto max-w-md text-center">
-          <h1 className="font-display text-2xl font-bold">Payment page not found</h1>
-          <Link href="/dashboard/courses">
-            <Button variant="outline" className="mt-4">
-              Back to courses
-            </Button>
+      <AppShell allowedRoles={["student"]}>
+        <div className="mx-auto max-w-md py-20 text-center">
+          <h1 className="font-display text-2xl font-bold">Course not found</h1>
+          <Link href="/dashboard/courses" className="mt-4 inline-block font-semibold text-primary">
+            Back to courses
           </Link>
         </div>
       </AppShell>
     );
   }
 
-  const continueLearningLessonId = getContinueLearningLessonId(course.id);
-  const startLearningHref = continueLearningLessonId
-    ? `/lesson/${continueLearningLessonId}`
-    : `/course/${course.id}`;
+  const firstLessonHref = `/course/${course.id}`;
+  const amount = course.discountPrice !== null && course.discountPrice < course.price ? course.discountPrice : course.price;
+
+  if (course.isOwned) {
+    return (
+      <AppShell allowedRoles={["student"]}>
+        <div className="mx-auto max-w-md py-16 text-center">
+          <BadgeCheck className="mx-auto h-12 w-12 text-success" />
+          <h1 className="mt-4 font-display text-2xl font-bold">You already own this course</h1>
+          <Link href={firstLessonHref} className="mt-4 inline-block">
+            <Button variant="accent">Go to course</Button>
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const pay = async () => {
+    try {
+      setProcessing(true);
+      const appUrl = publicEnv.appUrl.replace(/\/$/, "");
+      const callbackUrl = `${appUrl}/payment/callback`;
+      // Start the transaction on the server, then hand off to Paystack's hosted
+      // checkout. Paystack redirects back to /payment/callback?reference=...
+      const init = await initializePayment(course.id, callbackUrl);
+      window.location.href = init.authorization_url;
+    } catch (e) {
+      notifyError("Checkout failed", e instanceof Error ? e.message : "Please try again.");
+      setProcessing(false);
+    }
+  };
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-5xl space-y-6">
-        <Link
-          href={`/course/${course.id}`}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back to course preview
+    <AppShell allowedRoles={["student"]}>
+      <div className="mx-auto max-w-2xl space-y-6">
+        <Link href={`/course/${course.id}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> Back to course
         </Link>
 
-        <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-          <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-            Payment Page
+        <div className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
+          <div className="bg-gradient-to-r from-primary/10 via-background to-accent-soft p-6">
+            <div className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">Checkout</div>
+            <h1 className="mt-2 font-display text-3xl font-bold">{course.title}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{course.subtitle}</p>
           </div>
-          <h1 className="mt-2 font-display text-4xl font-bold">
-            {phase === "success" || owned ? "Payment Successful" : "Unlock Full Course"}
-          </h1>
-          <p className="mt-3 max-w-3xl text-muted-foreground">
-            {phase === "success" || owned
-              ? "Your course is fully unlocked and ready for learning."
-              : "Choose a payment method below to complete this frontend checkout simulation."}
-          </p>
-        </section>
 
-        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-            <div className="rounded-[1.5rem] border border-border bg-background p-5">
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                Course Summary
+          <div className="space-y-5 p-6">
+            <div className="rounded-2xl border border-border bg-background p-5">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Course price</span>
+                <span className={course.discountPrice !== null ? "text-muted-foreground line-through" : "font-semibold"}>
+                  {formatNaira(course.price)}
+                </span>
               </div>
-              <h2 className="mt-3 font-display text-2xl font-bold">{paymentResult?.title}</h2>
-              <p className="mt-2 text-sm text-muted-foreground">{paymentResult?.description}</p>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <div className="rounded-2xl bg-muted/50 px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                    Full Course Access
+              {course.discountPrice !== null && course.discountPrice < course.price && (
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-muted-foreground">Discount price</span>
+                  <span className="font-semibold">{formatNaira(course.discountPrice)}</span>
+                </div>
+              )}
+              <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-lg font-bold">
+                <span>Total</span>
+                <span>{formatNaira(amount)}</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-background p-5">
+              <div className="flex items-center gap-3">
+                <CreditCard className="h-6 w-6 text-primary" />
+                <div>
+                  <div className="font-semibold">Pay with Paystack</div>
+                  <div className="text-sm text-muted-foreground">
+                    Card, bank transfer, and mobile-ready checkout for Nigerian learners.
                   </div>
-                  <div className="mt-1 font-display text-2xl font-bold">{paymentResult?.amount}</div>
-                </div>
-                <div className="rounded-2xl bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
-                  All sections, lessons, tasks, and progress tracking unlock immediately after payment.
                 </div>
               </div>
             </div>
 
-            {phase === "select" && !owned && (
-              <div className="mt-6 space-y-4">
-                <div className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">
-                  Payment Methods
-                </div>
-                {paymentMethods.map((method) => {
-                  const selected = selectedMethod === method;
-                  const Icon = method === "paystack" ? CreditCard : Smartphone;
-                  return (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => setSelectedMethod(method)}
-                      className={`w-full rounded-[1.5rem] border p-5 text-left transition ${
-                        selected
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "border-border bg-background hover:border-primary/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2 font-display text-2xl font-bold">
-                            <Icon className="h-5 w-5 text-primary" />
-                            {getPaymentMethodLabel(method)}
-                          </div>
-                          <div className="mt-2 text-sm text-muted-foreground">
-                            {getPaymentMethodDescription(method)}
-                          </div>
-                        </div>
-                        {selected && (
-                          <div className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-                            Selected
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    variant="accent"
-                    onClick={() => {
-                      setSelectedMethod("paystack");
-                      setPhase("processing");
-                    }}
-                  >
-                    Proceed with Paystack
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedMethod("opay");
-                      setPhase("processing");
-                    }}
-                  >
-                    Proceed with OPay
-                  </Button>
-                </div>
-                {error && <div className="text-sm text-destructive">{error}</div>}
-              </div>
-            )}
-
-            {phase === "processing" && (
-              <div className="mt-6 rounded-[1.5rem] border border-primary/20 bg-primary/5 p-6 text-center">
-                <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary" />
-                <h2 className="mt-4 font-display text-2xl font-bold">Processing Payment...</h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Simulating a secure {getPaymentMethodLabel(selectedMethod)} checkout experience.
-                </p>
-              </div>
-            )}
-
-            {(phase === "success" || owned) && (
-              <div className="mt-6 rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-6">
-                <div className="flex items-center gap-2 text-emerald-700">
-                  <BadgeCheck className="h-5 w-5" />
-                  <div className="text-lg font-semibold">Payment Successful</div>
-                </div>
-                <div className="mt-4 space-y-2 text-sm text-emerald-900">
-                  <div>Course Title: {course.title}</div>
-                  <div>Amount Paid: {formatNaira(course.price)}</div>
-                  <div>Payment Method: {getPaymentMethodLabel(selectedMethod)}</div>
-                </div>
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <Link href="/dashboard/courses">
-                    <Button variant="outline">Go to My Courses</Button>
-                  </Link>
-                  <Link href={startLearningHref}>
-                    <Button variant="accent">Start Learning</Button>
-                  </Link>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="space-y-6">
-            <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-              <div className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">
-                Checkout Flow
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Explore Courses -&gt; Preview Course -&gt; Unlock Course
-                </div>
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Payment Page -&gt; Choose Paystack or OPay -&gt; Processing
-                </div>
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Success Screen -&gt; Course added to My Courses -&gt; Start Learning
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-              <div className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">
-                After Payment
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  All course sections become unlocked immediately.
-                </div>
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Lessons and tasks become accessible without refreshing the app.
-                </div>
-                <div className="rounded-2xl bg-muted/40 p-4">
-                  Continue Learning and My Courses update automatically.
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-              <Button variant="outline" className="w-full" onClick={() => router.push("/dashboard/payments")}>
-                View Payment History
-              </Button>
-            </div>
-          </section>
+            <Button variant="accent" size="lg" className="w-full" onClick={() => void pay()} loading={processing} loadingText="Processing...">
+              <ShieldCheck className="h-4 w-4" /> Pay {formatNaira(amount)} securely
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              One-time payment unlocks full lifetime access to this course.
+            </p>
+          </div>
         </div>
       </div>
     </AppShell>

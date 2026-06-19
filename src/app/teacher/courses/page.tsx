@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Eye, PencilLine, Trash2, Upload } from "lucide-react";
+import { Copy, Eye, PencilLine, Trash2, Upload } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
+import { useFeedback } from "@/lib/feedback";
 import { useTeacherPlatform, type TeacherCourseStatus } from "@/lib/teacher-platform";
 
 export default function TeacherCoursesPage() {
-  const { teacherCourses, saveCourse, deleteCourse, getCourseById, categories, archiveCourse, restoreCourse } =
+  const { notifyError, notifySuccess } = useFeedback();
+  const { teacherCourses, saveCourse, deleteCourse, duplicateCourse, getCourseById, categories, archiveCourse, restoreCourse } =
     useTeacherPlatform();
   const [tab, setTab] = useState<TeacherCourseStatus>("published");
+  const [actionCourseId, setActionCourseId] = useState<string | null>(null);
 
   const getCategoryName = (id: string) =>
     categories.find((category) => category.id === id)?.name ?? "Unassigned category";
@@ -49,7 +52,7 @@ export default function TeacherCoursesPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {(["published", "draft", "archived"] as const).map((value) => {
+          {(["published", "review", "draft", "declined", "archived"] as const).map((value) => {
             const active = tab === value;
             return (
               <button
@@ -62,7 +65,15 @@ export default function TeacherCoursesPage() {
                     : "border-border bg-card text-muted-foreground"
                 }`}
               >
-                {value === "published" ? "Published" : value === "draft" ? "Drafts" : "Archived"}
+                {value === "published"
+                  ? "Published"
+                  : value === "review"
+                    ? "In Review"
+                    : value === "draft"
+                      ? "Drafts"
+                      : value === "declined"
+                        ? "Declined"
+                        : "Archived"}
               </button>
             );
           })}
@@ -76,7 +87,15 @@ export default function TeacherCoursesPage() {
                   <div>
                     <div className="font-display text-2xl font-bold">{course.title}</div>
                     <div className="mt-1 text-sm text-muted-foreground">
-                      {course.status === "published" ? "Published" : course.status === "draft" ? "Draft" : "Archived"}{" "}
+                      {course.status === "published"
+                        ? "Published"
+                        : course.status === "review"
+                          ? "In review"
+                          : course.status === "declined"
+                            ? "Declined"
+                            : course.status === "draft"
+                              ? "Draft"
+                              : "Archived"}{" "}
                       | {course.analytics.enrollments} learners | updated {new Date(course.lastUpdated).toLocaleString("en-NG")}
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">
@@ -121,14 +140,49 @@ export default function TeacherCoursesPage() {
                       <Eye className="h-4 w-4" /> Preview
                     </Button>
                   </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={actionCourseId === `${course.id}:duplicate`}
+                    loadingText="Duplicating..."
+                    onClick={async () => {
+                      setActionCourseId(`${course.id}:duplicate`);
+                      try {
+                        await duplicateCourse(course.id);
+                        notifySuccess("Course duplicated", "A draft copy was created.");
+                      } catch (error) {
+                        notifyError(
+                          "Unable to duplicate",
+                          error instanceof Error ? error.message : "Request failed.",
+                        );
+                      } finally {
+                        setActionCourseId(null);
+                      }
+                    }}
+                  >
+                    <Copy className="h-4 w-4" /> Duplicate
+                  </Button>
                   {course.status === "published" ? (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
+                      loading={actionCourseId === `${course.id}:unpublish`}
+                      loadingText="Updating..."
+                      onClick={async () => {
                         const found = getCourseById(course.id);
                         if (found) {
-                          void saveCourse(found, "unpublish");
+                          setActionCourseId(`${course.id}:unpublish`);
+                          try {
+                            await saveCourse(found, "unpublish");
+                            notifySuccess("Course moved to draft");
+                          } catch (error) {
+                            notifyError(
+                              "Unable to update course",
+                              error instanceof Error ? error.message : "Request failed.",
+                            );
+                          } finally {
+                            setActionCourseId(null);
+                          }
                         }
                       }}
                     >
@@ -138,28 +192,108 @@ export default function TeacherCoursesPage() {
                     <Button
                       variant="accent"
                       size="sm"
-                      onClick={() => {
+                      loading={actionCourseId === `${course.id}:publish`}
+                      loadingText="Submitting..."
+                      onClick={async () => {
                         const found = getCourseById(course.id);
                         if (found) {
-                          void saveCourse(found, "publish");
+                          setActionCourseId(`${course.id}:publish`);
+                          try {
+                            await saveCourse(found, "publish");
+                            notifySuccess(
+                              "Course submitted for review",
+                              "An admin must approve it before students can see it.",
+                            );
+                          } catch (error) {
+                            notifyError(
+                              "Unable to submit course",
+                              error instanceof Error ? error.message : "Request failed.",
+                            );
+                          } finally {
+                            setActionCourseId(null);
+                          }
                         }
                       }}
                     >
-                      Publish
+                      {course.status === "review" ? "Resubmit" : "Publish"}
                     </Button>
                   )}
                   {course.status === "archived" ? (
-                    <Button variant="outline" size="sm" onClick={() => void restoreCourse(course.id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={actionCourseId === `${course.id}:restore`}
+                      loadingText="Restoring..."
+                      onClick={async () => {
+                        setActionCourseId(`${course.id}:restore`);
+                        try {
+                          await restoreCourse(course.id);
+                          notifySuccess("Course restored to draft");
+                        } catch (error) {
+                          notifyError(
+                            "Unable to restore course",
+                            error instanceof Error ? error.message : "Request failed.",
+                          );
+                        } finally {
+                          setActionCourseId(null);
+                        }
+                      }}
+                    >
                       Restore
                     </Button>
                   ) : (
-                    <Button variant="outline" size="sm" onClick={() => void archiveCourse(course.id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={actionCourseId === `${course.id}:archive`}
+                      loadingText="Archiving..."
+                      onClick={async () => {
+                        setActionCourseId(`${course.id}:archive`);
+                        try {
+                          await archiveCourse(course.id);
+                          notifySuccess("Course archived");
+                        } catch (error) {
+                          notifyError(
+                            "Unable to archive course",
+                            error instanceof Error ? error.message : "Request failed.",
+                          );
+                        } finally {
+                          setActionCourseId(null);
+                        }
+                      }}
+                    >
                       Archive
                     </Button>
                   )}
-                  <Button variant="outline" size="sm" onClick={() => void deleteCourse(course.id)}>
-                    <Trash2 className="h-4 w-4" /> Delete
-                  </Button>
+                  {course.pendingDeletion ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-2xl border border-amber-300 bg-amber-50/70 px-3 py-2 text-xs font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-100">
+                      <Trash2 className="h-3.5 w-3.5" /> Deletion pending admin approval
+                    </span>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={actionCourseId === `${course.id}:delete`}
+                      loadingText="Requesting..."
+                      onClick={async () => {
+                        if (!window.confirm(`Request deletion of "${course.title || "this course"}"? An admin must approve it.`)) return;
+                        setActionCourseId(`${course.id}:delete`);
+                        try {
+                          await deleteCourse(course.id);
+                          notifySuccess("Deletion requested", "An admin will review your request.");
+                        } catch (error) {
+                          notifyError(
+                            "Unable to request deletion",
+                            error instanceof Error ? error.message : "Request failed.",
+                          );
+                        } finally {
+                          setActionCourseId(null);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" /> Request deletion
+                    </Button>
+                  )}
                 </div>
               </div>
             ))

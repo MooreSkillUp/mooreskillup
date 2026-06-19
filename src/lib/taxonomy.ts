@@ -12,6 +12,8 @@ export interface TaxonomyCategory {
   id: string;
   name: string;
   program: string;
+  communityUrl?: string;
+  communityLabel?: string;
   subcategories: TaxonomySubcategory[];
 }
 
@@ -64,6 +66,8 @@ export function usePlatformTaxonomy() {
               id: category.id,
               name: category.name,
               program: category.program || category.name,
+              communityUrl: category.communityUrl ?? "",
+              communityLabel: category.communityLabel ?? "",
               subcategories: Array.isArray(category.subcategories) ? category.subcategories : [],
             })),
           );
