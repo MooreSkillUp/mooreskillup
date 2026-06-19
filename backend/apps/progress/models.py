@@ -13,6 +13,8 @@ class LessonProgress(UUIDPrimaryKeyModel, TimeStampedModel):
     last_accessed_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     time_spent_seconds = models.PositiveIntegerField(default=0)
+    # Resume point for video lessons (seconds into the video).
+    last_position_seconds = models.PositiveIntegerField(default=0)
 
     class Meta:
         unique_together = ("enrollment", "lesson")
@@ -24,3 +26,14 @@ class CourseProgress(UUIDPrimaryKeyModel, TimeStampedModel):
     total_lessons_count = models.PositiveIntegerField(default=0)
     progress_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     is_completed = models.BooleanField(default=False)
+
+
+class LessonNote(UUIDPrimaryKeyModel, TimeStampedModel):
+    """One free-text note per student per lesson."""
+
+    enrollment = models.ForeignKey("enrollments.Enrollment", on_delete=models.CASCADE, related_name="lesson_notes")
+    lesson = models.ForeignKey("courses.Lesson", on_delete=models.CASCADE, related_name="notes")
+    content = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ("enrollment", "lesson")

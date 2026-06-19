@@ -3,8 +3,36 @@ from rest_framework import serializers
 from apps.enrollments.models import Enrollment, Watchlist
 from apps.progress.models import LessonProgress
 
-from .models import Course, CourseTag, Lesson, Section, Task, TeacherActivityLog
+from django.db.models import Avg, Count
+
+from .models import (
+    Course,
+    CourseReview,
+    CourseTag,
+    CourseVersion,
+    Lesson,
+    Project,
+    Section,
+    Task,
+    TeacherActivityLog,
+)
 from .video import build_embed_url, validate_video_url
+
+
+class CourseReviewSerializer(serializers.ModelSerializer):
+    studentName = serializers.CharField(source="student.user.display_name", read_only=True)
+    studentAvatar = serializers.CharField(source="student.user.avatar_url", read_only=True)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+
+    class Meta:
+        model = CourseReview
+        fields = ("id", "rating", "comment", "status", "studentName", "studentAvatar", "createdAt")
+        read_only_fields = ("status",)
+
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError("Rating must be between 1 and 5.")
+        return value
 
 
 class LessonSerializer(serializers.ModelSerializer):
@@ -12,6 +40,7 @@ class LessonSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     duration = serializers.SerializerMethodField()
     embedUrl = serializers.SerializerMethodField()
+    resourceLinks = serializers.JSONField(source="resource_links", read_only=True)
 
     class Meta:
         model = Lesson
@@ -22,6 +51,8 @@ class LessonSerializer(serializers.ModelSerializer):
             "content_type",
             "video_url",
             "text_content",
+            "resource_links",
+            "resourceLinks",
             "tags",
             "duration_minutes",
             "duration",
@@ -58,6 +89,10 @@ class LessonSerializer(serializers.ModelSerializer):
                 return "in-progress"
         return "unlocked"
 
+    def to_internal_value(self, data):
+        mutable = _apply_camel_aliases(data, {"resourceLinks": "resource_links"})
+        return super().to_internal_value(mutable)
+
     def validate(self, attrs):
         content_type = attrs.get("content_type", getattr(self.instance, "content_type", None))
         video_url = attrs.get("video_url", getattr(self.instance, "video_url", ""))
@@ -66,11 +101,23 @@ class LessonSerializer(serializers.ModelSerializer):
         return attrs
 
 
+def _apply_camel_aliases(data, mapping):
+    """Let the studio send camelCase while the model fields stay snake_case."""
+    mutable = data.copy() if hasattr(data, "copy") else dict(data)
+    for camel, snake in mapping.items():
+        if camel in mutable and snake not in mutable:
+            mutable[snake] = mutable[camel]
+    return mutable
+
+
 class TaskSerializer(serializers.ModelSerializer):
-    submissionGuide = serializers.SerializerMethodField()
-    watchGuideUrl = serializers.SerializerMethodField()
-    sectionChannelUrl = serializers.SerializerMethodField()
-    submissionChannelUrl = serializers.SerializerMethodField()
+    """An assignment. Submission is off-platform via submission_type + URL."""
+
+    # camelCase mirrors for reading; writes use the snake_case model fields.
+    submissionType = serializers.CharField(source="submission_type", read_only=True)
+    submissionUrl = serializers.URLField(source="submission_url", read_only=True)
+    howToSubmit = serializers.CharField(source="how_to_submit", read_only=True)
+    dueDate = serializers.DateField(source="due_date", read_only=True)
 
     class Meta:
         model = Task
@@ -79,40 +126,69 @@ class TaskSerializer(serializers.ModelSerializer):
             "title",
             "instructions",
             "submission_type",
+            "submissionType",
+            "submission_url",
+            "submissionUrl",
+            "how_to_submit",
+            "howToSubmit",
+            "due_date",
+            "dueDate",
             "resource_links",
             "order",
             "is_required",
-            "submissionGuide",
-            "watchGuideUrl",
-            "sectionChannelUrl",
-            "submissionChannelUrl",
         )
 
-    def get_submissionGuide(self, obj):
-        return "Review the task brief, complete the work, and submit through the course channel."
+    def to_internal_value(self, data):
+        mutable = _apply_camel_aliases(
+            data,
+            {
+                "submissionType": "submission_type",
+                "submissionUrl": "submission_url",
+                "howToSubmit": "how_to_submit",
+                "dueDate": "due_date",
+            },
+        )
+        alias = {
+            "whatsapp-group": "whatsapp_group",
+            "google-form": "google_form",
+            "external-link": "external_link",
+        }
+        if mutable.get("submission_type") in alias:
+            mutable["submission_type"] = alias[mutable["submission_type"]]
+        return super().to_internal_value(mutable)
 
-    def get_watchGuideUrl(self, obj):
-        return obj.resource_links[0] if len(obj.resource_links) > 0 else ""
 
-    def get_sectionChannelUrl(self, obj):
-        return obj.resource_links[1] if len(obj.resource_links) > 1 else ""
+class ProjectSerializer(serializers.ModelSerializer):
+    submissionUrl = serializers.URLField(source="submission_url", read_only=True)
+    howToSubmit = serializers.CharField(source="how_to_submit", read_only=True)
 
-    def get_submissionChannelUrl(self, obj):
-        return obj.resource_links[2] if len(obj.resource_links) > 2 else ""
+    class Meta:
+        model = Project
+        fields = (
+            "id",
+            "title",
+            "description",
+            "requirements",
+            "deliverables",
+            "submission_url",
+            "submissionUrl",
+            "how_to_submit",
+            "howToSubmit",
+            "order",
+            "is_required",
+        )
 
     def to_internal_value(self, data):
-        mutable = data.copy()
-        submission_type = mutable.get("submission_type")
-        if submission_type == "file-upload":
-            mutable["submission_type"] = "file_upload"
-        elif submission_type == "text-submission":
-            mutable["submission_type"] = "text_submission"
+        mutable = _apply_camel_aliases(
+            data, {"submissionUrl": "submission_url", "howToSubmit": "how_to_submit"}
+        )
         return super().to_internal_value(mutable)
 
 
 class SectionSerializer(serializers.ModelSerializer):
     lessons = LessonSerializer(many=True, read_only=True)
     tasks = TaskSerializer(many=True, read_only=True)
+    projects = ProjectSerializer(many=True, read_only=True)
     isFree = serializers.SerializerMethodField()
     isLocked = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
@@ -131,6 +207,7 @@ class SectionSerializer(serializers.ModelSerializer):
             "status",
             "lessons",
             "tasks",
+            "projects",
         )
 
     def _get_enrollment(self, obj):
@@ -178,6 +255,18 @@ class CourseSerializer(serializers.ModelSerializer):
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     analytics = serializers.SerializerMethodField()
     tags = serializers.SlugRelatedField(slug_field="name", many=True, queryset=CourseTag.objects.all(), required=False)
+    discountPrice = serializers.DecimalField(
+        source="discount_price", max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
+    metaTitle = serializers.CharField(source="meta_title", required=False, allow_blank=True)
+    metaDescription = serializers.CharField(source="meta_description", required=False, allow_blank=True)
+    techStack = serializers.JSONField(source="tech_stack", required=False)
+    certificateEnabled = serializers.BooleanField(source="certificate_enabled", required=False)
+    isRecommended = serializers.BooleanField(source="is_recommended", required=False)
+    pendingDeletion = serializers.BooleanField(source="pending_deletion", read_only=True)
+    deletionReason = serializers.CharField(source="deletion_reason", read_only=True)
+    averageRating = serializers.SerializerMethodField()
+    reviewCount = serializers.SerializerMethodField()
 
     class Meta:
         model = Course
@@ -189,12 +278,29 @@ class CourseSerializer(serializers.ModelSerializer):
             "overview",
             "scheme_of_work",
             "roadmap_link",
+            "level",
             "price",
+            "discount_price",
+            "discountPrice",
             "currency",
             "status",
             "visibility",
             "featured",
             "total_lessons",
+            "meta_title",
+            "metaTitle",
+            "meta_description",
+            "metaDescription",
+            "tech_stack",
+            "techStack",
+            "certificate_enabled",
+            "certificateEnabled",
+            "is_recommended",
+            "isRecommended",
+            "pendingDeletion",
+            "deletionReason",
+            "averageRating",
+            "reviewCount",
             "teacherName",
             "teacherId",
             "ownerType",
@@ -239,7 +345,7 @@ class CourseSerializer(serializers.ModelSerializer):
         return obj.teacher.track if obj.teacher else None
 
     def get_producedBy(self, obj):
-        return "Produced by More SkillUp"
+        return "Produced by MooreSkillUp"
 
     def get_isOwned(self, obj):
         request = self.context.get("request")
@@ -259,6 +365,13 @@ class CourseSerializer(serializers.ModelSerializer):
         if self.get_isOwned(obj):
             return "open_course"
         return "unlock_course"
+
+    def get_averageRating(self, obj):
+        stats = obj.reviews.filter(status="published").aggregate(avg=Avg("rating"))
+        return round(stats["avg"], 1) if stats["avg"] is not None else 0
+
+    def get_reviewCount(self, obj):
+        return obj.reviews.filter(status="published").count()
 
     def get_analytics(self, obj):
         enrollments_count = obj.enrollments.count()
@@ -292,3 +405,17 @@ class TeacherActivitySerializer(serializers.ModelSerializer):
     class Meta:
         model = TeacherActivityLog
         fields = ("id", "message", "timestamp", "type", "created_at")
+
+
+class CourseVersionSerializer(serializers.ModelSerializer):
+    versionNumber = serializers.IntegerField(source="version_number", read_only=True)
+    createdBy = serializers.CharField(source="created_by.display_name", read_only=True, default=None)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    sectionCount = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CourseVersion
+        fields = ("id", "versionNumber", "note", "createdBy", "createdAt", "sectionCount")
+
+    def get_sectionCount(self, obj):
+        return len(obj.snapshot.get("sections", []))

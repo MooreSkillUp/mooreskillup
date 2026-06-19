@@ -27,6 +27,9 @@ class SubcategorySerializer(serializers.ModelSerializer):
 class CategorySerializer(serializers.ModelSerializer):
     subcategories = SubcategorySerializer(many=True, read_only=True)
     program = serializers.CharField(source="name", read_only=True)
+    communityUrl = serializers.URLField(source="community_url", required=False, allow_blank=True)
+    communityLabel = serializers.CharField(source="community_label", required=False, allow_blank=True)
+    displayOrder = serializers.IntegerField(source="display_order", required=False)
 
     class Meta:
         model = Category
@@ -37,6 +40,9 @@ class CategorySerializer(serializers.ModelSerializer):
             "slug",
             "description",
             "is_active",
+            "communityUrl",
+            "communityLabel",
+            "displayOrder",
             "subcategories",
             "created_at",
             "updated_at",

@@ -1,11 +1,19 @@
-import secrets
+from decimal import Decimal
 
 from rest_framework import serializers
 
 from apps.courses.models import Course
 from apps.enrollments.models import Enrollment
 
+from . import paystack
 from .models import Payment, Transaction
+
+
+def effective_price(course):
+    """The amount actually charged: discount price when it's lower, else price."""
+    if course.discount_price is not None and 0 < course.discount_price < course.price:
+        return course.discount_price
+    return course.price
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -52,25 +60,37 @@ class PaymentInitializeSerializer(serializers.Serializer):
         return attrs
 
     def create(self, validated_data):
-        student = self.context["request"].user.student_profile
+        request = self.context["request"]
+        student = request.user.student_profile
         course = validated_data["course"]
-        provider = validated_data["payment_method"]
+        amount = effective_price(course)  # server-computed; never trust the client
+        reference = paystack.new_reference()
+
         payment = Payment.objects.create(
             student=student,
             course=course,
-            amount=course.price,
-            currency=course.currency,
-            payment_method=provider,
+            amount=amount,
+            currency="NGN",
+            payment_method="paystack",
             status="pending",
             description=f"{course.title} full course access",
         )
-        reference = f"{provider[:4].upper()}-{secrets.token_hex(6).upper()}"
+        callback_url = validated_data.get("callback_url") or ""
+
+        init = paystack.initialize_transaction(
+            email=request.user.email,
+            amount_kobo=int(amount * 100),
+            reference=reference,
+            callback_url=callback_url,
+            metadata={"course_id": str(course.id), "student_id": str(student.id), "payment_id": str(payment.id)},
+        )
+
         transaction = Transaction.objects.create(
             payment=payment,
-            provider=provider,
-            reference=reference,
-            amount=course.price,
-            currency=course.currency,
-            authorization_url=validated_data.get("callback_url", "") or f"https://mock-gateway.moreskillup.dev/{provider}/{reference}",
+            provider="paystack",
+            reference=init["reference"],
+            amount=amount,
+            currency="NGN",
+            authorization_url=init["authorization_url"],
         )
         return {"payment": payment, "transaction": transaction}

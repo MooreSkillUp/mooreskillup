@@ -10,6 +10,12 @@ from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.enrollments.models import Enrollment, Watchlist
+from common.rbac import (
+    ADMIN_ROLE_CHOICES,
+    SUPER_ADMIN,
+    get_admin_role,
+    get_permissions_for,
+)
 
 from .models import PasswordResetToken, StudentProfile, TeacherProfile, User
 
@@ -17,7 +23,7 @@ from .models import PasswordResetToken, StudentProfile, TeacherProfile, User
 class StudentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentProfile
-        fields = ("selected_interest", "selected_track", "plan")
+        fields = ("selected_interest", "selected_track", "selected_tracks", "plan")
 
 
 class TeacherProfileSerializer(serializers.ModelSerializer):
@@ -47,6 +53,58 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
         )
 
 
+class AdminStudentSerializer(serializers.ModelSerializer):
+    displayName = serializers.CharField(source="user.display_name", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    userId = serializers.UUIDField(source="user_id", read_only=True)
+    selectedInterest = serializers.CharField(source="selected_interest", read_only=True)
+    selectedTrack = serializers.CharField(source="selected_track", read_only=True)
+    selectedTracks = serializers.ListField(source="selected_tracks", child=serializers.CharField(), read_only=True)
+    status = serializers.SerializerMethodField()
+    lastActiveAt = serializers.SerializerMethodField()
+    enrolledCourses = serializers.SerializerMethodField()
+    completedCourses = serializers.SerializerMethodField()
+    totalPayments = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentProfile
+        fields = (
+            "id",
+            "userId",
+            "displayName",
+            "email",
+            "selectedInterest",
+            "selectedTrack",
+            "selectedTracks",
+            "plan",
+            "status",
+            "lastActiveAt",
+            "enrolledCourses",
+            "completedCourses",
+            "totalPayments",
+        )
+
+    def get_status(self, obj):
+        return "active" if obj.user.is_active else "disabled"
+
+    def get_lastActiveAt(self, obj):
+        latest = (
+            obj.enrollments.order_by("-last_accessed_at", "-updated_at")
+            .values_list("last_accessed_at", flat=True)
+            .first()
+        )
+        return latest
+
+    def get_enrolledCourses(self, obj):
+        return obj.enrollments.count()
+
+    def get_completedCourses(self, obj):
+        return obj.enrollments.filter(status="completed").count()
+
+    def get_totalPayments(self, obj):
+        return obj.payments.filter(status="successful").count()
+
+
 class UserSerializer(serializers.ModelSerializer):
     displayName = serializers.CharField(source="display_name", read_only=True)
     avatarUrl = serializers.CharField(source="avatar_url", read_only=True)
@@ -59,6 +117,9 @@ class UserSerializer(serializers.ModelSerializer):
     plan = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     mustChangePassword = serializers.SerializerMethodField()
+    adminRole = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
+    twoFactorEnabled = serializers.BooleanField(source="two_factor_enabled", read_only=True)
 
     class Meta:
         model = User
@@ -68,6 +129,9 @@ class UserSerializer(serializers.ModelSerializer):
             "username",
             "displayName",
             "role",
+            "adminRole",
+            "permissions",
+            "twoFactorEnabled",
             "avatar",
             "avatarUrl",
             "selectedInterest",
@@ -102,6 +166,9 @@ class UserSerializer(serializers.ModelSerializer):
     def get_selectedTracks(self, obj):
         student_profile = self._get_student_profile(obj)
         if student_profile:
+            tracks = student_profile.selected_tracks or []
+            if tracks:
+                return tracks
             selected_track = student_profile.selected_track or None
             return [selected_track] if selected_track else []
         teacher_profile = self._get_teacher_profile(obj)
@@ -150,6 +217,12 @@ class UserSerializer(serializers.ModelSerializer):
             return teacher_profile.must_change_password
         return False
 
+    def get_adminRole(self, obj):
+        return get_admin_role(obj)
+
+    def get_permissions(self, obj):
+        return sorted(get_permissions_for(obj))
+
     def _get_student_profile(self, obj):
         if obj.role != "student":
             return None
@@ -169,7 +242,8 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     displayName = serializers.CharField(source="display_name", required=False)
-    avatarUrl = serializers.URLField(source="avatar_url", required=False, allow_blank=True)
+    # Holds a predefined avatar key (e.g. "av-blue"), not a URL.
+    avatarUrl = serializers.CharField(source="avatar_url", required=False, allow_blank=True)
     selectedInterest = serializers.CharField(required=False, allow_blank=True)
     selectedTrack = serializers.CharField(required=False, allow_blank=True)
     selectedTracks = serializers.ListField(child=serializers.CharField(), required=False)
@@ -186,6 +260,29 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             "selectedTracks",
             "interests",
         )
+
+    def validate(self, attrs):
+        user = self.instance
+        if not user:
+            return attrs
+
+        if user.role == "student":
+            selected_interest = attrs.get("selectedInterest")
+            selected_track = attrs.get("selectedTrack")
+            selected_tracks = attrs.get("selectedTracks")
+
+            if selected_interest is not None and user.student_profile.selected_interest and selected_interest != user.student_profile.selected_interest:
+                raise serializers.ValidationError({"selectedInterest": "Program cannot be changed after registration."})
+
+            if selected_tracks is not None:
+                cleaned_tracks = [track.strip() for track in selected_tracks if track and track.strip()]
+                if len(cleaned_tracks) > 3:
+                    raise serializers.ValidationError({"selectedTracks": "Select up to 3 tracks only."})
+                attrs["selectedTracks"] = cleaned_tracks
+                if selected_track is not None and selected_track not in cleaned_tracks:
+                    raise serializers.ValidationError({"selectedTrack": "Primary track must be included in selected tracks."})
+
+        return attrs
 
     def update(self, instance, validated_data):
         selected_interest = validated_data.pop("selectedInterest", None)
@@ -207,6 +304,10 @@ class UserUpdateSerializer(serializers.ModelSerializer):
                 profile.selected_track = selected_track
             elif selected_tracks:
                 profile.selected_track = selected_tracks[0]
+            if selected_tracks is not None:
+                profile.selected_tracks = selected_tracks
+            elif selected_track is not None:
+                profile.selected_tracks = [selected_track] if selected_track else []
             profile.save()
         elif hasattr(instance, "teacher_profile"):
             profile = instance.teacher_profile
@@ -289,6 +390,23 @@ class RegisterSerializer(serializers.ModelSerializer):
                 part.capitalize() for part in username.replace(".", " ").replace("_", " ").split() if part
             ) or username
 
+        if role == "student":
+            selected_interest = (attrs.get("selectedInterest") or "").strip()
+            selected_track = (attrs.get("selectedTrack") or "").strip()
+            selected_tracks = [track.strip() for track in attrs.get("selectedTracks", []) if track and track.strip()]
+
+            if not selected_interest:
+                raise serializers.ValidationError({"selectedInterest": "Program is required."})
+            if not selected_track:
+                raise serializers.ValidationError({"selectedTrack": "Primary track is required."})
+            if not selected_tracks:
+                selected_tracks = [selected_track]
+                attrs["selectedTracks"] = selected_tracks
+            if selected_track not in selected_tracks:
+                raise serializers.ValidationError({"selectedTrack": "Primary track must be included in selected tracks."})
+            if len(selected_tracks) > 3:
+                raise serializers.ValidationError({"selectedTracks": "Select up to 3 tracks only."})
+
         return attrs
 
     def create(self, validated_data):
@@ -300,7 +418,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         plan = validated_data.pop("plan", "free")
         validated_data.pop("adminRegistrationToken", None)
         if role == "admin":
+            # Bootstrap path: the first (token-gated) admin is the platform owner.
             validated_data["is_staff"] = True
+            validated_data["admin_role"] = SUPER_ADMIN
         user = User.objects.create_user(**validated_data)
         if role == "teacher":
             TeacherProfile.objects.create(
@@ -313,6 +433,7 @@ class RegisterSerializer(serializers.ModelSerializer):
                 user=user,
                 selected_interest=selected_interest or (interests[0] if interests else ""),
                 selected_track=selected_track or (selected_tracks[0] if selected_tracks else ""),
+                selected_tracks=selected_tracks or ([selected_track] if selected_track else []),
                 plan=plan or "free",
             )
         return user
@@ -426,6 +547,105 @@ class ChangePasswordSerializer(serializers.Serializer):
         if not user.check_password(current_password):
             raise serializers.ValidationError({"current_password": "Current password is incorrect."})
         return attrs
+
+
+class AdminAccountSerializer(serializers.ModelSerializer):
+    displayName = serializers.CharField(source="display_name", read_only=True)
+    adminRole = serializers.CharField(source="admin_role", read_only=True)
+    status = serializers.SerializerMethodField()
+    dateJoined = serializers.DateTimeField(source="date_joined", read_only=True)
+    lastLogin = serializers.DateTimeField(source="last_login", read_only=True)
+    permissions = serializers.SerializerMethodField()
+    permissionOverrides = serializers.JSONField(source="permission_overrides", read_only=True)
+    twoFactorEnabled = serializers.BooleanField(source="two_factor_enabled", read_only=True)
+
+    class Meta:
+        model = User
+        fields = (
+            "id", "email", "username", "displayName", "adminRole", "status",
+            "dateJoined", "lastLogin", "permissions", "permissionOverrides", "twoFactorEnabled",
+        )
+
+    def get_status(self, obj):
+        return "active" if obj.is_active else "disabled"
+
+    def get_permissions(self, obj):
+        return sorted(get_permissions_for(obj))
+
+
+class AdminAccountCreateSerializer(serializers.Serializer):
+    displayName = serializers.CharField()
+    email = serializers.EmailField()
+    adminRole = serializers.ChoiceField(choices=[choice[0] for choice in ADMIN_ROLE_CHOICES])
+    password = serializers.CharField(required=False, allow_blank=True, min_length=8)
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def create(self, validated_data):
+        display_name = validated_data["displayName"].strip()
+        password = validated_data.get("password", "").strip() or secrets.token_urlsafe(10)
+        username_base = display_name.lower().replace(" ", ".")
+        username = username_base
+        suffix = 1
+        while User.objects.filter(username=username).exists():
+            suffix += 1
+            username = f"{username_base}.{suffix}"
+
+        user = User.objects.create_user(
+            email=validated_data["email"],
+            username=username,
+            display_name=display_name,
+            password=password,
+            role="admin",
+            admin_role=validated_data["adminRole"],
+            is_staff=True,
+        )
+        user._generated_password = password
+        return user
+
+
+class AdminAccountUpdateSerializer(serializers.Serializer):
+    displayName = serializers.CharField(required=False)
+    adminRole = serializers.ChoiceField(
+        choices=[choice[0] for choice in ADMIN_ROLE_CHOICES], required=False
+    )
+    status = serializers.ChoiceField(choices=("active", "disabled"), required=False)
+
+    def validate(self, attrs):
+        target = self.instance
+        actor = self.context["request"].user
+
+        if target.id == actor.id and ("adminRole" in attrs or "status" in attrs):
+            raise serializers.ValidationError(
+                {"detail": "You cannot change your own role or deactivate yourself."}
+            )
+
+        demoting = attrs.get("adminRole") and attrs["adminRole"] != SUPER_ADMIN
+        deactivating = attrs.get("status") == "disabled"
+        if (demoting or deactivating) and target.admin_role == SUPER_ADMIN:
+            other_super_admins = (
+                User.objects.filter(role="admin", admin_role=SUPER_ADMIN, is_active=True)
+                .exclude(id=target.id)
+                .exists()
+            )
+            if not other_super_admins:
+                raise serializers.ValidationError(
+                    {"detail": "The platform must keep at least one active Super Admin."}
+                )
+        return attrs
+
+    def update(self, instance, validated_data):
+        if "displayName" in validated_data:
+            instance.display_name = validated_data["displayName"].strip()
+        if "adminRole" in validated_data:
+            instance.admin_role = validated_data["adminRole"]
+        if "status" in validated_data:
+            instance.is_active = validated_data["status"] == "active"
+        instance.save()
+        return instance
 
 
 def build_auth_response(user: User):

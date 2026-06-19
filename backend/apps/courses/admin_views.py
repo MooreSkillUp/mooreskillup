@@ -1,30 +1,48 @@
 from django.utils import timezone
+from django.shortcuts import get_object_or_404
 from rest_framework import response, status
 from rest_framework.views import APIView
 
-from common.permissions import IsAdminUserRole
+from common.rbac import AdminActionsPerMethod
+from apps.platform.audit import record_audit
 
-from .models import Course, Lesson, Section, Task
-from .serializers import CourseSerializer, LessonSerializer, SectionSerializer, TaskSerializer
+from .models import Course, Lesson, Project, Section, Task
+from .serializers import (
+    CourseSerializer,
+    LessonSerializer,
+    ProjectSerializer,
+    SectionSerializer,
+    TaskSerializer,
+)
+
+# Editing content (sections/lessons/tasks) inside an admin-owned course is part
+# of "courses:edit"; "courses:delete" is reserved for removing whole courses.
+OWNED_CONTENT_ACTIONS = {
+    "GET": ("courses:view",),
+    "POST": ("courses:edit",),
+    "PATCH": ("courses:edit",),
+    "DELETE": ("courses:edit",),
+}
 
 
-class AdminCourseMixin:
-    permission_classes = [IsAdminUserRole]
+class AdminCourseMixin(AdminActionsPerMethod):
+    admin_actions = {"GET": ("courses:view",), "PATCH": ("courses:edit",)}
 
     def get_queryset(self):
         return Course.objects.select_related("teacher__user", "category", "subcategory").prefetch_related(
             "sections__lessons",
             "sections__tasks",
+            "sections__projects",
             "tags",
         )
 
     def get_course(self, course_id):
-        return self.get_queryset().get(id=course_id)
+        return get_object_or_404(self.get_queryset(), id=course_id)
 
 
 class AdminOwnedCourseMixin(AdminCourseMixin):
     def get_course(self, course_id):
-        return self.get_queryset().get(id=course_id, teacher__isnull=True)
+        return get_object_or_404(self.get_queryset(), id=course_id, teacher__isnull=True)
 
 
 class AdminCourseDetailView(AdminCourseMixin, APIView):
@@ -54,6 +72,8 @@ class AdminOwnedCourseDetailView(AdminOwnedCourseMixin, APIView):
 
 
 class AdminOwnedCoursePublishView(AdminOwnedCourseMixin, APIView):
+    admin_actions = {"POST": ("courses:publish",)}
+
     def post(self, request, course_id):
         course = self.get_course(course_id)
         course.status = "published"
@@ -61,10 +81,19 @@ class AdminOwnedCoursePublishView(AdminOwnedCourseMixin, APIView):
         if not course.published_at:
             course.published_at = timezone.now()
         course.save(update_fields=["status", "visibility", "published_at", "updated_at"])
+        record_audit(
+            request,
+            "course.publish",
+            resource_type="course",
+            resource_id=course.id,
+            resource_name=course.title,
+        )
         return response.Response(CourseSerializer(course, context={"request": request}).data, status=status.HTTP_200_OK)
 
 
 class AdminOwnedCourseSectionCreateView(AdminOwnedCourseMixin, APIView):
+    admin_actions = OWNED_CONTENT_ACTIONS
+
     def post(self, request, course_id):
         course = self.get_course(course_id)
         serializer = SectionSerializer(data=request.data, context={"request": request})
@@ -73,11 +102,15 @@ class AdminOwnedCourseSectionCreateView(AdminOwnedCourseMixin, APIView):
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class AdminOwnedSectionView(APIView):
-    permission_classes = [IsAdminUserRole]
+class AdminOwnedSectionView(AdminActionsPerMethod, APIView):
+    admin_actions = OWNED_CONTENT_ACTIONS
 
     def get_object(self, section_id):
-        return Section.objects.select_related("course").get(id=section_id, course__teacher__isnull=True)
+        return get_object_or_404(
+            Section.objects.select_related("course"),
+            id=section_id,
+            course__teacher__isnull=True,
+        )
 
     def patch(self, request, section_id):
         section = self.get_object(section_id)
@@ -92,22 +125,26 @@ class AdminOwnedSectionView(APIView):
         return response.Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class AdminOwnedSectionLessonCreateView(APIView):
-    permission_classes = [IsAdminUserRole]
+class AdminOwnedSectionLessonCreateView(AdminActionsPerMethod, APIView):
+    admin_actions = OWNED_CONTENT_ACTIONS
 
     def post(self, request, section_id):
-        section = Section.objects.get(id=section_id, course__teacher__isnull=True)
+        section = get_object_or_404(Section, id=section_id, course__teacher__isnull=True)
         serializer = LessonSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save(section=section)
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class AdminOwnedLessonView(APIView):
-    permission_classes = [IsAdminUserRole]
+class AdminOwnedLessonView(AdminActionsPerMethod, APIView):
+    admin_actions = OWNED_CONTENT_ACTIONS
 
     def get_object(self, lesson_id):
-        return Lesson.objects.select_related("section__course").get(id=lesson_id, section__course__teacher__isnull=True)
+        return get_object_or_404(
+            Lesson.objects.select_related("section__course"),
+            id=lesson_id,
+            section__course__teacher__isnull=True,
+        )
 
     def patch(self, request, lesson_id):
         lesson = self.get_object(lesson_id)
@@ -122,22 +159,26 @@ class AdminOwnedLessonView(APIView):
         return response.Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class AdminOwnedSectionTaskCreateView(APIView):
-    permission_classes = [IsAdminUserRole]
+class AdminOwnedSectionTaskCreateView(AdminActionsPerMethod, APIView):
+    admin_actions = OWNED_CONTENT_ACTIONS
 
     def post(self, request, section_id):
-        section = Section.objects.get(id=section_id, course__teacher__isnull=True)
+        section = get_object_or_404(Section, id=section_id, course__teacher__isnull=True)
         serializer = TaskSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save(section=section)
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class AdminOwnedTaskView(APIView):
-    permission_classes = [IsAdminUserRole]
+class AdminOwnedTaskView(AdminActionsPerMethod, APIView):
+    admin_actions = OWNED_CONTENT_ACTIONS
 
     def get_object(self, task_id):
-        return Task.objects.select_related("section__course").get(id=task_id, section__course__teacher__isnull=True)
+        return get_object_or_404(
+            Task.objects.select_related("section__course"),
+            id=task_id,
+            section__course__teacher__isnull=True,
+        )
 
     def patch(self, request, task_id):
         task = self.get_object(task_id)
@@ -149,4 +190,38 @@ class AdminOwnedTaskView(APIView):
     def delete(self, request, task_id):
         task = self.get_object(task_id)
         task.delete()
+        return response.Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AdminOwnedSectionProjectCreateView(AdminActionsPerMethod, APIView):
+    admin_actions = OWNED_CONTENT_ACTIONS
+
+    def post(self, request, section_id):
+        section = get_object_or_404(Section, id=section_id, course__teacher__isnull=True)
+        serializer = ProjectSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save(section=section)
+        return response.Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class AdminOwnedProjectView(AdminActionsPerMethod, APIView):
+    admin_actions = OWNED_CONTENT_ACTIONS
+
+    def get_object(self, project_id):
+        return get_object_or_404(
+            Project.objects.select_related("section__course"),
+            id=project_id,
+            section__course__teacher__isnull=True,
+        )
+
+    def patch(self, request, project_id):
+        project = self.get_object(project_id)
+        serializer = ProjectSerializer(project, data=request.data, partial=True, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return response.Response(serializer.data)
+
+    def delete(self, request, project_id):
+        project = self.get_object(project_id)
+        project.delete()
         return response.Response(status=status.HTTP_204_NO_CONTENT)

@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 
 from common.models import TimeStampedModel, UUIDPrimaryKeyModel
+from common.rbac import ADMIN_ROLE_CHOICES, SUPER_ADMIN
 
 
 class UserManager(BaseUserManager):
@@ -21,6 +22,7 @@ class UserManager(BaseUserManager):
 
     def create_superuser(self, email, username, display_name, password=None, **extra_fields):
         extra_fields.setdefault("role", "admin")
+        extra_fields.setdefault("admin_role", SUPER_ADMIN)
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         return self.create_user(email, username, display_name, password, **extra_fields)
@@ -37,11 +39,18 @@ class User(UUIDPrimaryKeyModel, AbstractBaseUser, PermissionsMixin, TimeStampedM
     username = models.CharField(max_length=150, unique=True)
     display_name = models.CharField(max_length=255)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="student")
+    # Admin tier; only meaningful when role == "admin" (see common/rbac.py).
+    admin_role = models.CharField(max_length=20, choices=ADMIN_ROLE_CHOICES, null=True, blank=True)
     avatar = models.CharField(max_length=10, blank=True)
     avatar_url = models.URLField(blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
+    # Per-admin permission tweaks layered on top of the tier matrix:
+    # {"grant": ["perm", ...], "revoke": ["perm", ...]}.
+    permission_overrides = models.JSONField(default=dict, blank=True)
+    # Opt-in email one-time-code 2FA for admin accounts.
+    two_factor_enabled = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username", "display_name"]
@@ -79,6 +88,7 @@ class StudentProfile(UUIDPrimaryKeyModel, TimeStampedModel):
     user = models.OneToOneField("accounts.User", on_delete=models.CASCADE, related_name="student_profile")
     selected_interest = models.CharField(max_length=100, blank=True)
     selected_track = models.CharField(max_length=100, blank=True)
+    selected_tracks = models.JSONField(default=list, blank=True)
     plan = models.CharField(max_length=20, choices=PLAN_CHOICES, default="free")
 
     def __str__(self):
@@ -90,3 +100,15 @@ class PasswordResetToken(UUIDPrimaryKeyModel, TimeStampedModel):
     token = models.CharField(max_length=255, unique=True)
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
+
+
+class EmailOtp(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Short-lived one-time code emailed for 2FA sign-in."""
+
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="email_otps")
+    code = models.CharField(max_length=6)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)

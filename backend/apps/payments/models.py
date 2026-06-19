@@ -4,7 +4,7 @@ from common.models import TimeStampedModel, UUIDPrimaryKeyModel
 
 
 class Payment(UUIDPrimaryKeyModel, TimeStampedModel):
-    METHOD_CHOICES = (("paystack", "Paystack"), ("opay", "OPay"))
+    METHOD_CHOICES = (("paystack", "Paystack"),)
     STATUS_CHOICES = (
         ("pending", "Pending"),
         ("successful", "Successful"),
