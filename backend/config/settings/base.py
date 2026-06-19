@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "apps.accounts",
     "apps.categories",
     "apps.courses",
@@ -27,6 +28,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.progress",
     "apps.certificates",
+    "apps.platform",
 ]
 
 MIDDLEWARE = [
@@ -38,6 +40,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.platform.middleware.MaintenanceModeMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -81,13 +84,18 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
+    "DEFAULT_THROTTLE_RATES": {
+        "auth-login": os.getenv("THROTTLE_LOGIN", "5/min"),
+        "auth-register": os.getenv("THROTTLE_REGISTER", "10/hour"),
+        "auth-password-reset": os.getenv("THROTTLE_PASSWORD_RESET", "3/min"),
+    },
 }
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES", "30"))),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "7"))),
     "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": False,
+    "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
@@ -107,6 +115,12 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+# Paystack (the only gateway). Leave the secret key empty in dev/test to run in
+# "simulation mode" — checkout completes locally without contacting Paystack.
+PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
+PAYSTACK_PUBLIC_KEY = os.getenv("PAYSTACK_PUBLIC_KEY", "")
+PAYSTACK_BASE_URL = os.getenv("PAYSTACK_BASE_URL", "https://api.paystack.co")
 EMAIL_SITE_NAME = os.getenv("EMAIL_SITE_NAME", "MooreSkillUp")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@mooreskillup.com")
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")

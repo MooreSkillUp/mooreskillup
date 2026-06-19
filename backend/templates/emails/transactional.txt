@@ -1,0 +1,14 @@
+{{ site_name }}
+{{ heading }}
+
+{% if greeting %}{{ greeting }}
+{% endif %}{% if intro %}{{ intro }}
+{% endif %}{% for line in lines %}{{ line }}
+{% endfor %}{% if details %}
+{% for row in details %}{{ row.label }}: {{ row.value }}
+{% endfor %}{% endif %}{% if button_url %}
+{{ button_label }}: {{ button_url }}
+{% endif %}{% if footer %}
+{{ footer }}{% endif %}
+
+-- {{ site_name }}
