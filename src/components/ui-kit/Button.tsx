@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
@@ -7,6 +8,8 @@ type Size = "sm" | "md" | "lg";
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
+  loading?: boolean;
+  loadingText?: string;
 }
 
 const variants: Record<Variant, string> = {
@@ -26,7 +29,19 @@ const sizes: Record<Size, string> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, Props>(
-  ({ className, variant = "primary", size = "md", ...props }, ref) => (
+  (
+    {
+      className,
+      variant = "primary",
+      size = "md",
+      loading = false,
+      loadingText,
+      children,
+      disabled,
+      ...props
+    },
+    ref,
+  ) => (
     <button
       ref={ref}
       className={cn(
@@ -35,8 +50,13 @@ export const Button = forwardRef<HTMLButtonElement, Props>(
         sizes[size],
         className,
       )}
+      disabled={disabled || loading}
+      aria-busy={loading}
       {...props}
-    />
+    >
+      {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+      {loading ? loadingText ?? children : children}
+    </button>
   ),
 );
 Button.displayName = "Button";

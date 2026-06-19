@@ -28,6 +28,11 @@ services:
       dockerfile: backend/docker/django/Dockerfile
     env_file:
       - backend/.env
+    # Explicit DNS so the container can resolve external hosts (e.g. Paystack).
+    # Fixes "No address associated with hostname" on Docker Desktop / WSL2.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     ports:
       - "8000:8000"
     depends_on:
@@ -51,6 +56,7 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
       - API_URL=http://api:8000
     depends_on:
       - api

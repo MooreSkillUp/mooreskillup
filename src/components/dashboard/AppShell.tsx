@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
+import { AppLoader } from "@/components/shared/AppLoader";
 import { Sidebar } from "./Sidebar";
 import { TopNavbar } from "./TopNavbar";
 import { getHomeRouteForUser, useAuth } from "../../lib/auth";
@@ -32,7 +33,7 @@ export function AppShell({
     }
   }, [allowedRoles, isAuthenticated, isLoading, router, user]);
 
-  if (isLoading) return null;
+  if (isLoading) return <AppLoader fullScreen label="Loading your dashboard" />;
   if (!isAuthenticated) return null;
   if (allowedRoles && user && !allowedRoles.includes(user.role)) return null;
 
