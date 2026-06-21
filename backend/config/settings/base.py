@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "apps.progress",
     "apps.certificates",
     "apps.platform",
+    "anymail",
 ]
 
 MIDDLEWARE = [
@@ -128,20 +129,14 @@ EMAIL_SITE_NAME = os.getenv("EMAIL_SITE_NAME", "MooreSkillUp")
 # EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "mooreskillup@gmail.com")
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
-EMAIL_HOST = os.getenv("EMAIL_HOST", "")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
 
-# EMAIL_BACKEND = os.getenv(
-#     "EMAIL_BACKEND",
-#     "django.core.mail.backends.smtp.EmailBackend"
-# )
-# EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp-relay.brevo.com")
+# Stmp settings for production (using Brevo SMTP Relay)
+# EMAIL_HOST = os.getenv("EMAIL_HOST", "")
 # EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-# EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
-# EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+# EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+# EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 # EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
-# DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
 
+ANYMAIL = {
+    "BREVO_API_KEY": os.getenv("BREVO_API_KEY", ""),
+}
