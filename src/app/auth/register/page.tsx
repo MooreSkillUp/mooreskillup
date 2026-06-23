@@ -17,7 +17,7 @@ import { BrandLogo } from "@/components/shared/BrandLogo";
 
 
 export default function AuthRegisterPage() {
-  const { register, logout } = useAuth();
+  const { initiateRegister, verifyRegister, resendRegisterCode, logout } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
   const router = useRouter();
   const { interests, trackOptionsByInterest, isLoading: isLoadingTaxonomy, error: taxonomyError } =
@@ -32,6 +32,11 @@ export default function AuthRegisterPage() {
   const [primaryTrack, setPrimaryTrack] = useState<TrackName>("Backend with Python");
   const [secondaryTracks, setSecondaryTracks] = useState<TrackName[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pendingVerification, setPendingVerification] = useState<{ pendingId: string; email: string } | null>(null);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
   const trackOptions = useMemo(
     () => trackOptionsByInterest[selectedInterest] ?? [],
     [selectedInterest, trackOptionsByInterest],
@@ -56,6 +61,15 @@ export default function AuthRegisterPage() {
       current.filter((track) => trackOptions.includes(track) && track !== primaryTrack).slice(0, 2),
     );
   }, [interests, primaryTrack, selectedInterest, trackOptions, trackOptionsByInterest]);
+
+  // Resend timer countdown
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const interval = setInterval(() => {
+      setResendTimer((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendTimer]);
 
   const setField =
     (field: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -96,7 +110,7 @@ export default function AuthRegisterPage() {
     }
     setLoading(true);
     try {
-      await register({
+      const result = await initiateRegister({
         username: form.username,
         email: form.email,
         password: form.password,
@@ -106,14 +120,44 @@ export default function AuthRegisterPage() {
         selectedTrack: primaryTrack,
         selectedTracks,
       });
-      logout();
-      notifySuccess("Account created", "Login with your new account to continue.");
-      router.push("/auth/login");
+      setPendingVerification(result);
+      notifySuccess("Verification code sent", `We sent a 6-digit code to ${form.email}.`);
+      setResendTimer(60);
+      setLoading(false);
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "Unable to create your account.";
       notifyError("Registration failed", message);
       setLoading(false);
+    }
+  };
+
+  const onVerify = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!pendingVerification || verificationCode.length !== 6) return;
+    setVerifying(true);
+    try {
+      await verifyRegister(pendingVerification.pendingId, verificationCode.trim());
+      notifySuccess("Account verified", "Welcome to MooreSkillUp! Your account is ready.");
+      router.push("/dashboard");
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error ? submitError.message : "Verification failed. Please check the code.";
+      notifyError("Verification failed", message);
+      setVerifying(false);
+    }
+  };
+
+  const onResend = async () => {
+    if (!pendingVerification || resendTimer > 0) return;
+    try {
+      await resendRegisterCode(pendingVerification.pendingId);
+      notifySuccess("Code resent", "We sent a new 6-digit verification code.");
+      setResendTimer(60);
+    } catch (resendError) {
+      const message =
+        resendError instanceof Error ? resendError.message : "Unable to resend code.";
+      notifyError("Resend failed", message);
     }
   };
 
@@ -162,148 +206,215 @@ export default function AuthRegisterPage() {
             <ThemeToggle />
           </div>
 
-          <h2 className="font-display text-3xl font-bold tracking-tight">Create your account</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Add your details, pick a program, choose one primary track, and optionally add up to two supporting tracks.
-          </p>
-
-          <form onSubmit={onSubmit} className="mt-8 space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input label="Username" value={form.username} onChange={setField("username")} required />
-              <Input label="Email" type="email" value={form.email} onChange={setField("email")} required />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <PasswordInput label="Password" value={form.password} onChange={setField("password")} required />
-              <PasswordInput
-                label="Confirm password"
-                autoComplete="new-password"
-                value={form.confirm}
-                onChange={setField("confirm")}
-                required
-              />
-            </div>
-
-            <div>
-              <div className="text-sm font-medium text-foreground">Choose your main academy path</div>
-              {taxonomyError && (
-                <p className="mt-2 text-sm text-destructive">{taxonomyError}</p>
-              )}
-              {!taxonomyError && !isLoadingTaxonomy && !interests.length && (
+          {pendingVerification ? (
+            <div className="space-y-6">
+              <div>
+                <h2 className="font-display text-3xl font-bold tracking-tight">Verify your email</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Registration opens after an admin adds categories and tracks.
+                  Enter the 6-digit verification code sent to <span className="font-semibold text-foreground">{pendingVerification.email}</span>.
                 </p>
-              )}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {interests.map((interest) => {
-                  const active = selectedInterest === interest;
-                  return (
-                    <button
-                      key={interest}
-                      type="button"
-                      onClick={() => chooseInterest(interest)}
-                      className={`rounded-full border px-4 py-2 text-sm transition ${
-                        active
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground"
-                      }`}
-                    >
-                      {interest}
-                    </button>
-                  );
-                })}
               </div>
+
+              <form onSubmit={onVerify} className="space-y-4">
+                <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+                  We want to ensure your email is active. The code will expire in 10 minutes.
+                </div>
+
+                <Input
+                  label="6-Digit Verification Code"
+                  value={verificationCode}
+                  onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  inputMode="numeric"
+                  autoFocus
+                  required
+                  className="text-center font-mono text-3xl tracking-[0.5em] placeholder:tracking-normal placeholder:font-sans placeholder:text-sm"
+                />
+
+                <Button
+                  type="submit"
+                  variant="accent"
+                  size="lg"
+                  className="w-full mt-4"
+                  loading={verifying}
+                  loadingText="Verifying..."
+                  disabled={verificationCode.length !== 6}
+                >
+                  Verify & Create Account
+                </Button>
+
+                <div className="flex items-center justify-between text-sm mt-4">
+                  <button
+                    type="button"
+                    onClick={onResend}
+                    disabled={resendTimer > 0}
+                    className={`font-semibold transition ${
+                      resendTimer > 0
+                        ? "text-muted-foreground cursor-not-allowed"
+                        : "text-primary hover:text-accent"
+                    }`}
+                  >
+                    {resendTimer > 0 ? `Resend code in ${resendTimer}s` : "Resend Code"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingVerification(null);
+                      setVerificationCode("");
+                    }}
+                    className="font-semibold text-muted-foreground hover:text-foreground"
+                  >
+                    Back to sign up
+                  </button>
+                </div>
+              </form>
             </div>
+          ) : (
+            <>
+              <h2 className="font-display text-3xl font-bold tracking-tight">Create your account</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Add your details, pick a program, choose one primary track, and optionally add up to two supporting tracks.
+              </p>
 
-            <div className="rounded-3xl border border-border bg-muted/30 p-5">
-              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <ArrowRight className="h-4 w-4 text-primary" />
-                Choose your primary track inside {selectedInterest}
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {trackOptions.map((track) => {
-                  const active = primaryTrack === track;
-                  return (
-                    <button
-                      key={track}
-                      type="button"
-                      onClick={() => {
-                        setPrimaryTrack(track);
-                        setSecondaryTracks((current) => current.filter((item) => item !== track));
-                      }}
-                      className={`rounded-2xl border px-4 py-4 text-left transition ${
-                        active
-                          ? "border-accent bg-accent/10 shadow-sm"
-                          : "border-border bg-card hover:border-primary/30"
-                      }`}
-                    >
-                      <div className="font-display text-lg font-bold">{track}</div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        This is your main track. The dashboard and recommendations will prioritize it first.
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+              <form onSubmit={onSubmit} className="mt-8 space-y-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input label="Username" value={form.username} onChange={setField("username")} required />
+                  <Input label="Email" type="email" value={form.email} onChange={setField("email")} required />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <PasswordInput label="Password" value={form.password} onChange={setField("password")} required />
+                  <PasswordInput
+                    label="Confirm password"
+                    autoComplete="new-password"
+                    value={form.confirm}
+                    onChange={setField("confirm")}
+                    required
+                  />
+                </div>
 
-            <div className="rounded-3xl border border-border bg-muted/30 p-5">
-              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <ArrowRight className="h-4 w-4 text-primary" />
-                Add up to two secondary tracks
-              </div>
-              <div className="mt-2 text-sm text-muted-foreground">
-                Total tracks cannot exceed 3. Secondary tracks broaden recommendations without changing your primary learning direction.
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {trackOptions.map((track) => {
-                  if (track === primaryTrack) return null;
-                  const active = secondaryTracks.includes(track);
-                  const disabled = !active && secondaryTracks.length >= 2;
-                  return (
-                    <button
-                      key={track}
-                      type="button"
-                      onClick={() => toggleSecondaryTrack(track)}
-                      disabled={disabled}
-                      className={`rounded-2xl border px-4 py-4 text-left transition ${
-                        active
-                          ? "border-primary bg-primary/10 shadow-sm"
-                          : "border-border bg-card hover:border-primary/30"
-                      } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
-                    >
-                      <div className="font-display text-lg font-bold">{track}</div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        {active ? "Added as a secondary track." : "Optional supporting track."}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-3 text-sm text-muted-foreground">
-                Selected tracks: {selectedTracks.join(", ")}
-              </div>
-            </div>
+                <div>
+                  <div className="text-sm font-medium text-foreground">Choose your main academy path</div>
+                  {taxonomyError && (
+                    <p className="mt-2 text-sm text-destructive">{taxonomyError}</p>
+                  )}
+                  {!taxonomyError && !isLoadingTaxonomy && !interests.length && (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Registration opens after an admin adds categories and tracks.
+                    </p>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {interests.map((interest) => {
+                      const active = selectedInterest === interest;
+                      return (
+                        <button
+                          key={interest}
+                          type="button"
+                          onClick={() => chooseInterest(interest)}
+                          className={`rounded-full border px-4 py-2 text-sm transition ${
+                            active
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                          }`}
+                        >
+                          {interest}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
+                <div className="rounded-3xl border border-border bg-muted/30 p-5">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <ArrowRight className="h-4 w-4 text-primary" />
+                    Choose your primary track inside {selectedInterest}
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {trackOptions.map((track) => {
+                      const active = primaryTrack === track;
+                      return (
+                        <button
+                          key={track}
+                          type="button"
+                          onClick={() => {
+                            setPrimaryTrack(track);
+                            setSecondaryTracks((current) => current.filter((item) => item !== track));
+                          }}
+                          className={`rounded-2xl border px-4 py-4 text-left transition ${
+                            active
+                              ? "border-accent bg-accent/10 shadow-sm"
+                              : "border-border bg-card hover:border-primary/30"
+                          }`}
+                        >
+                          <div className="font-display text-lg font-bold">{track}</div>
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            This is your main track. The dashboard and recommendations will prioritize it first.
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-            <Button
-              type="submit"
-              variant="accent"
-              size="lg"
-              className="w-full"
-              loading={loading}
-              loadingText="Logging in..."
-              disabled={isLoadingTaxonomy || !interests.length || !trackOptions.length}
-            >
-              Create account
-            </Button>
-          </form>
+                <div className="rounded-3xl border border-border bg-muted/30 p-5">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <ArrowRight className="h-4 w-4 text-primary" />
+                    Add up to two secondary tracks
+                  </div>
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    Total tracks cannot exceed 3. Secondary tracks broaden recommendations without changing your primary learning direction.
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {trackOptions.map((track) => {
+                      if (track === primaryTrack) return null;
+                      const active = secondaryTracks.includes(track);
+                      const disabled = !active && secondaryTracks.length >= 2;
+                      return (
+                        <button
+                          key={track}
+                          type="button"
+                          onClick={() => toggleSecondaryTrack(track)}
+                          disabled={disabled}
+                          className={`rounded-2xl border px-4 py-4 text-left transition ${
+                            active
+                              ? "border-primary bg-primary/10 shadow-sm"
+                              : "border-border bg-card hover:border-primary/30"
+                          } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+                        >
+                          <div className="font-display text-lg font-bold">{track}</div>
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            {active ? "Added as a secondary track." : "Optional supporting track."}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 text-sm text-muted-foreground">
+                    Selected tracks: {selectedTracks.join(", ")}
+                  </div>
+                </div>
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            Already registered?{" "}
-            <Link href="/auth/login" className="font-semibold text-primary hover:text-accent">
-              Login
-            </Link>
-          </div>
+                <Button
+                  type="submit"
+                  variant="accent"
+                  size="lg"
+                  className="w-full"
+                  loading={loading}
+                  loadingText="Creating account..."
+                  disabled={isLoadingTaxonomy || !interests.length || !trackOptions.length}
+                >
+                  Create account
+                </Button>
+              </form>
+
+              <div className="mt-6 text-center text-sm text-muted-foreground">
+                Already registered?{" "}
+                <Link href="/auth/login" className="font-semibold text-primary hover:text-accent">
+                  Login
+                </Link>
+              </div>
+            </>
+          )}
         </motion.div>
       </div>
     </div>

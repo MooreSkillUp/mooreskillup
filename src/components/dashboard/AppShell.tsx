@@ -8,6 +8,7 @@ import { Sidebar } from "./Sidebar";
 import { TopNavbar } from "./TopNavbar";
 import { getHomeRouteForUser, useAuth } from "../../lib/auth";
 import type { UserRole } from "../../lib/mock-data";
+import { OnboardingTour } from "./OnboardingTour";
 
 export function AppShell({
   children,
@@ -43,6 +44,7 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopNavbar onMenu={() => setSidebarOpen(true)} />
         <motion.main
+          id="tour-content"
           key={typeof window !== "undefined" ? window.location.pathname : "page"}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -52,6 +54,7 @@ export function AppShell({
           {children}
         </motion.main>
       </div>
+      <OnboardingTour />
     </div>
   );
 }
