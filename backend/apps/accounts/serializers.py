@@ -120,6 +120,7 @@ class UserSerializer(serializers.ModelSerializer):
     adminRole = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
     twoFactorEnabled = serializers.BooleanField(source="two_factor_enabled", read_only=True)
+    isOnboarded = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -132,6 +133,7 @@ class UserSerializer(serializers.ModelSerializer):
             "adminRole",
             "permissions",
             "twoFactorEnabled",
+            "isOnboarded",
             "avatar",
             "avatarUrl",
             "selectedInterest",
@@ -222,6 +224,12 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_permissions(self, obj):
         return sorted(get_permissions_for(obj))
+
+    def get_isOnboarded(self, obj):
+        student_profile = self._get_student_profile(obj)
+        if student_profile:
+            return student_profile.onboarded
+        return True
 
     def _get_student_profile(self, obj):
         if obj.role != "student":
