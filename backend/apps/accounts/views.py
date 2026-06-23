@@ -76,6 +76,9 @@ class RegisterView(generics.CreateAPIView):
 
     def create(self, request, *args, **kwargs):
         from apps.platform.models import PlatformSettings
+        from django.contrib.auth.hashers import make_password
+        from common.email import send_transactional_email
+        from .models import PendingRegistration
 
         if not PlatformSettings.get_solo().student_registration_open:
             return response.Response(
@@ -85,8 +88,187 @@ class RegisterView(generics.CreateAPIView):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        return response.Response(build_auth_response(user), status=status.HTTP_201_CREATED)
+
+        data = serializer.validated_data
+        email = data.get("email")
+        username = data.get("username")
+        password = data.get("password")
+        display_name = data.get("display_name")
+        role = data.get("role", "student")
+        selected_interest = data.get("selectedInterest", "")
+        selected_track = data.get("selectedTrack", "")
+        selected_tracks = data.get("selectedTracks", [])
+        plan = data.get("plan", "free")
+
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        
+        # Clear any previous pending registration for this email/username to avoid duplicates
+        PendingRegistration.objects.filter(email=email).delete()
+        
+        pending = PendingRegistration.objects.create(
+            email=email,
+            username=username,
+            display_name=display_name,
+            password=make_password(password),
+            role=role,
+            selected_interest=selected_interest,
+            selected_track=selected_track,
+            selected_tracks=selected_tracks,
+            plan=plan,
+            code=code,
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+
+        send_transactional_email(
+            to_email=email,
+            subject="Verify your MooreSkillUp email",
+            heading="Confirm your registration",
+            greeting=f"Hi {display_name or username},",
+            intro="Use the verification code below to complete your registration. It expires in 10 minutes.",
+            details=[{"label": "Verification Code", "value": code}],
+            footer="If you didn't request this code, you can safely ignore this email.",
+        )
+
+        return response.Response({
+            "detail": "Verification code sent to email.",
+            "pendingId": str(pending.id),
+            "email": email
+        }, status=status.HTTP_200_OK)
+
+
+class VerifyRegisterView(APIView):
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-register"
+
+    def post(self, request):
+        from .models import PendingRegistration, User, StudentProfile
+        from .serializers import build_auth_response
+
+        pending_id = request.data.get("pendingId")
+        code = request.data.get("code")
+
+        if not pending_id or not code:
+            return Response(
+                {"detail": "Verification ID and code are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            pending = PendingRegistration.objects.get(id=pending_id)
+        except (PendingRegistration.DoesNotExist, ValueError):
+            return Response(
+                {"detail": "No pending registration found or session expired."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if pending.is_expired():
+            pending.delete()
+            return Response(
+                {"detail": "Verification code has expired. Please register again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if pending.code != code.strip():
+            return Response(
+                {"detail": "Invalid verification code."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Double check uniqueness constraints before creating
+        if User.objects.filter(email=pending.email).exists():
+            pending.delete()
+            return Response(
+                {"detail": "A user with this email already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if User.objects.filter(username=pending.username).exists():
+            pending.delete()
+            return Response(
+                {"detail": "A user with this username already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = User.objects.create(
+            email=pending.email,
+            username=pending.username,
+            display_name=pending.display_name,
+            role=pending.role,
+            is_active=True,
+        )
+        user.password = pending.password
+        user.save()
+
+        StudentProfile.objects.create(
+            user=user,
+            selected_interest=pending.selected_interest,
+            selected_track=pending.selected_track,
+            selected_tracks=pending.selected_tracks,
+            plan=pending.plan,
+            onboarded=False,
+        )
+
+        auth_data = build_auth_response(user)
+        pending.delete()
+
+        return Response(auth_data, status=status.HTTP_201_CREATED)
+
+
+class ResendRegisterCodeView(APIView):
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-register"
+
+    def post(self, request):
+        from .models import PendingRegistration
+        from common.email import send_transactional_email
+
+        pending_id = request.data.get("pendingId")
+        if not pending_id:
+            return Response(
+                {"detail": "Pending registration ID is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            pending = PendingRegistration.objects.get(id=pending_id)
+        except (PendingRegistration.DoesNotExist, ValueError):
+            return Response(
+                {"detail": "Pending registration session expired or not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        pending.code = code
+        pending.expires_at = timezone.now() + timedelta(minutes=10)
+        pending.save(update_fields=["code", "expires_at"])
+
+        send_transactional_email(
+            to_email=pending.email,
+            subject="Verify your MooreSkillUp email",
+            heading="Confirm your registration",
+            greeting=f"Hi {pending.display_name or pending.username},",
+            intro="Use this new verification code to complete your registration. It expires in 10 minutes.",
+            details=[{"label": "Verification Code", "value": code}],
+            footer="If you didn't request this code, you can safely ignore this email.",
+        )
+
+        return Response({"detail": "A new verification code has been sent."}, status=status.HTTP_200_OK)
+
+
+class CompleteOnboardingView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role == "student":
+            profile = getattr(request.user, "student_profile", None)
+            if profile:
+                profile.onboarded = True
+                profile.save(update_fields=["onboarded"])
+                return Response({"detail": "Onboarding completed."}, status=status.HTTP_200_OK)
+            return Response({"detail": "Student profile not found."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "Only student profiles require onboarding."}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class AdminRegisterView(generics.CreateAPIView):

@@ -90,6 +90,7 @@ class StudentProfile(UUIDPrimaryKeyModel, TimeStampedModel):
     selected_track = models.CharField(max_length=100, blank=True)
     selected_tracks = models.JSONField(default=list, blank=True)
     plan = models.CharField(max_length=20, choices=PLAN_CHOICES, default="free")
+    onboarded = models.BooleanField(default=False)
 
     def __str__(self):
         return self.user.display_name
@@ -112,3 +113,27 @@ class EmailOtp(UUIDPrimaryKeyModel, TimeStampedModel):
 
     class Meta:
         ordering = ("-created_at",)
+
+
+class PendingRegistration(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Temporary storage for public registration data before email verification."""
+
+    email = models.EmailField(unique=True)
+    username = models.CharField(max_length=150)
+    display_name = models.CharField(max_length=255)
+    password = models.CharField(max_length=255)  # Hashed password
+    role = models.CharField(max_length=20, default="student")
+    selected_interest = models.CharField(max_length=100, blank=True)
+    selected_track = models.CharField(max_length=100, blank=True)
+    selected_tracks = models.JSONField(default=list, blank=True)
+    plan = models.CharField(max_length=20, default="free")
+    code = models.CharField(max_length=6)
+    expires_at = models.DateTimeField()
+
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
+
+    def __str__(self):
+        return f"Pending: {self.email} ({self.code})"
+
