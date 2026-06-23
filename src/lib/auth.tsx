@@ -41,6 +41,7 @@ export interface AuthUser {
   status?: "active" | "disabled";
   mustChangePassword?: boolean;
   twoFactorEnabled?: boolean;
+  isOnboarded?: boolean;
 }
 
 /** Returned by login() when the account requires an emailed 2FA code. */
@@ -85,6 +86,10 @@ interface AuthContextValue {
   verifyTwoFactor: (userId: string, code: string) => Promise<AuthUser>;
   toggleTwoFactor: (enabled: boolean) => Promise<boolean>;
   register: (payload: RegisterPayload) => Promise<AuthUser>;
+  initiateRegister: (payload: RegisterPayload) => Promise<{ pendingId: string; email: string }>;
+  verifyRegister: (pendingId: string, code: string) => Promise<AuthUser>;
+  resendRegisterCode: (pendingId: string) => Promise<{ detail: string }>;
+  completeOnboarding: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<PasswordResetRequestResult>;
   resetPassword: (token: string, nextPassword: string) => Promise<PasswordResetConfirmResult>;
   logout: () => void;
@@ -220,6 +225,7 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
     status: (raw.status ?? "active") as "active" | "disabled",
     mustChangePassword: Boolean(raw.mustChangePassword),
     twoFactorEnabled: Boolean(raw.twoFactorEnabled),
+    isOnboarded: raw.role !== "student" ? true : Boolean(raw.isOnboarded),
   };
 }
 
@@ -471,6 +477,87 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persistTokens, persistUser],
   );
 
+  const initiateRegister = useCallback(
+    async (payload: RegisterPayload) => {
+      const response = await fetch(buildApiUrl("/api/auth/register/"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: payload.email,
+          username: payload.username,
+          displayName: payload.displayName,
+          password: payload.password,
+          role: "student",
+          interests: payload.interests,
+          selectedInterest: payload.selectedInterest,
+          selectedTrack: payload.selectedTrack,
+          selectedTracks: payload.selectedTracks ?? [payload.selectedTrack],
+          plan: payload.plan ?? "free",
+        }),
+      });
+      const responsePayload = await parseJsonSafely(response);
+      const pendingId = responsePayload?.pendingId || responsePayload?.pending_id;
+      if (!response.ok || !pendingId) {
+        throw new Error(extractErrorMessage(responsePayload, "Unable to initiate registration."));
+      }
+      return {
+        pendingId: pendingId as string,
+        email: (responsePayload.email || payload.email) as string,
+      };
+    },
+    []
+  );
+
+  const verifyRegister = useCallback(
+    async (pendingId: string, code: string) => {
+      const response = await fetch(buildApiUrl("/api/auth/register/verify/"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pendingId, code }),
+      });
+      const responsePayload = await parseJsonSafely(response);
+      if (!response.ok || !responsePayload?.user || !responsePayload?.access || !responsePayload?.refresh) {
+        throw new Error(extractErrorMessage(responsePayload, "Verification failed."));
+      }
+
+      persistTokens(responsePayload.access as string, responsePayload.refresh as string);
+      const nextUser = persistUser(responsePayload.user);
+      if (!nextUser) {
+        throw new Error("Unable to load your account.");
+      }
+      return nextUser;
+    },
+    [persistTokens, persistUser]
+  );
+
+  const resendRegisterCode = useCallback(
+    async (pendingId: string) => {
+      const response = await fetch(buildApiUrl("/api/auth/register/resend-code/"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pendingId }),
+      });
+      const responsePayload = await parseJsonSafely(response);
+      if (!response.ok) {
+        throw new Error(extractErrorMessage(responsePayload, "Unable to resend code."));
+      }
+      return { detail: (responsePayload?.detail as string) || "Code resent." };
+    },
+    []
+  );
+
+  const completeOnboarding = useCallback(
+    async () => {
+      await authenticatedRequest("/api/auth/onboard/", {
+        method: "POST",
+      });
+      if (user) {
+        persistUser({ ...user, isOnboarded: true });
+      }
+    },
+    [authenticatedRequest, persistUser, user]
+  );
+
   const requestPasswordReset = useCallback(async (email: string) => {
     const response = await fetch(buildApiUrl("/api/auth/password-reset/request/"), {
       method: "POST",
@@ -596,6 +683,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       verifyTwoFactor,
       toggleTwoFactor,
       register,
+      initiateRegister,
+      verifyRegister,
+      resendRegisterCode,
+      completeOnboarding,
       requestPasswordReset,
       resetPassword,
       logout,
@@ -611,6 +702,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       refreshCurrentUser,
       register,
+      initiateRegister,
+      verifyRegister,
+      resendRegisterCode,
+      completeOnboarding,
       requestPasswordReset,
       resetPassword,
       toggleWishlist,

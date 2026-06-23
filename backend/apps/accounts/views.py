@@ -132,6 +132,7 @@ class RegisterView(generics.CreateAPIView):
         return response.Response({
             "detail": "Verification code sent to email.",
             "pendingId": str(pending.id),
+            "pending_id": str(pending.id),
             "email": email
         }, status=status.HTTP_200_OK)
 
@@ -145,7 +146,7 @@ class VerifyRegisterView(APIView):
         from .models import PendingRegistration, User, StudentProfile
         from .serializers import build_auth_response
 
-        pending_id = request.data.get("pendingId")
+        pending_id = request.data.get("pendingId") or request.data.get("pending_id")
         code = request.data.get("code")
 
         if not pending_id or not code:
@@ -223,7 +224,7 @@ class ResendRegisterCodeView(APIView):
         from .models import PendingRegistration
         from common.email import send_transactional_email
 
-        pending_id = request.data.get("pendingId")
+        pending_id = request.data.get("pendingId") or request.data.get("pending_id")
         if not pending_id:
             return Response(
                 {"detail": "Pending registration ID is required."},

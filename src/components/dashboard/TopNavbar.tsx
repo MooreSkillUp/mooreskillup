@@ -59,7 +59,7 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
   const notificationsHref = role === "admin" ? "/admin/notifications" : "/notifications";
 
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-xl">
+    <header id="tour-header" className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-xl">
       <div className="flex h-16 items-center justify-between gap-4 px-4 lg:px-8">
         <div className="flex items-center gap-3">
           <button
