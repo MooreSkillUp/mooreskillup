@@ -859,14 +859,26 @@ export function useTeacherPlatform(
       }
 
       const previousCourse = getCourseById(nextCourse.id);
-      const payload = {
+
+      // Guard: if categories haven't loaded yet, categoryId/subcategoryId will
+      // be empty strings which the backend rejects. Fail loudly instead of
+      // sending a guaranteed 400.
+      if (!nextCourse.categoryId || !nextCourse.subcategoryId) {
+        if (options?.autosave) return { ok: false, course: nextCourse, issues: [] };
+        return {
+          ok: false,
+          course: nextCourse,
+          issues: ["Course category and track are not loaded yet. Please wait a moment and try again."],
+        };
+      }
+
+      const payload: Record<string, unknown> = {
         title: nextCourse.title,
         subtitle: nextCourse.subtitle,
         category: nextCourse.categoryId,
         subcategory: nextCourse.subcategoryId,
         overview: nextCourse.overview,
         scheme_of_work: nextCourse.schemeOfWork,
-        roadmap_link: nextCourse.roadmapLink,
         price: nextCourse.price,
         status:
           intent === "publish"
@@ -879,6 +891,10 @@ export function useTeacherPlatform(
         visibility: intent === "publish" ? "hidden" : nextCourse.visibility,
         tags: nextCourse.tags,
       };
+      // URLField on the backend rejects empty string — only send when non-empty.
+      if (nextCourse.roadmapLink.trim()) {
+        payload.roadmap_link = nextCourse.roadmapLink;
+      }
 
       let saved: Record<string, unknown>;
       try {
@@ -1014,11 +1030,12 @@ export function useTeacherPlatform(
   );
 
   const updateProfile = useCallback(
-    async (patch: Partial<TeacherProfileSettings>) => {
+    async (patch: Partial<TeacherProfileSettings> & { avatarUrl?: string }) => {
       const payload: Record<string, unknown> = {};
       if (typeof patch.displayName === "string") payload.displayName = patch.displayName;
       if (typeof patch.program === "string") payload.selectedInterest = patch.program;
       if (typeof patch.track === "string") payload.selectedTrack = patch.track;
+      if (typeof patch.avatarUrl === "string") payload.avatarUrl = patch.avatarUrl;
       const updatedUser = await authenticatedRequest<Record<string, unknown>>("/api/auth/me/", {
         method: "PATCH",
         body: JSON.stringify(payload),

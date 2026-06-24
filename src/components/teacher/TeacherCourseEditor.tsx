@@ -178,6 +178,7 @@ export function TeacherCourseEditor({
   const [autosaveMessage, setAutosaveMessage] = useState("Waiting for changes");
   const [manualMessage, setManualMessage] = useState("");
   const [manualMessageTone, setManualMessageTone] = useState<"success" | "warning">("success");
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [activeAction, setActiveAction] = useState<
     "draft" | "preview" | "publish" | "unpublish" | "archive" | "restore" | null
   >(null);
@@ -392,9 +393,20 @@ export function TeacherCourseEditor({
 
   const saveDraft = async () => {
     setActiveAction("draft");
+    setValidationErrors([]);
     try {
       const result = await saveCourse({ ...course, status: "draft" }, "draft");
-      if (!result.ok) return;
+      if (!result.ok) {
+        if (result.issues?.length) {
+          setValidationErrors(result.issues);
+          showManualMessage("Fix the issues below before saving.", "warning");
+        } else {
+          showManualMessage("Draft could not be saved. Please try again.", "warning");
+          notifyError("Draft not saved", "Please check your course details and try again.");
+        }
+        return;
+      }
+      setValidationErrors([]);
       persistAndNavigateIfNeeded(result.course);
       showManualMessage("Course saved as draft.");
       notifySuccess("Draft saved", "You can continue editing this course later from My Courses.");
@@ -405,13 +417,19 @@ export function TeacherCourseEditor({
 
   const publish = async () => {
     setActiveAction("publish");
+    setValidationErrors([]);
     try {
       const result = await saveCourse({ ...course, status: "published" }, "publish");
       if (!result.ok) {
-        showManualMessage("Fix validation issues before submitting for review.", "warning");
-        notifyError("Course not ready", "Fix validation issues before submitting for review.");
+        const errs = result.issues?.length
+          ? result.issues
+          : ["Fix all validation issues before submitting for review."];
+        setValidationErrors(errs);
+        showManualMessage("Course not ready — see issues below.", "warning");
+        notifyError("Course not ready", "Fix the listed issues before submitting for review.");
         return;
       }
+      setValidationErrors([]);
       persistAndNavigateIfNeeded(result.course);
       showManualMessage(
         platformMode === "admin-owned"
@@ -431,12 +449,17 @@ export function TeacherCourseEditor({
 
   const unpublish = async () => {
     setActiveAction("unpublish");
+    setValidationErrors([]);
     try {
       const result = await saveCourse({ ...course, status: "draft" }, "unpublish");
-      if (!result.ok) return;
+      if (!result.ok) {
+        showManualMessage("Unable to unpublish. Please try again.", "warning");
+        notifyError("Unpublish failed", "Please try again.");
+        return;
+      }
       persistAndNavigateIfNeeded(result.course);
       showManualMessage("Course moved back to draft.");
-      notifySuccess("Course moved to draft");
+      notifySuccess("Course unpublished", "The course is now in draft and hidden from learners.");
     } finally {
       setActiveAction(null);
     }
@@ -444,12 +467,17 @@ export function TeacherCourseEditor({
 
   const archive = async () => {
     setActiveAction("archive");
+    setValidationErrors([]);
     try {
       const result = await saveCourse({ ...course, status: "archived", visibility: "hidden" }, "archive");
-      if (!result.ok) return;
+      if (!result.ok) {
+        showManualMessage("Unable to archive. Please try again.", "warning");
+        notifyError("Archive failed", "Please try again.");
+        return;
+      }
       persistAndNavigateIfNeeded(result.course);
-      showManualMessage("Course archived.");
-      notifySuccess("Course archived");
+      showManualMessage("Course archived and hidden from learners.");
+      notifySuccess("Course archived", "You can restore it to a draft at any time.");
     } finally {
       setActiveAction(null);
     }
@@ -457,12 +485,17 @@ export function TeacherCourseEditor({
 
   const restore = async () => {
     setActiveAction("restore");
+    setValidationErrors([]);
     try {
       const result = await saveCourse({ ...course, status: "draft", visibility: "hidden" }, "restore");
-      if (!result.ok) return;
+      if (!result.ok) {
+        showManualMessage("Unable to restore. Please try again.", "warning");
+        notifyError("Restore failed", "Please try again.");
+        return;
+      }
       persistAndNavigateIfNeeded(result.course);
-      showManualMessage("Course restored to draft.");
-      notifySuccess("Draft restored");
+      showManualMessage("Course restored to draft — ready to edit.");
+      notifySuccess("Draft restored", "The course is back in draft mode.");
     } finally {
       setActiveAction(null);
     }
@@ -535,6 +568,19 @@ export function TeacherCourseEditor({
               }`}
             >
               {manualMessage}
+            </div>
+          )}
+          {validationErrors.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-destructive/40 bg-destructive/5 px-4 py-3">
+              <div className="text-sm font-semibold text-destructive">Issues to fix before publishing:</div>
+              <ul className="mt-2 space-y-1">
+                {validationErrors.map((err, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-destructive">
+                    <span className="mt-0.5 shrink-0">•</span>
+                    {err}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

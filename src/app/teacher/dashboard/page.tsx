@@ -5,16 +5,15 @@ import { useEffect, useState } from "react";
 import {
   Activity,
   BookOpen,
-  Trash2,
   Eye,
   FileEdit,
   LayoutList,
+  Trash2,
   Upload,
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
-import { Input } from "@/components/ui-kit/Input";
 import { PasswordInput } from "@/components/ui-kit/PasswordInput";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/lib/feedback";
@@ -22,7 +21,7 @@ import { useTeacherPlatform } from "@/lib/teacher-platform";
 
 export default function TeacherDashboardPage() {
   const { notifyError, notifySuccess } = useFeedback();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { profile, stats, activities, teacherCourses, clearTeacherActivities, isLoading, error, changePassword } =
     useTeacherPlatform();
   const topCourse = [...teacherCourses].sort(
@@ -35,11 +34,15 @@ export default function TeacherDashboardPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
 
   useEffect(() => {
+    // Wait for auth to finish hydrating before evaluating mustChangePassword.
+    // Without this guard, stale localStorage cache triggers the popup
+    // prematurely on every reload before the server token is verified.
+    if (authLoading) return;
     if (!user?.mustChangePassword) return;
     const dismissedKey = `mooreskillup.teacher-password-prompt.dismissed.${user.id}`;
     if (typeof window !== "undefined" && window.sessionStorage.getItem(dismissedKey) === "true") return;
     setPasswordPromptOpen(true);
-  }, [user?.id, user?.mustChangePassword]);
+  }, [authLoading, user?.id, user?.mustChangePassword]);
 
   const submitFirstLoginPassword = async () => {
     if (!newPassword.trim()) {
@@ -87,7 +90,9 @@ export default function TeacherDashboardPage() {
               </div>
               <h2 className="mt-2 font-display text-2xl font-bold">Update your temporary password</h2>
               <p className="mt-2 max-w-3xl text-muted-foreground">
-                You can replace the temporary password now, or skip and continue using it until you use the forgot-password flow.
+                Your account was set up with a temporary password. Set a new one now, or skip and continue with the
+                temporary password. If you forget your password in the future, contact an admin to resend your
+                credentials.
               </p>
               <div className="mt-5 grid gap-4 md:grid-cols-2">
                 <PasswordInput
@@ -115,6 +120,7 @@ export default function TeacherDashboardPage() {
             </section>
           </div>
         )}
+
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
@@ -124,7 +130,8 @@ export default function TeacherDashboardPage() {
               Welcome back, {profile.displayName}
             </h1>
             <p className="mt-2 max-w-3xl text-muted-foreground">
-              Manage your course pipeline, learner reach, draft progress, and recent instructor activity from one professional LMS workspace.
+              Manage your course pipeline, learner reach, draft progress, and recent instructor activity from one
+              professional LMS workspace.
             </p>
             {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
           </div>
@@ -169,19 +176,14 @@ export default function TeacherDashboardPage() {
                   Latest actions from your teacher workspace. Entries auto-expire after 24 hours.
                 </p>
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={clearTeacherActivities}
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete All Activities
-                </button>
-                <Link href="/teacher/uploads" className="text-sm font-semibold text-primary">
-                  Open activity log
-                </Link>
-              </div>
+              <button
+                type="button"
+                onClick={clearTeacherActivities}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+              >
+                <Trash2 className="h-4 w-4" />
+                Clear all
+              </button>
             </div>
             <div className="mt-5 space-y-3">
               {activities.slice(0, 6).map((activity) => (
@@ -228,9 +230,7 @@ export default function TeacherDashboardPage() {
                   </div>
                   <div className="mt-4 flex gap-2">
                     <Link href={`/teacher/courses/${topCourse.id}/edit`}>
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
+                      <Button variant="outline" size="sm">Edit</Button>
                     </Link>
                     <Link href={`/teacher/courses/${topCourse.id}/preview`}>
                       <Button variant="outline" size="sm">

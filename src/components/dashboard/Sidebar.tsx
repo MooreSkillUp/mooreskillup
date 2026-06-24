@@ -81,7 +81,6 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     { href: "/teacher/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/teacher/courses", label: "My courses", icon: BookOpen },
     { href: "/teacher/create-course", label: "Create course", icon: Upload },
-    { href: "/teacher/uploads", label: "Current uploads", icon: FolderKanban },
     { href: "/teacher/students", label: "Students", icon: Users },
     { href: "/teacher/analytics", label: "Analytics", icon: BarChart3 },
     { href: "/teacher/announcements", label: "Announcements", icon: BellRing },
