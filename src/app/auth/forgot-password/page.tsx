@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
@@ -16,6 +15,7 @@ export default function ForgotPasswordPage() {
   const { notifyError, notifySuccess } = useFeedback();
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [isAdminOrTeacherBlock, setIsAdminOrTeacherBlock] = useState(false);
   const [token, setToken] = useState("");
   const [resetUrl, setResetUrl] = useState("");
   const [emailHint, setEmailHint] = useState("");
@@ -27,6 +27,7 @@ export default function ForgotPasswordPage() {
     setToken("");
     setResetUrl("");
     setEmailHint("");
+    setIsAdminOrTeacherBlock(false);
     setLoading(true);
     try {
       const result = await requestPasswordReset(email);
@@ -36,9 +37,18 @@ export default function ForgotPasswordPage() {
       setEmailHint(result.emailHint ?? "");
       notifySuccess("Reset email processed", result.message);
     } catch (submitError) {
-      const message =
+      const errorMessage =
         submitError instanceof Error ? submitError.message : "Unable to send reset email.";
-      notifyError("Reset request failed", message);
+      // Detect the blocked-role response from the backend and show a friendlier UI.
+      const isBlocked =
+        errorMessage.toLowerCase().includes("administrator accounts") ||
+        errorMessage.toLowerCase().includes("teacher accounts");
+      if (isBlocked) {
+        setIsAdminOrTeacherBlock(true);
+        setMessage(errorMessage);
+      } else {
+        notifyError("Reset request failed", errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -53,7 +63,7 @@ export default function ForgotPasswordPage() {
       >
         <div className="mb-8 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-          <BrandLogo href="/" />
+            <BrandLogo href="/" />
           </Link>
           <ThemeToggle />
         </div>
@@ -69,7 +79,7 @@ export default function ForgotPasswordPage() {
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="teacher@mooreskillup.com"
+            placeholder="you@mooreskillup.com"
             required
           />
           <Button type="submit" variant="accent" size="lg" className="w-full" loading={loading} loadingText="Sending...">
@@ -77,8 +87,16 @@ export default function ForgotPasswordPage() {
           </Button>
         </form>
 
+        {isAdminOrTeacherBlock && (
+          <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50/70 p-5 dark:border-amber-700 dark:bg-amber-500/10">
+            <div className="font-semibold text-amber-900 dark:text-amber-100">Password reset not available</div>
+            <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">
+              Admin and teacher accounts cannot use the public password reset flow. Please contact your Super Admin or platform admin to have your credentials resent. They will email you a new temporary password, and you will be asked to change it on your next login.
+            </p>
+          </div>
+        )}
 
-        {message && (
+        {message && !isAdminOrTeacherBlock && (
           <div className="mt-6 rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
             {message}
           </div>
@@ -105,6 +123,13 @@ export default function ForgotPasswordPage() {
             </div>
           </div>
         )}
+
+        <div className="mt-6 text-center text-sm text-muted-foreground">
+          Remembered it?{" "}
+          <Link href="/auth/login" className="font-semibold text-primary hover:text-accent">
+            Back to login
+          </Link>
+        </div>
       </motion.div>
     </div>
   );

@@ -42,7 +42,9 @@ class User(UUIDPrimaryKeyModel, AbstractBaseUser, PermissionsMixin, TimeStampedM
     # Admin tier; only meaningful when role == "admin" (see common/rbac.py).
     admin_role = models.CharField(max_length=20, choices=ADMIN_ROLE_CHOICES, null=True, blank=True)
     avatar = models.CharField(max_length=10, blank=True)
-    avatar_url = models.URLField(blank=True)
+    # Stores a predefined avatar key (e.g. "av-blue"), not a real URL — the name
+    # is kept for backwards compatibility with existing DB rows and the frontend.
+    avatar_url = models.CharField(max_length=50, blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)

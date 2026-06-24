@@ -418,6 +418,11 @@ class PasswordResetRequestView(APIView):
                     {"detail": "Administrator accounts cannot reset passwords publicly. Please contact a Super Admin to resend your credentials."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if user.role == "teacher":
+                return response.Response(
+                    {"detail": "Teacher accounts cannot reset passwords through this page. Please contact an admin to have your credentials resent."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             PasswordResetToken.objects.filter(user=user, used_at__isnull=True).delete()
             reset_token = PasswordResetToken.objects.create(
                 user=user,

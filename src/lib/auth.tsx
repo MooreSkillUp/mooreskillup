@@ -402,10 +402,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!nextUser) {
         throw new Error("Unable to load your account.");
       }
+
+      // If this login requires a password change (new/resent credentials),
+      // clear the sessionStorage dismissal flag so the prompt always surfaces
+      // even if the user had previously dismissed it in the same browser tab.
+      if (nextUser.mustChangePassword && typeof window !== "undefined") {
+        const key = `mooreskillup.teacher-password-prompt.dismissed.${nextUser.id}`;
+        const adminKey = `mooreskillup.admin-password-prompt.dismissed.${nextUser.id}`;
+        window.sessionStorage.removeItem(key);
+        window.sessionStorage.removeItem(adminKey);
+      }
+
       return nextUser;
     },
     [persistTokens, persistUser],
   );
+
 
   const verifyTwoFactor = useCallback(
     async (userId: string, code: string) => {
@@ -423,10 +435,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!nextUser) {
         throw new Error("Unable to load your account.");
       }
+      // Same dismissal-key cleanup as regular login.
+      if (nextUser.mustChangePassword && typeof window !== "undefined") {
+        window.sessionStorage.removeItem(`mooreskillup.teacher-password-prompt.dismissed.${nextUser.id}`);
+        window.sessionStorage.removeItem(`mooreskillup.admin-password-prompt.dismissed.${nextUser.id}`);
+      }
       return nextUser;
     },
     [persistTokens, persistUser],
   );
+
 
   const toggleTwoFactor = useCallback(
     async (enabled: boolean) => {
