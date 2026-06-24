@@ -413,6 +413,11 @@ class PasswordResetRequestView(APIView):
         email_hint = None
 
         if user:
+            if user.role == "admin":
+                return response.Response(
+                    {"detail": "Administrator accounts cannot reset passwords publicly. Please contact a Super Admin to resend your credentials."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             PasswordResetToken.objects.filter(user=user, used_at__isnull=True).delete()
             reset_token = PasswordResetToken.objects.create(
                 user=user,
@@ -479,7 +484,12 @@ class ChangePasswordView(APIView):
         serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         request.user.set_password(serializer.validated_data["new_password"])
-        request.user.save(update_fields=["password"])
+        update_fields = ["password"]
+        if request.user.role == "admin" and request.user.must_change_password:
+            request.user.must_change_password = False
+            update_fields.append("must_change_password")
+        request.user.save(update_fields=update_fields)
+
         if request.user.role == "teacher" and hasattr(request.user, "teacher_profile"):
             teacher_profile = request.user.teacher_profile
             if teacher_profile.must_change_password:
@@ -844,7 +854,8 @@ class AdminAccountResendCredentialsView(AdminActionsPerMethod, APIView):
         admin = get_object_or_404(User, id=admin_id, role="admin")
         temp_password = secrets.token_urlsafe(10)
         admin.set_password(temp_password)
-        admin.save(update_fields=["password"])
+        admin.must_change_password = True
+        admin.save(update_fields=["password", "must_change_password"])
         _email_new_account_credentials(admin, temp_password, "admin")
         record_audit(
             request,

@@ -51,6 +51,7 @@ class User(UUIDPrimaryKeyModel, AbstractBaseUser, PermissionsMixin, TimeStampedM
     permission_overrides = models.JSONField(default=dict, blank=True)
     # Opt-in email one-time-code 2FA for admin accounts.
     two_factor_enabled = models.BooleanField(default=False)
+    must_change_password = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username", "display_name"]

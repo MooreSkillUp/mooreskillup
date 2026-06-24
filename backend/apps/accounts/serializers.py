@@ -214,6 +214,8 @@ class UserSerializer(serializers.ModelSerializer):
         return "active" if obj.is_active else "disabled"
 
     def get_mustChangePassword(self, obj):
+        if obj.must_change_password:
+            return True
         teacher_profile = self._get_teacher_profile(obj)
         if obj.role == "teacher" and teacher_profile:
             return teacher_profile.must_change_password
@@ -544,9 +546,10 @@ class ChangePasswordSerializer(serializers.Serializer):
         user = self.context["request"].user
         current_password = attrs.get("current_password", "")
         must_change_password = bool(
-            user.role == "teacher"
-            and hasattr(user, "teacher_profile")
-            and user.teacher_profile.must_change_password
+            (user.role == "teacher"
+             and hasattr(user, "teacher_profile")
+             and user.teacher_profile.must_change_password)
+            or (user.role == "admin" and user.must_change_password)
         )
         if must_change_password:
             return attrs
@@ -610,6 +613,7 @@ class AdminAccountCreateSerializer(serializers.Serializer):
             role="admin",
             admin_role=validated_data["adminRole"],
             is_staff=True,
+            must_change_password=True,
         )
         user._generated_password = password
         return user
