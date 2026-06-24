@@ -4,6 +4,7 @@ import {
   extractErrorMessage,
   normalizeListPayload,
 } from "./authenticated-api";
+import { useAuth } from "./auth";
 
 
 export interface AdminTeacher {
@@ -225,6 +226,7 @@ function normalizeSupportTicketPayload(payload: unknown): AdminSupportTicket[] {
 
 export function useAdminPlatform(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true;
+  const { user } = useAuth();
   const [teachers, setTeachers] = useState<AdminTeacher[]>([]);
   const [students, setStudents] = useState<AdminStudent[]>([]);
   const [categories, setCategories] = useState<AdminCategory[]>([]);
@@ -240,81 +242,86 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
+    if (!user) return;
     setIsLoading(true);
     setError("");
-    const [dashboardResult, teacherResult, studentResult, categoryResult, courseResult, broadcastResult, transactionResult, supportTicketResult] =
-      await Promise.allSettled([
-        authenticatedRequest<{
-          totals: AdminTotals;
-          analytics?: AdminAnalytics;
-          activityFeed?: AdminActivityEvent[];
-          systemAlerts?: Record<string, number>;
-        }>("/api/dashboard/admin/"),
-        authenticatedRequest<AdminTeacher[]>("/api/admin/teachers/"),
-        authenticatedRequest<AdminStudent[]>("/api/admin/students/"),
-        authenticatedRequest<AdminCategory[]>("/api/admin/categories/"),
-        authenticatedRequest<AdminCourse[]>("/api/admin/courses/"),
-        authenticatedRequest<AdminBroadcast[]>("/api/admin/broadcasts/"),
-        authenticatedRequest<AdminTransaction[]>("/api/admin/transactions/"),
-        authenticatedRequest<AdminSupportTicket[]>("/api/admin/support-tickets/"),
-      ]);
 
+    const hasPerm = (p: string) => !!user.permissions?.includes(p);
+
+    const promises: Promise<any>[] = [];
+    const keys: string[] = [];
+
+    if (hasPerm("dashboard:view")) {
+      promises.push(authenticatedRequest("/api/dashboard/admin/"));
+      keys.push("dashboard");
+    }
+    if (hasPerm("teachers:view")) {
+      promises.push(authenticatedRequest("/api/admin/teachers/"));
+      keys.push("teachers");
+    }
+    if (hasPerm("students:view")) {
+      promises.push(authenticatedRequest("/api/admin/students/"));
+      keys.push("students");
+    }
+    if (hasPerm("categories:view")) {
+      promises.push(authenticatedRequest("/api/admin/categories/"));
+      keys.push("categories");
+    }
+    if (hasPerm("courses:view")) {
+      promises.push(authenticatedRequest("/api/admin/courses/"));
+      keys.push("courses");
+    }
+    if (hasPerm("notifications:view")) {
+      promises.push(authenticatedRequest("/api/admin/broadcasts/"));
+      keys.push("broadcasts");
+    }
+    if (hasPerm("payments:view")) {
+      promises.push(authenticatedRequest("/api/admin/transactions/"));
+      keys.push("transactions");
+    }
+    if (hasPerm("support:view")) {
+      promises.push(authenticatedRequest("/api/admin/support-tickets/"));
+      keys.push("supportTickets");
+    }
+
+    const results = await Promise.allSettled(promises);
     const failures: string[] = [];
 
-    if (dashboardResult.status === "fulfilled") {
-      setTotals(dashboardResult.value.totals);
-      setAnalytics(dashboardResult.value.analytics ?? null);
-      setActivityFeed(dashboardResult.value.activityFeed ?? []);
-      setSystemAlerts(dashboardResult.value.systemAlerts ?? {});
-    } else {
-      failures.push(dashboardResult.reason instanceof Error ? dashboardResult.reason.message : "Dashboard totals failed to load.");
-    }
+    results.forEach((result, index) => {
+      const key = keys[index];
+      if (result.status === "fulfilled") {
+        const val = result.value;
+        if (key === "dashboard") {
+          setTotals(val.totals);
+          setAnalytics(val.analytics ?? null);
+          setActivityFeed(val.activityFeed ?? []);
+          setSystemAlerts(val.systemAlerts ?? {});
+        } else if (key === "teachers") {
+          setTeachers(normalizeTeacherPayload(val));
+        } else if (key === "students") {
+          setStudents(normalizeStudentPayload(val));
+        } else if (key === "categories") {
+          setCategories(normalizeCategoryPayload(val));
+        } else if (key === "courses") {
+          setCourses(normalizeCoursePayload(val));
+        } else if (key === "broadcasts") {
+          setBroadcasts(normalizeBroadcastPayload(val));
+        } else if (key === "transactions") {
+          setTransactions(normalizeListPayload<AdminTransaction>(val));
+        } else if (key === "supportTickets") {
+          setSupportTickets(normalizeSupportTicketPayload(val));
+        }
+      } else {
+        const msg = result.reason instanceof Error ? result.reason.message : "Request failed.";
+        failures.push(`${key} failed to load: ${msg}`);
+      }
+    });
 
-    if (teacherResult.status === "fulfilled") {
-      setTeachers(normalizeTeacherPayload(teacherResult.value));
-    } else {
-      failures.push(teacherResult.reason instanceof Error ? teacherResult.reason.message : "Teachers failed to load.");
+    if (failures.length > 0) {
+      setError(failures.join(" | "));
     }
-
-    if (studentResult.status === "fulfilled") {
-      setStudents(normalizeStudentPayload(studentResult.value));
-    } else {
-      failures.push(studentResult.reason instanceof Error ? studentResult.reason.message : "Students failed to load.");
-    }
-
-    if (categoryResult.status === "fulfilled") {
-      setCategories(normalizeCategoryPayload(categoryResult.value));
-    } else {
-      failures.push(categoryResult.reason instanceof Error ? categoryResult.reason.message : "Categories failed to load.");
-    }
-
-    if (courseResult.status === "fulfilled") {
-      setCourses(normalizeCoursePayload(courseResult.value));
-    } else {
-      failures.push(courseResult.reason instanceof Error ? courseResult.reason.message : "Courses failed to load.");
-    }
-
-    if (broadcastResult.status === "fulfilled") {
-      setBroadcasts(normalizeBroadcastPayload(broadcastResult.value));
-    } else {
-      failures.push(broadcastResult.reason instanceof Error ? broadcastResult.reason.message : "Broadcasts failed to load.");
-    }
-
-    if (transactionResult.status === "fulfilled") {
-      setTransactions(normalizeListPayload<AdminTransaction>(transactionResult.value));
-    } else {
-      failures.push(transactionResult.reason instanceof Error ? transactionResult.reason.message : "Transactions failed to load.");
-    }
-
-    if (supportTicketResult.status === "fulfilled") {
-      setSupportTickets(normalizeSupportTicketPayload(supportTicketResult.value));
-    } else {
-      failures.push(supportTicketResult.reason instanceof Error ? supportTicketResult.reason.message : "Support tickets failed to load.");
-    }
-
-    setError(failures.join(" | "));
     setIsLoading(false);
-  }, []);
+  }, [user]);
 
   const runAction = useCallback(async <T,>(action: () => Promise<T>) => {
     setError("");
@@ -329,12 +336,13 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !user) {
       setIsLoading(false);
       return;
     }
     void load();
-  }, [enabled, load]);
+  }, [enabled, user, load]);
+
 
   const activeTeachers = useMemo(
     () => teachers.filter((teacher) => teacher.status === "active"),

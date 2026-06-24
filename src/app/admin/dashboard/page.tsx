@@ -18,6 +18,7 @@ import {
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { useAdminPlatform } from "@/lib/admin-platform";
+import { useAuth } from "@/lib/auth";
 
 type RangeKey = "7" | "30" | "90" | "all";
 
@@ -29,6 +30,7 @@ const RANGE_OPTIONS: { value: RangeKey; label: string }[] = [
 ];
 
 export default function AdminDashboardPage() {
+  const { user } = useAuth();
   const {
     teachers,
     courses,
@@ -40,6 +42,8 @@ export default function AdminDashboardPage() {
     error,
   } = useAdminPlatform();
   const [range, setRange] = useState<RangeKey>("30");
+
+  const hasPerm = (p: string) => !user?.permissions || user.permissions.includes(p);
 
   const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
   const reviewCourses = courses.filter((course) => course.status === "review");
@@ -54,13 +58,13 @@ export default function AdminDashboardPage() {
   }, [activityFeed, range]);
 
   const statCards = [
-    { icon: Users, label: "Students", value: `${totals?.students ?? 0}`, href: "/admin/students" },
-    { icon: Shield, label: "Active teachers", value: `${activeTeachers}`, href: "/admin/users" },
-    { icon: FolderKanban, label: "Total courses", value: `${courses.length}`, href: "/admin/courses" },
-    { icon: FolderCheck, label: "Review queue", value: `${reviewCourses.length}`, href: "/admin/reviews" },
-    { icon: CreditCard, label: "Active enrollments", value: `${totals?.activeEnrollments ?? 0}`, href: "/admin/payments" },
-    { icon: CreditCard, label: "Revenue", value: `NGN ${totals?.revenue ?? "0.00"}`, href: "/admin/payments" },
-  ];
+    { icon: Users, label: "Students", value: `${totals?.students ?? 0}`, href: "/admin/students", permission: "students:view" },
+    { icon: Shield, label: "Active teachers", value: `${activeTeachers}`, href: "/admin/users", permission: "teachers:view" },
+    { icon: FolderKanban, label: "Total courses", value: `${courses.length}`, href: "/admin/courses", permission: "courses:view" },
+    { icon: FolderCheck, label: "Review queue", value: `${reviewCourses.length}`, href: "/admin/reviews", permission: "courses:approve" },
+    { icon: CreditCard, label: "Active enrollments", value: `${totals?.activeEnrollments ?? 0}`, href: "/admin/payments", permission: "payments:view" },
+    { icon: CreditCard, label: "Revenue", value: `NGN ${totals?.revenue ?? "0.00"}`, href: "/admin/payments", permission: "payments:view" },
+  ].filter((card) => hasPerm(card.permission));
 
   const attention = [
     {
@@ -70,6 +74,7 @@ export default function AdminDashboardPage() {
       count: reviewCourses.length,
       href: "/admin/reviews",
       cta: "Open review queue",
+      permission: "courses:approve",
     },
     {
       key: "deletions",
@@ -78,6 +83,7 @@ export default function AdminDashboardPage() {
       count: deletionRequests.length,
       href: "/admin/courses",
       cta: "Review requests",
+      permission: "courses:delete",
     },
     {
       key: "tickets",
@@ -86,6 +92,7 @@ export default function AdminDashboardPage() {
       count: openSupportTickets.length,
       href: "/admin/support",
       cta: "Open support",
+      permission: "support:view",
     },
     {
       key: "payments",
@@ -94,8 +101,9 @@ export default function AdminDashboardPage() {
       count: failedPayments,
       href: "/admin/payments",
       cta: "Open payments",
+      permission: "payments:view",
     },
-  ].filter((item) => item.count > 0);
+  ].filter((item) => item.count > 0 && hasPerm(item.permission));
 
   return (
     <AppShell allowedRoles={["admin"]}>
@@ -112,14 +120,18 @@ export default function AdminDashboardPage() {
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex flex-wrap gap-3">
-            <Link href="/admin/teachers">
-              <Button variant="accent">
-                <UserPlus className="h-4 w-4" /> Create teacher
-              </Button>
-            </Link>
-            <Link href="/admin/broadcast-notifications">
-              <Button variant="outline">Send a broadcast</Button>
-            </Link>
+            {hasPerm("teachers:create") && (
+              <Link href="/admin/teachers">
+                <Button variant="accent">
+                  <UserPlus className="h-4 w-4" /> Create teacher
+                </Button>
+              </Link>
+            )}
+            {hasPerm("notifications:broadcast") && (
+              <Link href="/admin/broadcast-notifications">
+                <Button variant="outline">Send a broadcast</Button>
+              </Link>
+            )}
           </div>
         </div>
 
@@ -188,11 +200,11 @@ export default function AdminDashboardPage() {
           <h2 className="mt-2 font-display text-2xl font-bold">Jump to where the work is</h2>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              { href: "/admin/reviews", label: "Review queue", stat: reviewCourses.length },
-              { href: "/admin/support", label: "Open tickets", stat: openSupportTickets.length },
-              { href: "/admin/courses", label: "Deletion requests", stat: deletionRequests.length },
-              { href: "/admin/users", label: "Active teachers", stat: activeTeachers },
-            ].map((shortcut) => (
+              { href: "/admin/reviews", label: "Review queue", stat: reviewCourses.length, permission: "courses:approve" },
+              { href: "/admin/support", label: "Open tickets", stat: openSupportTickets.length, permission: "support:view" },
+              { href: "/admin/courses", label: "Deletion requests", stat: deletionRequests.length, permission: "courses:view" },
+              { href: "/admin/users", label: "Active teachers", stat: activeTeachers, permission: "teachers:view" },
+            ].filter((shortcut) => hasPerm(shortcut.permission)).map((shortcut) => (
               <Link
                 key={shortcut.href}
                 href={shortcut.href}
@@ -204,6 +216,7 @@ export default function AdminDashboardPage() {
             ))}
           </div>
         </section>
+
 
         {/* Trimmed activity feed with date-range filter */}
         <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
