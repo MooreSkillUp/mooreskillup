@@ -8,6 +8,7 @@ from common.permissions import IsStudentUserRole, IsTeacherUserRole
 from common.rbac import AdminAction
 from apps.platform.audit import record_audit
 
+from .activity import prune_teacher_activity_logs
 from .models import Course, CourseReview, Lesson, Project, Section, Task, TeacherActivityLog
 from .serializers import (
     CourseReviewSerializer,
@@ -373,7 +374,9 @@ class TeacherActivityListView(APIView):
     permission_classes = [IsTeacherUserRole]
 
     def get(self, request):
-        activities = TeacherActivityLog.objects.filter(teacher=request.user.teacher_profile)[:50]
+        teacher = request.user.teacher_profile
+        prune_teacher_activity_logs(teacher)
+        activities = TeacherActivityLog.objects.filter(teacher=teacher)[:50]
         return response.Response(TeacherActivitySerializer(activities, many=True).data)
 
     def post(self, request):
@@ -390,6 +393,7 @@ class TeacherActivityListView(APIView):
             message=message,
             activity_type=activity_type,
         )
+        prune_teacher_activity_logs(request.user.teacher_profile)
         return response.Response(TeacherActivitySerializer(activity).data, status=status.HTTP_201_CREATED)
 
     def delete(self, request):

@@ -410,6 +410,10 @@ export function TeacherCourseEditor({
       persistAndNavigateIfNeeded(result.course);
       showManualMessage("Course saved as draft.");
       notifySuccess("Draft saved", "You can continue editing this course later from My Courses.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to save draft.";
+      showManualMessage(message, "warning");
+      notifyError("Draft not saved", message);
     } finally {
       setActiveAction(null);
     }
@@ -442,6 +446,10 @@ export function TeacherCourseEditor({
           ? "The course is now visible to learners."
           : "An admin can now approve or decline the course.",
       );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to submit course.";
+      showManualMessage(message, "warning");
+      notifyError("Submit failed", message);
     } finally {
       setActiveAction(null);
     }
@@ -460,6 +468,10 @@ export function TeacherCourseEditor({
       persistAndNavigateIfNeeded(result.course);
       showManualMessage("Course moved back to draft.");
       notifySuccess("Course unpublished", "The course is now in draft and hidden from learners.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to unpublish.";
+      showManualMessage(message, "warning");
+      notifyError("Unpublish failed", message);
     } finally {
       setActiveAction(null);
     }
@@ -478,6 +490,10 @@ export function TeacherCourseEditor({
       persistAndNavigateIfNeeded(result.course);
       showManualMessage("Course archived and hidden from learners.");
       notifySuccess("Course archived", "You can restore it to a draft at any time.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to archive.";
+      showManualMessage(message, "warning");
+      notifyError("Archive failed", message);
     } finally {
       setActiveAction(null);
     }
@@ -496,6 +512,10 @@ export function TeacherCourseEditor({
       persistAndNavigateIfNeeded(result.course);
       showManualMessage("Course restored to draft — ready to edit.");
       notifySuccess("Draft restored", "The course is back in draft mode.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to restore.";
+      showManualMessage(message, "warning");
+      notifyError("Restore failed", message);
     } finally {
       setActiveAction(null);
     }
@@ -505,6 +525,24 @@ export function TeacherCourseEditor({
   const assignmentCount = course.sections.reduce((sum, section) => sum + section.tasks.length, 0);
   const projectCount = course.sections.reduce((sum, section) => sum + section.projects.length, 0);
   const progressLabel = `${course.sections.length} section${course.sections.length === 1 ? "" : "s"} | ${lessonCount} lessons | ${assignmentCount} assignments | ${projectCount} projects`;
+
+  const publishActionLabel =
+    platformMode === "admin-owned"
+      ? "Publish"
+      : course.status === "declined"
+        ? "Resubmit for review"
+        : "Submit for review";
+
+  const publishBlockedLabel =
+    course.status === "review"
+      ? "Awaiting admin review"
+      : course.status === "approved"
+        ? "Approved — admin will publish"
+        : null;
+
+  const canSubmitForReview =
+    platformMode === "admin-owned" ||
+    (course.status !== "published" && course.status !== "archived" && !publishBlockedLabel);
 
   return (
     <div className="space-y-8">
@@ -540,11 +578,15 @@ export function TeacherCourseEditor({
                 <Button variant="outline" onClick={restore} loading={activeAction === "restore"} loadingText="Restoring...">
                   Restore to Draft
                 </Button>
-              ) : (
-                <Button variant="accent" onClick={publish} loading={activeAction === "publish"} loadingText={platformMode === "admin-owned" ? "Publishing..." : "Submitting..."}>
-                  <Upload className="h-4 w-4" /> Publish
+              ) : publishBlockedLabel ? (
+                <Button variant="accent" disabled title={publishBlockedLabel}>
+                  {publishBlockedLabel}
                 </Button>
-              )}
+              ) : canSubmitForReview ? (
+                <Button variant="accent" onClick={publish} loading={activeAction === "publish"} loadingText={platformMode === "admin-owned" ? "Publishing..." : "Submitting..."}>
+                  <Upload className="h-4 w-4" /> {publishActionLabel}
+                </Button>
+              ) : null}
               {course.status !== "archived" && (
                 <Button variant="outline" onClick={archive} loading={activeAction === "archive"} loadingText="Archiving...">
                   Archive

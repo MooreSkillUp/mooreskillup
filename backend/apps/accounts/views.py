@@ -549,6 +549,8 @@ class AdminTeacherUpdateView(AdminActionsPerMethod, APIView):
             teacher.user.save(update_fields=["display_name"])
         if "status" in request.data:
             teacher.status = request.data["status"]
+            teacher.user.is_active = request.data["status"] == "active"
+            teacher.user.save(update_fields=["is_active"])
         if "program" in request.data:
             teacher.program = request.data["program"]
         if "track" in request.data:

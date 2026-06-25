@@ -16,6 +16,7 @@ import {
   type UserPlan,
   type UserRole,
 } from "./mock-data";
+import { clearAuthCookies, writeAuthCookies } from "./auth-cookies";
 
 export type AdminRole = "super-admin" | "admin" | "moderator";
 
@@ -253,6 +254,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalized = normalizeUser(nextUser);
     setUser(normalized);
     writeStorage(USER_STORAGE_KEY, normalized ? JSON.stringify(normalized) : null);
+    if (normalized) {
+      writeAuthCookies(normalized.role);
+    } else {
+      clearAuthCookies();
+    }
     return normalized;
   }, []);
 
@@ -262,6 +268,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof refreshToken !== "undefined") {
       refreshTokenRef.current = refreshToken;
       writeStorage(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
+    }
+    if (!accessToken) {
+      clearAuthCookies();
     }
   }, []);
 
@@ -349,6 +358,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (active) {
               setUser(normalizeUser(parsed));
             }
+            if ((accessToken || refreshToken) && parsed.role) {
+              writeAuthCookies(parsed.role);
+            }
           } catch {
             writeStorage(USER_STORAGE_KEY, null);
           }
@@ -402,17 +414,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!nextUser) {
         throw new Error("Unable to load your account.");
       }
-
-      // If this login requires a password change (new/resent credentials),
-      // clear the sessionStorage dismissal flag so the prompt always surfaces
-      // even if the user had previously dismissed it in the same browser tab.
-      if (nextUser.mustChangePassword && typeof window !== "undefined") {
-        const key = `mooreskillup.teacher-password-prompt.dismissed.${nextUser.id}`;
-        const adminKey = `mooreskillup.admin-password-prompt.dismissed.${nextUser.id}`;
-        window.sessionStorage.removeItem(key);
-        window.sessionStorage.removeItem(adminKey);
-      }
-
       return nextUser;
     },
     [persistTokens, persistUser],

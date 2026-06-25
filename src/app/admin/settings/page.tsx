@@ -8,6 +8,7 @@ import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth";
+import { hasUserPermission } from "@/lib/admin-rbac";
 import { useFeedback } from "@/lib/feedback";
 import { useAdminSettings } from "@/lib/platform-admin";
 
@@ -79,8 +80,8 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [togglingTwoFactor, setTogglingTwoFactor] = useState(false);
 
-  const canEdit = user?.permissions?.includes("admin-settings:edit") ?? false;
-  const canView = !user?.permissions?.length || user.permissions.includes("admin-settings:view");
+  const canEdit = hasUserPermission(user?.permissions, "admin-settings:edit");
+  const canView = hasUserPermission(user?.permissions, "admin-settings:view");
   const isAdmin = user?.role === "admin";
 
   useEffect(() => {

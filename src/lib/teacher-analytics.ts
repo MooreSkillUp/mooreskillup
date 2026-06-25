@@ -16,6 +16,8 @@ export interface TeacherAnalyticsData {
     totalCourses: number;
     publishedCourses: number;
     draftCourses: number;
+    pendingReviewCourses: number;
+    declinedCourses: number;
     totalEnrollments: number;
     activeLearners: number;
     completionRate: number;

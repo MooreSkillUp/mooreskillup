@@ -18,6 +18,7 @@ import { Input } from "@/components/ui-kit/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAdminPlatform } from "@/lib/admin-platform";
 import { useAuth } from "@/lib/auth";
+import { hasUserPermission } from "@/lib/admin-rbac";
 import { useFeedback } from "@/lib/feedback";
 
 // ─── Priority badge ────────────────────────────────────────────────────────────
@@ -48,6 +49,8 @@ export default function AdminSupportPage() {
     useAdminPlatform();
   const { user } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
+  const canCloseTickets = hasUserPermission(user?.permissions, "support:close");
+  const canAssignTickets = hasUserPermission(user?.permissions, "support:assign") || hasUserPermission(user?.permissions, "support:add-notes");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -323,6 +326,7 @@ export default function AdminSupportPage() {
                     variant="outline"
                     loading={actionKey === `${selected.id}:delete`}
                     loadingText="Deleting…"
+                    disabled={!canCloseTickets}
                     onClick={async () => {
                       setActionKey(`${selected.id}:delete`);
                       try {
@@ -381,6 +385,7 @@ export default function AdminSupportPage() {
                     <label className="text-sm font-medium">Status</label>
                     <select
                       value={selected.status}
+                      disabled={!canCloseTickets}
                       onChange={(e) => void handleUpdate({ status: e.target.value })}
                       className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
                     >
@@ -407,6 +412,7 @@ export default function AdminSupportPage() {
                     <Button
                       variant="outline"
                       className="w-full"
+                      disabled={!canAssignTickets}
                       loading={actionKey === `${selected.id}:assign`}
                       loadingText="Assigning…"
                       onClick={() => void handleAssignToMe()}

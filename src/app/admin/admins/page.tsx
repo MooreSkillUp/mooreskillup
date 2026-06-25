@@ -16,7 +16,7 @@ import {
   type AdminTeamMember,
   type AdminTierCode,
 } from "@/lib/admin-team";
-import { rolePermissionMap, type AdminRole } from "@/lib/admin-rbac";
+import { rolePermissionMap, hasUserPermission, type AdminRole } from "@/lib/admin-rbac";
 import { publicEnv } from "@/lib/public-env";
 
 const CREATABLE_TIERS: AdminTierCode[] = ["admin", "moderator", "super_admin"];
@@ -29,7 +29,7 @@ const OVERRIDABLE_PERMISSIONS: { action: string; label: string }[] = [
   { action: "students:delete", label: "Delete students" },
   { action: "categories:delete", label: "Delete categories" },
   { action: "admin-settings:edit", label: "Edit platform settings" },
-  { action: "audit-logs:view", label: "View audit logs" },
+  { action: "activity-logs:view", label: "View activity logs" },
   { action: "activity-logs:export", label: "Export activity logs" },
 ];
 
@@ -56,7 +56,7 @@ export default function AdminTeamPage() {
   const { notifyError, notifySuccess } = useFeedback();
   const { admins, isLoading, error, createAdmin, updateAdmin, deleteAdmin, resendCredentials, updatePermissions } =
     useAdminTeam();
-  const canManagePermissions = !user?.permissions?.length || user.permissions.includes("permissions:manage");
+  const canManagePermissions = hasUserPermission(user?.permissions, "permissions:manage");
 
   const [form, setForm] = useState({ displayName: "", email: "", password: "", confirmPassword: "" });
   const [selectedTier, setSelectedTier] = useState<AdminTierCode>("admin");
@@ -69,7 +69,7 @@ export default function AdminTeamPage() {
   const [deleting, setDeleting] = useState(false);
   const [permissionsOpenId, setPermissionsOpenId] = useState<string | null>(null);
 
-  const canManageAdmins = !user?.permissions?.length || user.permissions.includes("admins:view");
+  const canManageAdmins = hasUserPermission(user?.permissions, "admins:view");
 
   const togglePermission = async (member: AdminTeamMember, action: string, enable: boolean) => {
     const base = tierBasePermissions(member.adminRole);
@@ -100,7 +100,7 @@ export default function AdminTeamPage() {
       setBusyAdminId(null);
     }
   };
-  const loginUrl = `${publicEnv.appUrl.replace(/\/$/, "")}/login`;
+  const loginUrl = `${publicEnv.appUrl.replace(/\/$/, "")}/auth/login`;
 
   const copyCredentials = async () => {
     if (!createdAdmin) return;

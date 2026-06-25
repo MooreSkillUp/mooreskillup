@@ -6,13 +6,18 @@ import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { PasswordInput } from "@/components/ui-kit/PasswordInput";
+import { useAuth } from "@/lib/auth";
+import { hasUserPermission } from "@/lib/admin-rbac";
 import { useFeedback } from "@/lib/feedback";
 import { useAdminPlatform, type AdminTeacher } from "@/lib/admin-platform";
 import { type Interest, type TrackName } from "@/lib/mock-data";
 import { usePlatformTaxonomy } from "@/lib/taxonomy";
 
 export default function AdminTeachersPage() {
+  const { user } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
+  const canDelete = hasUserPermission(user?.permissions, "teachers:delete");
+  const canEdit = hasUserPermission(user?.permissions, "teachers:edit");
   const { createTeacher, updateTeacher, deleteTeacher, resendTeacherInvite, teachers, isLoading, error } =
     useAdminPlatform();
   const { interests, trackOptionsByInterest, isLoading: isLoadingTaxonomy, error: taxonomyError } =
@@ -417,34 +422,40 @@ export default function AdminTeachersPage() {
                     </div>
 
                     <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => void resend(teacher)}
-                      >
-                        <Mail className="h-4 w-4" /> Resend invite
-                      </Button>
-                      <Button
-                        variant={teacher.status === "active" ? "outline" : "accent"}
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => void toggleStatus(teacher)}
-                      >
-                        {teacher.status === "active" ? "Deactivate" : "Reactivate"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy}
-                        className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                        onClick={() => {
-                          setDeleteTarget(teacher);
-                          setDeleteConfirm("");
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" /> Remove
-                      </Button>
+                      {canEdit && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => void resend(teacher)}
+                          >
+                            <Mail className="h-4 w-4" /> Resend invite
+                          </Button>
+                          <Button
+                            variant={teacher.status === "active" ? "outline" : "accent"}
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => void toggleStatus(teacher)}
+                          >
+                            {teacher.status === "active" ? "Deactivate" : "Reactivate"}
+                          </Button>
+                        </>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            setDeleteTarget(teacher);
+                            setDeleteConfirm("");
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" /> Remove
+                        </Button>
+                      )}
                     </div>
                   </div>
                 );

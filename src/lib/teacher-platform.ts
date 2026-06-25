@@ -163,6 +163,11 @@ export interface TeacherDashboardStats {
   draftCourses: number;
   activeCourses: number;
   totalLearners: number;
+  pendingReviewCourses: number;
+  declinedCourses: number;
+  approvedCourses: number;
+  completionRate: number;
+  totalViews: number;
 }
 
 interface TeacherDashboardPayload {
@@ -380,6 +385,11 @@ export function useTeacherPlatform(
     draftCourses: 0,
     activeCourses: 0,
     totalLearners: 0,
+    pendingReviewCourses: 0,
+    declinedCourses: 0,
+    approvedCourses: 0,
+    completionRate: 0,
+    totalViews: 0,
   });
   const [categories, setCategories] = useState<TeacherCategory[]>([]);
   const [teacherCourses, setTeacherCourses] = useState<TeacherCourse[]>([]);
@@ -412,6 +422,11 @@ export function useTeacherPlatform(
               draftCourses: 0,
               activeCourses: 0,
               totalLearners: 0,
+              pendingReviewCourses: 0,
+              declinedCourses: 0,
+              approvedCourses: 0,
+              completionRate: 0,
+              totalViews: 0,
             },
           }),
           authenticatedRequest<unknown>("/api/admin/categories/"),
@@ -860,6 +875,31 @@ export function useTeacherPlatform(
 
       const previousCourse = getCourseById(nextCourse.id);
 
+      if (intent === "publish") {
+        const currentStatus = previousCourse?.status ?? nextCourse.status;
+        if (currentStatus === "review") {
+          return {
+            ok: false,
+            course: nextCourse,
+            issues: ["This course is already awaiting admin review."],
+          };
+        }
+        if (currentStatus === "approved") {
+          return {
+            ok: false,
+            course: nextCourse,
+            issues: ["This course has been approved. An admin will publish it soon."],
+          };
+        }
+        if (currentStatus === "published") {
+          return {
+            ok: false,
+            course: nextCourse,
+            issues: ["This course is already published. Use Unpublish to move it back to draft."],
+          };
+        }
+      }
+
       // Guard: if categories haven't loaded yet, categoryId/subcategoryId will
       // be empty strings which the backend rejects. Fail loudly instead of
       // sending a guaranteed 400.
@@ -879,7 +919,13 @@ export function useTeacherPlatform(
         subcategory: nextCourse.subcategoryId,
         overview: nextCourse.overview,
         scheme_of_work: nextCourse.schemeOfWork,
+        level: nextCourse.level,
         price: nextCourse.price,
+        discount_price: nextCourse.discountPrice,
+        meta_title: nextCourse.metaTitle,
+        meta_description: nextCourse.metaDescription,
+        tech_stack: nextCourse.techStack,
+        certificate_enabled: nextCourse.certificateEnabled,
         status:
           intent === "publish"
             ? "review"
