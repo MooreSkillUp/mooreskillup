@@ -5,22 +5,24 @@ import { useEffect, useState } from "react";
 import {
   Activity,
   BookOpen,
+  CheckCircle2,
+  Clock3,
   Eye,
   FileEdit,
   LayoutList,
   Trash2,
+  TrendingUp,
   Upload,
   Users,
+  XCircle,
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
+import { FirstLoginPasswordModal } from "@/components/shared/FirstLoginPasswordModal";
 import { Button } from "@/components/ui-kit/Button";
-import { PasswordInput } from "@/components/ui-kit/PasswordInput";
 import { useAuth } from "@/lib/auth";
-import { useFeedback } from "@/lib/feedback";
 import { useTeacherPlatform } from "@/lib/teacher-platform";
 
 export default function TeacherDashboardPage() {
-  const { notifyError, notifySuccess } = useFeedback();
   const { user, isLoading: authLoading } = useAuth();
   const { profile, stats, activities, teacherCourses, clearTeacherActivities, isLoading, error, changePassword } =
     useTeacherPlatform();
@@ -28,99 +30,24 @@ export default function TeacherDashboardPage() {
     (left, right) => right.analytics.enrollments - left.analytics.enrollments,
   )[0];
   const [passwordPromptOpen, setPasswordPromptOpen] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [promptMessage, setPromptMessage] = useState("");
-  const [passwordSaving, setPasswordSaving] = useState(false);
 
   useEffect(() => {
-    // Wait for auth to finish hydrating before evaluating mustChangePassword.
-    // Without this guard, stale localStorage cache triggers the popup
-    // prematurely on every reload before the server token is verified.
     if (authLoading) return;
-    if (!user?.mustChangePassword) return;
-    const dismissedKey = `mooreskillup.teacher-password-prompt.dismissed.${user.id}`;
-    if (typeof window !== "undefined" && window.sessionStorage.getItem(dismissedKey) === "true") return;
-    setPasswordPromptOpen(true);
-  }, [authLoading, user?.id, user?.mustChangePassword]);
-
-  const submitFirstLoginPassword = async () => {
-    if (!newPassword.trim()) {
-      setPromptMessage("Enter a new password to continue.");
-      notifyError("Password required", "Enter a new password to continue.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPromptMessage("New password and confirm password must match.");
-      notifyError("Password mismatch", "New password and confirm password must match.");
-      return;
-    }
-    setPasswordSaving(true);
-    try {
-      await changePassword("", newPassword);
-      setPromptMessage("Password updated successfully.");
-      setPasswordPromptOpen(false);
-      setNewPassword("");
-      setConfirmPassword("");
-      notifySuccess("Password updated successfully");
-    } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : "Unable to update password.";
-      setPromptMessage(message);
-      notifyError("Unable to update password", message);
-    } finally {
-      setPasswordSaving(false);
-    }
-  };
-
-  const skipPasswordPrompt = () => {
-    if (typeof window !== "undefined" && user?.id) {
-      window.sessionStorage.setItem(`mooreskillup.teacher-password-prompt.dismissed.${user.id}`, "true");
-    }
-    setPasswordPromptOpen(false);
-  };
+    setPasswordPromptOpen(Boolean(user?.mustChangePassword));
+  }, [authLoading, user?.mustChangePassword]);
 
   return (
     <AppShell allowedRoles={["teacher", "admin"]}>
-      <div className="space-y-8">
-        {passwordPromptOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <section className="w-full max-w-2xl rounded-[2rem] border border-primary/30 bg-card p-6 shadow-2xl">
-              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-                First login security
-              </div>
-              <h2 className="mt-2 font-display text-2xl font-bold">Update your temporary password</h2>
-              <p className="mt-2 max-w-3xl text-muted-foreground">
-                Your account was set up with a temporary password. Set a new one now, or skip and continue with the
-                temporary password. If you forget your password in the future, contact an admin to resend your
-                credentials.
-              </p>
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <PasswordInput
-                  label="New password"
-                  autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                />
-                <PasswordInput
-                  label="Confirm password"
-                  autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                />
-              </div>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Button variant="accent" onClick={submitFirstLoginPassword} loading={passwordSaving} loadingText="Saving password...">
-                  Save new password
-                </Button>
-                <Button variant="outline" onClick={skipPasswordPrompt}>
-                  Keep temporary password for now
-                </Button>
-              </div>
-              {promptMessage && <p className="mt-3 text-sm text-success">{promptMessage}</p>}
-            </section>
-          </div>
-        )}
+      <FirstLoginPasswordModal
+        open={passwordPromptOpen}
+        roleLabel="teacher"
+        onChangePassword={async (newPassword) => {
+          await changePassword("", newPassword);
+          setPasswordPromptOpen(false);
+        }}
+      />
 
+      <div className="space-y-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
@@ -149,22 +76,44 @@ export default function TeacherDashboardPage() {
           </div>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
           {[
-            { icon: BookOpen, label: "Total Courses", value: `${stats.totalCourses}` },
-            { icon: Upload, label: "Published Courses", value: `${stats.publishedCourses}` },
-            { icon: FileEdit, label: "Draft Courses", value: `${stats.draftCourses}` },
-            { icon: Activity, label: "Active Courses", value: `${stats.activeCourses}` },
-            { icon: Users, label: "Total Learners", value: `${stats.totalLearners}` },
+            { icon: BookOpen, label: "Total courses", value: `${stats.totalCourses}` },
+            { icon: Upload, label: "Published", value: `${stats.publishedCourses}` },
+            { icon: FileEdit, label: "Drafts", value: `${stats.draftCourses}` },
+            { icon: Activity, label: "Active (live)", value: `${stats.activeCourses}` },
+            { icon: Clock3, label: "Awaiting review", value: `${stats.pendingReviewCourses}` },
+            { icon: CheckCircle2, label: "Approved", value: `${stats.approvedCourses}` },
+            { icon: XCircle, label: "Declined", value: `${stats.declinedCourses}` },
+            { icon: Users, label: "Total learners", value: `${stats.totalLearners}` },
           ].map((item) => (
-            <div key={item.label} className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <item.icon className="h-6 w-6" />
+            <div key={item.label} className="rounded-3xl border border-border bg-card p-5 shadow-sm">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <item.icon className="h-5 w-5" />
               </div>
-              <div className="mt-5 font-display text-3xl font-bold">{item.value}</div>
+              <div className="mt-4 font-display text-2xl font-bold">{item.value}</div>
               <div className="mt-1 text-sm text-muted-foreground">{item.label}</div>
             </div>
           ))}
+        </div>
+
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <TrendingUp className="h-6 w-6" />
+            </div>
+            <div className="mt-5 font-display text-3xl font-bold">{stats.completionRate}%</div>
+            <div className="mt-1 text-sm text-muted-foreground">Overall completion rate</div>
+            <p className="mt-2 text-xs text-muted-foreground">Across all enrollments in your courses.</p>
+          </div>
+          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <Eye className="h-6 w-6" />
+            </div>
+            <div className="mt-5 font-display text-3xl font-bold">{stats.totalViews}</div>
+            <div className="mt-1 text-sm text-muted-foreground">Engaged learners</div>
+            <p className="mt-2 text-xs text-muted-foreground">Enrolled students who have opened at least one lesson.</p>
+          </div>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
@@ -173,12 +122,12 @@ export default function TeacherDashboardPage() {
               <div>
                 <h2 className="font-display text-2xl font-bold">Recent activity</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Latest actions from your teacher workspace. Entries auto-expire after 24 hours.
+                  Latest actions from your workspace. Entries are kept for 30 days.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={clearTeacherActivities}
+                onClick={() => void clearTeacherActivities()}
                 className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
               >
                 <Trash2 className="h-4 w-4" />
@@ -207,7 +156,9 @@ export default function TeacherDashboardPage() {
               <h2 className="font-display text-2xl font-bold">Course pipeline</h2>
               <div className="mt-5 space-y-4">
                 <div className="rounded-2xl bg-muted/40 p-4 text-sm text-muted-foreground">
-                  Published and learner-visible courses currently count toward your active course total.
+                  {stats.pendingReviewCourses > 0
+                    ? `${stats.pendingReviewCourses} course${stats.pendingReviewCourses === 1 ? "" : "s"} awaiting admin review.`
+                    : "No courses are waiting for admin review right now."}
                 </div>
                 <div className="rounded-2xl bg-muted/40 p-4 text-sm text-muted-foreground">
                   Drafts remain fully editable and continue auto-saving while you build.
@@ -224,8 +175,8 @@ export default function TeacherDashboardPage() {
                 <div className="mt-4 rounded-2xl border border-border bg-background p-5">
                   <div className="font-display text-xl font-bold">{topCourse.title}</div>
                   <div className="mt-2 flex flex-wrap gap-3 text-sm text-muted-foreground">
-                    <span>{topCourse.analytics.views} views</span>
                     <span>{topCourse.analytics.enrollments} enrollments</span>
+                    <span>{topCourse.analytics.views} engaged learners</span>
                     <span>{topCourse.analytics.completionRate}% completion</span>
                   </div>
                   <div className="mt-4 flex gap-2">
@@ -241,7 +192,7 @@ export default function TeacherDashboardPage() {
                 </div>
               ) : (
                 <div className="mt-4 rounded-2xl bg-muted/40 p-4 text-sm text-muted-foreground">
-                  Create your first course to start tracking views and enrollments here.
+                  Create your first course to start tracking enrollments and completion here.
                 </div>
               )}
             </div>

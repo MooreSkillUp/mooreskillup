@@ -5,6 +5,8 @@ import { Download, GiftIcon, GraduationCap, PencilLine, Trash2 } from "lucide-re
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
+import { useAuth } from "@/lib/auth";
+import { hasUserPermission } from "@/lib/admin-rbac";
 import { useFeedback } from "@/lib/feedback";
 import { useAdminPlatform } from "@/lib/admin-platform";
 import {
@@ -19,7 +21,9 @@ import {
 const PAGE_SIZE = 10;
 
 export default function AdminStudentsPage() {
+  const { user } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
+  const canDelete = hasUserPermission(user?.permissions, "students:delete");
   const { students, courses, updateStudent, deleteStudent, grantStudentAccess, isLoading, error } =
     useAdminPlatform();
   const [search, setSearch] = useState("");
@@ -364,16 +368,18 @@ export default function AdminStudentsPage() {
                                   ? "Suspend"
                                   : "Reactivate"}
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDeleteTargetId(student.id);
-                                setDeleteConfirmation("");
-                              }}
-                              className="rounded-full border border-destructive/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-destructive"
-                            >
-                              Delete
-                            </button>
+                            {canDelete && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeleteTargetId(student.id);
+                                  setDeleteConfirmation("");
+                                }}
+                                className="rounded-full border border-destructive/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-destructive"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

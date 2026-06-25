@@ -1,7 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, BookOpen, Download, GraduationCap, TrendingUp, Users } from "lucide-react";
+import {
+  BarChart3,
+  BookOpen,
+  Clock3,
+  Download,
+  GraduationCap,
+  TrendingUp,
+  Users,
+  XCircle,
+} from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -50,8 +59,8 @@ export default function TeacherAnalyticsPage() {
             </div>
             <h1 className="mt-2 font-display text-4xl font-bold">Your course performance</h1>
             <p className="mt-2 max-w-3xl text-muted-foreground">
-              These numbers cover only the courses assigned to you — enrollments, active learners, and
-              completion across your own courses.
+              These numbers cover only the courses assigned to you — enrollments, active learners, completion,
+              and pipeline status across your own courses.
             </p>
             {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           </div>
@@ -61,11 +70,20 @@ export default function TeacherAnalyticsPage() {
           </Button>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
           <MetricCard icon={BookOpen} label="Your courses" value={totals?.totalCourses ?? 0} sub={`${totals?.publishedCourses ?? 0} published`} />
+          <MetricCard icon={Clock3} label="Awaiting review" value={totals?.pendingReviewCourses ?? 0} />
+          <MetricCard icon={XCircle} label="Declined" value={totals?.declinedCourses ?? 0} />
           <MetricCard icon={Users} label="Total enrollments" value={totals?.totalEnrollments ?? 0} />
           <MetricCard icon={GraduationCap} label="Active learners (30d)" value={totals?.activeLearners ?? 0} />
           <MetricCard icon={TrendingUp} label="Completion rate" value={`${totals?.completionRate ?? 0}%`} />
+          <MetricCard
+            icon={BarChart3}
+            label="Engaged learners"
+            value={totals?.totalViews ?? 0}
+            sub="Opened at least one lesson"
+          />
+          <MetricCard icon={BookOpen} label="Drafts" value={totals?.draftCourses ?? 0} />
         </div>
 
         <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
@@ -106,6 +124,9 @@ export default function TeacherAnalyticsPage() {
 
         <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
           <h2 className="font-display text-2xl font-bold">Per-course breakdown</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            &quot;Engaged learners&quot; counts enrolled students who have accessed course content at least once.
+          </p>
           <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
@@ -115,7 +136,7 @@ export default function TeacherAnalyticsPage() {
                   <th className="pb-3 pr-4">Enrollments</th>
                   <th className="pb-3 pr-4">Active (30d)</th>
                   <th className="pb-3 pr-4">Completion</th>
-                  <th className="pb-3">Views</th>
+                  <th className="pb-3">Engaged</th>
                 </tr>
               </thead>
               <tbody>

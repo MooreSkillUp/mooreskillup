@@ -1,9 +1,10 @@
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework import response, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.views import APIView
 
-from common.rbac import AdminActionsPerMethod
+from common.rbac import AdminActionsPerMethod, user_has_admin_permission
 from apps.platform.audit import record_audit
 
 from .models import Course, Lesson, Project, Section, Task
@@ -25,6 +26,16 @@ OWNED_CONTENT_ACTIONS = {
 }
 
 
+def _require_managed_course_access(request, course, *, write=False):
+    if course.teacher_id is None:
+        return
+    if write or request.method not in ("GET", "HEAD", "OPTIONS"):
+        if not user_has_admin_permission(request.user, "courses:edit"):
+            raise PermissionDenied("You do not have permission to edit this course.")
+    elif not user_has_admin_permission(request.user, "courses:view"):
+        raise PermissionDenied("You do not have permission to view this course.")
+
+
 class AdminCourseMixin(AdminActionsPerMethod):
     admin_actions = {"GET": ("courses:view",), "PATCH": ("courses:edit",)}
 
@@ -41,6 +52,13 @@ class AdminCourseMixin(AdminActionsPerMethod):
 
 
 class AdminOwnedCourseMixin(AdminCourseMixin):
+    def get_course(self, course_id):
+        course = get_object_or_404(self.get_queryset(), id=course_id)
+        _require_managed_course_access(self.request, course, write=self.request.method not in ("GET", "HEAD", "OPTIONS"))
+        return course
+
+
+class AdminOwnedOnlyCourseMixin(AdminCourseMixin):
     def get_course(self, course_id):
         return get_object_or_404(self.get_queryset(), id=course_id, teacher__isnull=True)
 
@@ -71,7 +89,7 @@ class AdminOwnedCourseDetailView(AdminOwnedCourseMixin, APIView):
         return response.Response(serializer.data)
 
 
-class AdminOwnedCoursePublishView(AdminOwnedCourseMixin, APIView):
+class AdminOwnedCoursePublishView(AdminOwnedOnlyCourseMixin, APIView):
     admin_actions = {"POST": ("courses:publish",)}
 
     def post(self, request, course_id):
@@ -106,11 +124,13 @@ class AdminOwnedSectionView(AdminActionsPerMethod, APIView):
     admin_actions = OWNED_CONTENT_ACTIONS
 
     def get_object(self, section_id):
-        return get_object_or_404(
-            Section.objects.select_related("course"),
-            id=section_id,
-            course__teacher__isnull=True,
+        section = get_object_or_404(Section.objects.select_related("course"), id=section_id)
+        _require_managed_course_access(
+            self.request,
+            section.course,
+            write=self.request.method not in ("GET", "HEAD", "OPTIONS"),
         )
+        return section
 
     def patch(self, request, section_id):
         section = self.get_object(section_id)
@@ -129,7 +149,8 @@ class AdminOwnedSectionLessonCreateView(AdminActionsPerMethod, APIView):
     admin_actions = OWNED_CONTENT_ACTIONS
 
     def post(self, request, section_id):
-        section = get_object_or_404(Section, id=section_id, course__teacher__isnull=True)
+        section = get_object_or_404(Section.objects.select_related("course"), id=section_id)
+        _require_managed_course_access(self.request, section.course, write=True)
         serializer = LessonSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save(section=section)
@@ -140,11 +161,13 @@ class AdminOwnedLessonView(AdminActionsPerMethod, APIView):
     admin_actions = OWNED_CONTENT_ACTIONS
 
     def get_object(self, lesson_id):
-        return get_object_or_404(
-            Lesson.objects.select_related("section__course"),
-            id=lesson_id,
-            section__course__teacher__isnull=True,
+        lesson = get_object_or_404(Lesson.objects.select_related("section__course"), id=lesson_id)
+        _require_managed_course_access(
+            self.request,
+            lesson.section.course,
+            write=self.request.method not in ("GET", "HEAD", "OPTIONS"),
         )
+        return lesson
 
     def patch(self, request, lesson_id):
         lesson = self.get_object(lesson_id)
@@ -163,7 +186,8 @@ class AdminOwnedSectionTaskCreateView(AdminActionsPerMethod, APIView):
     admin_actions = OWNED_CONTENT_ACTIONS
 
     def post(self, request, section_id):
-        section = get_object_or_404(Section, id=section_id, course__teacher__isnull=True)
+        section = get_object_or_404(Section.objects.select_related("course"), id=section_id)
+        _require_managed_course_access(self.request, section.course, write=True)
         serializer = TaskSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save(section=section)
@@ -174,11 +198,13 @@ class AdminOwnedTaskView(AdminActionsPerMethod, APIView):
     admin_actions = OWNED_CONTENT_ACTIONS
 
     def get_object(self, task_id):
-        return get_object_or_404(
-            Task.objects.select_related("section__course"),
-            id=task_id,
-            section__course__teacher__isnull=True,
+        task = get_object_or_404(Task.objects.select_related("section__course"), id=task_id)
+        _require_managed_course_access(
+            self.request,
+            task.section.course,
+            write=self.request.method not in ("GET", "HEAD", "OPTIONS"),
         )
+        return task
 
     def patch(self, request, task_id):
         task = self.get_object(task_id)
@@ -197,7 +223,8 @@ class AdminOwnedSectionProjectCreateView(AdminActionsPerMethod, APIView):
     admin_actions = OWNED_CONTENT_ACTIONS
 
     def post(self, request, section_id):
-        section = get_object_or_404(Section, id=section_id, course__teacher__isnull=True)
+        section = get_object_or_404(Section.objects.select_related("course"), id=section_id)
+        _require_managed_course_access(self.request, section.course, write=True)
         serializer = ProjectSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save(section=section)
@@ -208,11 +235,13 @@ class AdminOwnedProjectView(AdminActionsPerMethod, APIView):
     admin_actions = OWNED_CONTENT_ACTIONS
 
     def get_object(self, project_id):
-        return get_object_or_404(
-            Project.objects.select_related("section__course"),
-            id=project_id,
-            section__course__teacher__isnull=True,
+        project = get_object_or_404(Project.objects.select_related("section__course"), id=project_id)
+        _require_managed_course_access(
+            self.request,
+            project.section.course,
+            write=self.request.method not in ("GET", "HEAD", "OPTIONS"),
         )
+        return project
 
     def patch(self, request, project_id):
         project = self.get_object(project_id)

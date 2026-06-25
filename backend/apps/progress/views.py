@@ -13,6 +13,7 @@ from apps.courses.serializers import CourseSerializer, TeacherActivitySerializer
 from apps.enrollments.models import Enrollment
 from apps.notifications.models import Notification
 from apps.payments.models import Payment
+from apps.courses.activity import prune_teacher_activity_logs
 from apps.courses.models import TeacherActivityLog
 from apps.accounts.models import User
 
@@ -223,8 +224,13 @@ class TeacherDashboardView(views.APIView):
         from apps.platform.models import PlatformSettings
 
         teacher = request.user.teacher_profile
+        prune_teacher_activity_logs(teacher)
         courses = Course.objects.filter(teacher=teacher)
         total_learners = Enrollment.objects.filter(course__teacher=teacher).values("student_id").distinct().count()
+        enrollments = Enrollment.objects.filter(course__teacher=teacher)
+        total_enrollments = enrollments.count()
+        total_completed = enrollments.filter(status="completed").count()
+        total_views = enrollments.filter(last_accessed_at__isnull=False).count()
         recent_activities = TeacherActivityLog.objects.filter(teacher=teacher)[:8]
         recent_courses = courses.order_by("-updated_at", "-created_at")[:6]
         return response.Response(
@@ -244,6 +250,13 @@ class TeacherDashboardView(views.APIView):
                     "draftCourses": courses.filter(status="draft").count(),
                     "activeCourses": courses.filter(status="published", visibility="visible").count(),
                     "totalLearners": total_learners,
+                    "pendingReviewCourses": courses.filter(status="review").count(),
+                    "declinedCourses": courses.filter(status="declined").count(),
+                    "approvedCourses": courses.filter(status="approved").count(),
+                    "completionRate": round((total_completed / total_enrollments) * 100, 1)
+                    if total_enrollments
+                    else 0,
+                    "totalViews": total_views,
                 },
                 "recentActivities": TeacherActivitySerializer(recent_activities, many=True).data,
                 "recentCourses": CourseSerializer(recent_courses, many=True, context={"request": request}).data,
@@ -306,6 +319,8 @@ def build_teacher_analytics(teacher):
             "totalCourses": courses.count(),
             "publishedCourses": courses.filter(status="published").count(),
             "draftCourses": courses.filter(status="draft").count(),
+            "pendingReviewCourses": courses.filter(status="review").count(),
+            "declinedCourses": courses.filter(status="declined").count(),
             "totalEnrollments": total_enrollments,
             "activeLearners": active_learners,
             "completionRate": round((total_completed / total_enrollments) * 100, 1)

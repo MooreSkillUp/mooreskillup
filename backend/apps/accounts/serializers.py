@@ -508,6 +508,16 @@ class LoginSerializer(serializers.Serializer):
         user = authenticate(email=attrs["email"], password=attrs["password"])
         if not user:
             raise serializers.ValidationError("Invalid credentials.")
+        if not user.is_active:
+            raise serializers.ValidationError("This account has been deactivated. Contact your administrator.")
+        if user.role == "teacher":
+            try:
+                if user.teacher_profile.status != "active":
+                    raise serializers.ValidationError(
+                        "This teacher account is inactive. Contact your administrator."
+                    )
+            except ObjectDoesNotExist as exc:
+                raise serializers.ValidationError("Teacher profile not found.") from exc
         attrs["user"] = user
         return attrs
 

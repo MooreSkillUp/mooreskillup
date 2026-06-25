@@ -45,7 +45,7 @@ export default function AdminOwnedCoursePreviewPage() {
             <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
               Preview mode
             </div>
-            <h1 className="mt-2 font-display text-4xl font-bold">Admin-owned learner preview</h1>
+            <h1 className="mt-2 font-display text-4xl font-bold">Course learner preview</h1>
           </div>
           <Link href={`/admin/owned-courses/${course.id}/edit`}>
             <Button variant="outline">Back to editor</Button>

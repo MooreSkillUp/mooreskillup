@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -17,11 +17,9 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
+import { hasUserPermission, type AdminResourceAction } from "@/lib/admin-rbac";
 import { useAdminPlatform } from "@/lib/admin-platform";
 import { useAuth } from "@/lib/auth";
-import { PasswordInput } from "@/components/ui-kit/PasswordInput";
-import { useFeedback } from "@/lib/feedback";
-import { authenticatedRequest } from "@/lib/authenticated-api";
 
 type RangeKey = "7" | "30" | "90" | "all";
 
@@ -33,8 +31,7 @@ const RANGE_OPTIONS: { value: RangeKey; label: string }[] = [
 ];
 
 export default function AdminDashboardPage() {
-  const { user, refreshCurrentUser, isLoading: authLoading } = useAuth();
-  const { notifyError, notifySuccess } = useFeedback();
+  const { user } = useAuth();
   const {
     teachers,
     courses,
@@ -47,66 +44,8 @@ export default function AdminDashboardPage() {
   } = useAdminPlatform();
   const [range, setRange] = useState<RangeKey>("30");
 
-  const [passwordPromptOpen, setPasswordPromptOpen] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [promptMessage, setPromptMessage] = useState("");
-  const [passwordSaving, setPasswordSaving] = useState(false);
-
-  useEffect(() => {
-    // Wait until auth has fully resolved from the API before checking — this prevents
-    // the stale localStorage cache (which may have mustChangePassword: false) from
-    // suppressing the popup before refreshCurrentUser() has updated the user object.
-    if (authLoading) return;
-    if (!user?.mustChangePassword) return;
-    const dismissedKey = `mooreskillup.admin-password-prompt.dismissed.${user.id}`;
-    if (typeof window !== "undefined" && window.sessionStorage.getItem(dismissedKey) === "true") return;
-    setPasswordPromptOpen(true);
-  }, [authLoading, user?.id, user?.mustChangePassword]);
-
-  const submitFirstLoginPassword = async () => {
-    if (!newPassword.trim()) {
-      setPromptMessage("Enter a new password to continue.");
-      notifyError("Password required", "Enter a new password to continue.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPromptMessage("New password and confirm password must match.");
-      notifyError("Password mismatch", "New password and confirm password must match.");
-      return;
-    }
-    setPasswordSaving(true);
-    try {
-      await authenticatedRequest("/api/auth/change-password/", {
-        method: "POST",
-        body: JSON.stringify({
-          current_password: "",
-          new_password: newPassword,
-        }),
-      });
-      await refreshCurrentUser();
-      setPromptMessage("Password updated successfully.");
-      setPasswordPromptOpen(false);
-      setNewPassword("");
-      setConfirmPassword("");
-      notifySuccess("Password updated successfully");
-    } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : "Unable to update password.";
-      setPromptMessage(message);
-      notifyError("Unable to update password", message);
-    } finally {
-      setPasswordSaving(false);
-    }
-  };
-
-  const skipPasswordPrompt = () => {
-    if (typeof window !== "undefined" && user?.id) {
-      window.sessionStorage.setItem(`mooreskillup.admin-password-prompt.dismissed.${user.id}`, "true");
-    }
-    setPasswordPromptOpen(false);
-  };
-
-  const hasPerm = (p: string) => !user?.permissions || user.permissions.includes(p);
+  const hasPerm = (permission: string) =>
+    hasUserPermission(user?.permissions, permission as AdminResourceAction);
 
   const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
   const reviewCourses = courses.filter((course) => course.status === "review");
@@ -171,42 +110,6 @@ export default function AdminDashboardPage() {
   return (
     <AppShell allowedRoles={["admin"]}>
       <div className="space-y-8">
-        {passwordPromptOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <section className="w-full max-w-2xl rounded-[2rem] border border-primary/30 bg-card p-6 shadow-2xl">
-              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-                First login security
-              </div>
-              <h2 className="mt-2 font-display text-2xl font-bold">Update your temporary password</h2>
-              <p className="mt-2 max-w-3xl text-muted-foreground">
-                You can replace the temporary password now, or skip and continue using it until you request a password reset from a Super Admin.
-              </p>
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <PasswordInput
-                  label="New password"
-                  autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                />
-                <PasswordInput
-                  label="Confirm password"
-                  autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                />
-              </div>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Button variant="accent" onClick={submitFirstLoginPassword} loading={passwordSaving} loadingText="Saving password...">
-                  Save new password
-                </Button>
-                <Button variant="outline" onClick={skipPasswordPrompt}>
-                  Keep temporary password for now
-                </Button>
-              </div>
-              {promptMessage && <p className="mt-3 text-sm text-success">{promptMessage}</p>}
-            </section>
-          </div>
-        )}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">

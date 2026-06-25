@@ -144,10 +144,15 @@ class AdminSupportTicketDetailView(AdminActionsPerMethod, views.APIView):
     def patch(self, request, ticket_id):
         # Moderators may add notes, but resolving/closing needs support:close.
         if "status" in request.data and not user_has_admin_permission(request.user, "support:close"):
-            return response.Response(
-                {"detail": "You do not have permission to change ticket status."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            if request.data.get("status") == "in_progress" and user_has_admin_permission(
+                request.user, "support:add-notes"
+            ):
+                pass
+            else:
+                return response.Response(
+                    {"detail": "You do not have permission to change ticket status."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         ticket = get_object_or_404(SupportTicket, id=ticket_id)
         previous_status = ticket.status
         serializer = SupportTicketSerializer(ticket, data=request.data, partial=True)

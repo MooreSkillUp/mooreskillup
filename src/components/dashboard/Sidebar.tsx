@@ -28,6 +28,7 @@ import {
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useAdminPlatform } from "@/lib/admin-platform";
 import { usePlatformNotifications } from "@/lib/platform-notifications";
+import { hasUserPermission } from "@/lib/admin-rbac";
 import { getHomeRouteForUser, getRoleLabel, useAuth } from "../../lib/auth";
 import { cn } from "../../lib/utils";
 
@@ -56,7 +57,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
   // Each admin link is gated by the backend-granted permission that its page needs.
   const canAdmin = (permission: string) =>
-    !user?.permissions?.length || user.permissions.includes(permission);
+    hasUserPermission(user?.permissions, permission as Parameters<typeof hasUserPermission>[1]);
 
   const adminLinks = [
     { href: "/admin/dashboard", label: "Dashboard", icon: Shield, permission: "dashboard:view" },
