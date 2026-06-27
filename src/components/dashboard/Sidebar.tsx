@@ -171,7 +171,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         <div className="border-t border-sidebar-border p-3">
           <button
             onClick={() => {
-              logout();
+              void logout();
               onClose();
               router.push("/");
             }}

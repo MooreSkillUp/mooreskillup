@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import AuditLog, PlatformSettings
+from .models import AuditLog, AuthenticationSettings, PlatformSettings
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
@@ -86,3 +86,14 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
             "refundMaxProgressPercent",
             "updatedAt",
         )
+
+
+class AuthenticationSettingsSerializer(serializers.ModelSerializer):
+    maxStudentDevices = serializers.IntegerField(source="max_student_devices", required=False, min_value=1, max_value=10)
+    maxTeacherDevices = serializers.IntegerField(source="max_teacher_devices", required=False, min_value=1, max_value=10)
+    maxAdminDevices = serializers.IntegerField(source="max_admin_devices", required=False, min_value=1, max_value=10)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+
+    class Meta:
+        model = AuthenticationSettings
+        fields = ("maxStudentDevices", "maxTeacherDevices", "maxAdminDevices", "updatedAt")

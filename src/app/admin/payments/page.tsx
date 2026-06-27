@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AlertTriangle, CreditCard, Download, Search, Wallet } from "lucide-react";
-import { buildApiUrl } from "@/lib/authenticated-api";
+import { buildApiUrl, getAccessToken } from "@/lib/authenticated-api";
 import {
   Dialog,
   DialogContent,
@@ -67,8 +67,9 @@ export default function AdminPaymentsPage() {
   const pagedTransactions = filteredTransactions.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const exportCsv = async () => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("mooreskillup.access-token") : null;
+    const token = getAccessToken();
     const response = await fetch(buildApiUrl("/api/admin/transactions/export/"), {
+      credentials: "include",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!response.ok) {

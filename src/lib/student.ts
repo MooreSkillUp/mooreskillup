@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { authenticatedRequest, buildApiUrl, parseJsonSafely } from "./authenticated-api";
+import { authenticatedRequest, buildApiUrl, getAccessToken, parseJsonSafely } from "./authenticated-api";
 
 export type CourseLevel = "beginner" | "intermediate" | "advanced";
 
@@ -102,7 +102,7 @@ export function useCatalog(filters: CatalogFilters) {
     let active = true;
     setIsLoading(true);
     setError("");
-    const token = typeof window !== "undefined" ? localStorage.getItem("mooreskillup.access-token") : null;
+    const token = getAccessToken();
     fetch(buildApiUrl(`/api/courses/${query}`), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
@@ -285,7 +285,7 @@ export function useCourse(courseId: string) {
     setIsLoading(true);
     setError("");
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("mooreskillup.access-token") : null;
+      const token = getAccessToken();
       const response = await fetch(buildApiUrl(`/api/courses/${courseId}/`), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -417,7 +417,7 @@ export function usePlayer(lessonId: string) {
     setIsLoading(true);
     setError("");
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("mooreskillup.access-token") : null;
+      const token = getAccessToken();
       const response = await fetch(buildApiUrl(`/api/student/lessons/${lessonId}/`), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });

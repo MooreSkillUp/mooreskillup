@@ -59,14 +59,6 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              '(function(){try{var t=localStorage.getItem("mooreskillup.access-token");var u=localStorage.getItem("mooreskillup.user");if(!t||!u)return;var role=JSON.parse(u).role;if(!role)return;var maxAge=2592000;var secure=location.protocol==="https:" ? "; Secure" : "";document.cookie="mooreskillup.session=1; path=/; max-age="+maxAge+"; SameSite=Lax"+secure;document.cookie="mooreskillup.role="+encodeURIComponent(role)+"; path=/; max-age="+maxAge+"; SameSite=Lax"+secure;}catch(e){}})();',
-          }}
-        />
-      </head>
       <body className="transition-colors duration-300">
         <Providers>{children}</Providers>
       </body>

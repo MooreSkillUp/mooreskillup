@@ -9,8 +9,9 @@ from rest_framework.pagination import PageNumberPagination
 from common.rbac import AdminActionsPerMethod
 
 from .audit import record_audit
-from .models import AuditLog, PlatformSettings
-from .serializers import AuditLogSerializer, PlatformSettingsSerializer
+
+from .models import AuditLog, AuthenticationSettings, PlatformSettings
+from .serializers import AuditLogSerializer, AuthenticationSettingsSerializer, PlatformSettingsSerializer
 
 
 def prune_expired_logs():
@@ -118,6 +119,21 @@ class PlatformSettingsView(AdminActionsPerMethod, views.APIView):
         }
         record_audit(request, "settings.update", resource_type="settings", changes=changes)
         return response.Response(after)
+
+
+class AuthenticationSettingsView(AdminActionsPerMethod, views.APIView):
+    admin_actions = {"GET": ("permissions:manage",), "PATCH": ("permissions:manage",)}
+
+    def get(self, request):
+        return response.Response(AuthenticationSettingsSerializer(AuthenticationSettings.get_solo()).data)
+
+    def patch(self, request):
+        instance = AuthenticationSettings.get_solo()
+        serializer = AuthenticationSettingsSerializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        record_audit(request, "auth-settings.update", resource_type="settings")
+        return response.Response(serializer.data)
 
 
 class PublicPlatformStatusView(views.APIView):

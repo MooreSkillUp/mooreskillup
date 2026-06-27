@@ -80,7 +80,7 @@ AUTH_USER_MODEL = "accounts.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.accounts.authentication.SessionJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -91,8 +91,11 @@ REST_FRAMEWORK = {
         "auth-login": os.getenv("THROTTLE_LOGIN", "5/min"),
         "auth-register": os.getenv("THROTTLE_REGISTER", "10/hour"),
         "auth-password-reset": os.getenv("THROTTLE_PASSWORD_RESET", "3/min"),
+        "auth-refresh": os.getenv("THROTTLE_REFRESH", "60/min"),
     },
 }
+
+CORS_ALLOW_CREDENTIALS = True
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES", "30"))),

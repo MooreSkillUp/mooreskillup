@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Plus, Save, X } from "lucide-react";
 import { AppShell } from "../../components/dashboard/AppShell";
 import { CommunityLinks } from "../../components/dashboard/CommunityLinks";
@@ -23,7 +24,8 @@ import { usePlatformTaxonomy } from "../../lib/taxonomy";
 
 export default function SettingsPage() {
   const { notifyError, notifySuccess } = useFeedback();
-  const { user, updateUser, toggleTwoFactor } = useAuth();
+  const router = useRouter();
+  const { user, updateUser, toggleTwoFactor, logoutAll } = useAuth();
   const { categories } = usePlatformTaxonomy();
   const academicPath = user?.selectedInterest ?? "Backend Development";
   const [username, setUsername] = useState(user?.username ?? "");
@@ -31,6 +33,7 @@ export default function SettingsPage() {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [twoFactorBusy, setTwoFactorBusy] = useState(false);
+  const [logoutAllBusy, setLogoutAllBusy] = useState(false);
 
   const onToggleTwoFactor = async (enabled: boolean) => {
     setTwoFactorBusy(true);
@@ -44,6 +47,19 @@ export default function SettingsPage() {
       notifyError("Couldn't update 2FA", error instanceof Error ? error.message : "Request failed.");
     } finally {
       setTwoFactorBusy(false);
+    }
+  };
+
+  const onLogoutAll = async () => {
+    setLogoutAllBusy(true);
+    try {
+      await logoutAll();
+      notifySuccess("Signed out everywhere", "You have been logged out of all devices.");
+      router.push("/auth/login?signed_out=all");
+    } catch (error) {
+      notifyError("Could not sign out everywhere", error instanceof Error ? error.message : "Request failed.");
+    } finally {
+      setLogoutAllBusy(false);
     }
   };
 
@@ -132,6 +148,24 @@ export default function SettingsPage() {
         </div>
 
         <CommunityLinks />
+
+        <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+          <h2 className="font-display text-xl font-semibold">Session management</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Sign out from every device and browser session connected to your account.
+          </p>
+          <div className="mt-4 flex items-center justify-between gap-4 rounded-3xl border border-border bg-background p-4">
+            <div>
+              <div className="font-medium">All active sessions</div>
+              <div className="text-sm text-muted-foreground">
+                This ends every current session and clears your current device too.
+              </div>
+            </div>
+            <Button variant="outline" loading={logoutAllBusy} loadingText="Signing out..." onClick={() => void onLogoutAll()}>
+              Sign out of all devices
+            </Button>
+          </div>
+        </section>
 
         {user?.role === "admin" && (
           <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">

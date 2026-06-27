@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AuditLog, PlatformSettings
+from .models import AuditLog, AuthenticationSettings, PlatformSettings
 
 
 @admin.register(AuditLog)
@@ -20,3 +20,8 @@ class AuditLogAdmin(admin.ModelAdmin):
 @admin.register(PlatformSettings)
 class PlatformSettingsAdmin(admin.ModelAdmin):
     list_display = ("site_name", "maintenance_mode", "student_registration_open", "audit_retention_days")
+
+
+@admin.register(AuthenticationSettings)
+class AuthenticationSettingsAdmin(admin.ModelAdmin):
+    list_display = ("max_student_devices", "max_teacher_devices", "max_admin_devices", "updated_at")

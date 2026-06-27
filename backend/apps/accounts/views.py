@@ -5,19 +5,30 @@ from django.conf import settings
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, response, status
+from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.views import TokenRefreshView
 
-from common.rbac import SUPER_ADMIN, AdminActionsPerMethod
+from common.rbac import SUPER_ADMIN, AdminAction, AdminActionsPerMethod
 from apps.platform.audit import record_audit
 
 from apps.courses.models import Course
 
 from .models import PasswordResetToken
+from .session_auth import (
+    AUTH_REFRESH_COOKIE,
+    build_session_auth_response,
+    clear_auth_cookies,
+    clear_failed_logins,
+    register_failed_login,
+    refresh_session_from_token,
+    revoke_all_sessions,
+    revoke_session,
+    set_auth_cookies,
+)
 from .password_reset_email import try_send_password_reset_email
 from .serializers import (
     AdminAccountCreateSerializer,
@@ -33,7 +44,6 @@ from .serializers import (
     TeacherProfileSerializer,
     UserSerializer,
     UserUpdateSerializer,
-    build_auth_response,
 )
 
 
@@ -144,7 +154,6 @@ class VerifyRegisterView(APIView):
 
     def post(self, request):
         from .models import PendingRegistration, User, StudentProfile
-        from .serializers import build_auth_response
 
         pending_id = request.data.get("pendingId") or request.data.get("pending_id")
         code = request.data.get("code")
@@ -209,10 +218,11 @@ class VerifyRegisterView(APIView):
             onboarded=False,
         )
 
-        auth_data = build_auth_response(user)
+        auth_response = build_session_auth_response(user, request=request)
         pending.delete()
 
-        return Response(auth_data, status=status.HTTP_201_CREATED)
+        auth_response.status_code = status.HTTP_201_CREATED
+        return auth_response
 
 
 class ResendRegisterCodeView(APIView):
@@ -297,7 +307,9 @@ class AdminRegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data={**request.data, "role": "admin"})
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        return response.Response(build_auth_response(user), status=status.HTTP_201_CREATED)
+        auth_response = build_session_auth_response(user, request=request)
+        auth_response.status_code = status.HTTP_201_CREATED
+        return auth_response
 
 
 def _send_login_otp(user):
@@ -326,7 +338,16 @@ class LoginView(APIView):
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except ValidationError:
+            email = (request.data.get("email") or "").strip()
+            from .models import User
+
+            user = User.objects.filter(email__iexact=email).first()
+            if user and user.is_active and not user.is_locked:
+                register_failed_login(user)
+            raise
         user = serializer.validated_data["user"]
         if user.two_factor_enabled:
             _send_login_otp(user)
@@ -337,7 +358,8 @@ class LoginView(APIView):
                     "detail": "We emailed a 6-digit code to finish signing in.",
                 }
             )
-        return response.Response(build_auth_response(user))
+        clear_failed_logins(user)
+        return build_session_auth_response(user, request=request)
 
 
 class TwoFactorVerifyView(APIView):
@@ -367,7 +389,8 @@ class TwoFactorVerifyView(APIView):
         otp.used_at = timezone.now()
         otp.save(update_fields=["used_at"])
         EmailOtp.objects.filter(user=user, used_at__isnull=True).delete()
-        return response.Response(build_auth_response(user))
+        clear_failed_logins(user)
+        return build_session_auth_response(user, request=request)
 
 
 class TwoFactorToggleView(APIView):
@@ -477,11 +500,35 @@ class PasswordResetConfirmView(APIView):
         PasswordResetToken.objects.filter(user=reset_token.user, used_at__isnull=True).exclude(
             pk=reset_token.pk
         ).delete()
-        return response.Response({"detail": "Password reset successful."})
+        revoke_all_sessions(reset_token.user)
+        cleared = response.Response({"detail": "Password reset successful."})
+        return clear_auth_cookies(cleared)
 
 
-class RefreshView(TokenRefreshView):
+class RefreshView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-refresh"
+
+    def post(self, request):
+        refresh_token = request.data.get("refresh") or request.COOKIES.get(AUTH_REFRESH_COOKIE)
+        if not refresh_token:
+            return response.Response(
+                {"detail": "No refresh session was found. Please sign in again."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        try:
+            session, access, refreshed = refresh_session_from_token(refresh_token)
+        except Exception as exc:
+            cleared = response.Response(
+                {"detail": str(exc) if str(exc) else "Your session has expired. Please sign in again."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            return clear_auth_cookies(cleared)
+
+        auth_response = response.Response({"access": access, "user": UserSerializer(session.user).data})
+        return set_auth_cookies(auth_response, refreshed, session, request=request)
 
 
 class ChangePasswordView(APIView):
@@ -500,7 +547,29 @@ class ChangePasswordView(APIView):
             if teacher_profile.must_change_password:
                 teacher_profile.must_change_password = False
                 teacher_profile.save(update_fields=["must_change_password", "updated_at"])
-        return response.Response({"detail": "Password updated successfully."})
+        revoke_all_sessions(request.user)
+        cleared = response.Response({"detail": "Password updated successfully."})
+        return clear_auth_cookies(cleared)
+
+
+class LogoutView(APIView):
+    def post(self, request):
+        session_key = getattr(getattr(request, "auth", None), "get", lambda *_: None)("sid")
+        if session_key:
+            from .models import UserSession
+
+            session = UserSession.objects.filter(session_key=session_key, user=request.user).first()
+            if session:
+                revoke_session(session)
+        cleared = response.Response({"detail": "Signed out successfully."})
+        return clear_auth_cookies(cleared)
+
+
+class LogoutAllView(APIView):
+    def post(self, request):
+        revoke_all_sessions(request.user)
+        cleared = response.Response({"detail": "Signed out of all devices."})
+        return clear_auth_cookies(cleared)
 
 
 class AdminTeacherListView(AdminActionsPerMethod, APIView):
@@ -873,6 +942,48 @@ class AdminAccountResendCredentialsView(AdminActionsPerMethod, APIView):
             metadata={"email": admin.email},
         )
         return response.Response({"detail": f"New sign-in details emailed to {admin.email}."})
+
+
+class AdminUserLockView(APIView):
+    permission_classes = [AdminAction("users:role-management")]
+
+    def post(self, request, user_id):
+        from .models import User, UserSession
+
+        target = get_object_or_404(User, id=user_id)
+        if target.id == request.user.id:
+            return response.Response({"detail": "You cannot lock your own account."}, status=status.HTTP_400_BAD_REQUEST)
+        target.is_active = False
+        target.locked_until = None
+        target.failed_login_attempts = 0
+        target.save(update_fields=["is_active", "locked_until", "failed_login_attempts"])
+        UserSession.objects.filter(user=target, is_active=True).update(is_active=False)
+        return response.Response({"detail": f"{target.display_name} has been locked."})
+
+
+class AdminUserUnlockView(APIView):
+    permission_classes = [AdminAction("users:role-management")]
+
+    def post(self, request, user_id):
+        from .models import User
+
+        target = get_object_or_404(User, id=user_id)
+        target.is_active = True
+        target.locked_until = None
+        target.failed_login_attempts = 0
+        target.save(update_fields=["is_active", "locked_until", "failed_login_attempts"])
+        return response.Response({"detail": f"{target.display_name} has been unlocked."})
+
+
+class AdminUserLogoutAllView(APIView):
+    permission_classes = [AdminAction("users:role-management")]
+
+    def post(self, request, user_id):
+        from .models import User
+
+        target = get_object_or_404(User, id=user_id)
+        revoke_all_sessions(target)
+        return response.Response({"detail": f"All sessions revoked for {target.display_name}."})
 
 
 @api_view(["GET"])

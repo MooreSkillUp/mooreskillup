@@ -92,3 +92,25 @@ class PlatformSettings(models.Model):
 
     def __str__(self):
         return self.site_name
+
+
+class AuthenticationSettings(models.Model):
+    max_student_devices = models.PositiveIntegerField(default=2)
+    max_teacher_devices = models.PositiveIntegerField(default=3)
+    max_admin_devices = models.PositiveIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Authentication settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        instance, _ = cls.objects.get_or_create(pk=1)
+        return instance
+
+    def __str__(self):
+        return "Authentication settings"
