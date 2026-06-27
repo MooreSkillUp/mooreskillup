@@ -30,11 +30,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const hasSession = request.cookies.get(SESSION_COOKIE)?.value === "1";
+  const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
   const role = request.cookies.get(ROLE_COOKIE)?.value;
 
   if (!hasSession) {
-    return NextResponse.next();
+    const loginUrl = new URL("/auth/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   if (pathname.startsWith("/teacher") && role && role !== "teacher" && role !== "admin") {

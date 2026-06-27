@@ -54,7 +54,7 @@ function Toggle({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function AdminSettingsPage() {
-  const { user, toggleTwoFactor } = useAuth();
+  const { user, toggleTwoFactor, logoutAll } = useAuth();
   const router = useRouter();
   const { notifyError, notifySuccess } = useFeedback();
   const { settings, isLoading, error, saveSettings } = useAdminSettings();
@@ -79,6 +79,7 @@ export default function AdminSettingsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [togglingTwoFactor, setTogglingTwoFactor] = useState(false);
+  const [logoutAllBusy, setLogoutAllBusy] = useState(false);
 
   const canEdit = hasUserPermission(user?.permissions, "admin-settings:edit");
   const canView = hasUserPermission(user?.permissions, "admin-settings:view");
@@ -138,6 +139,22 @@ export default function AdminSettingsPage() {
       );
     } finally {
       setTogglingTwoFactor(false);
+    }
+  };
+
+  const onLogoutAll = async () => {
+    setLogoutAllBusy(true);
+    try {
+      await logoutAll();
+      notifySuccess("Signed out everywhere", "You have been logged out of all devices.");
+      router.push("/auth/login?signed_out=all");
+    } catch (err) {
+      notifyError(
+        "Could not sign out everywhere",
+        err instanceof Error ? err.message : "Request failed.",
+      );
+    } finally {
+      setLogoutAllBusy(false);
     }
   };
 
@@ -219,15 +236,27 @@ export default function AdminSettingsPage() {
                         beyond what their role provides by default.
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push("/admin/admins")}
-                    >
-                      <Users className="h-4 w-4" /> Manage team
-                    </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push("/admin/admins")}
+                  >
+                    <Users className="h-4 w-4" /> Manage team
+                  </Button>
+                </div>
+
+                <div className="flex items-start justify-between gap-4 rounded-3xl border border-border bg-background p-5">
+                  <div>
+                    <div className="font-medium">Sign out of all devices</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      End every active session attached to your admin account.
+                    </div>
                   </div>
+                  <Button variant="outline" loading={logoutAllBusy} loadingText="Signing out..." onClick={() => void onLogoutAll()}>
+                    Sign out everywhere
+                  </Button>
                 </div>
               </div>
+            </div>
             )}
 
             {/* ── General ── */}

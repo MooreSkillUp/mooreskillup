@@ -510,6 +510,10 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("Invalid credentials.")
         if not user.is_active:
             raise serializers.ValidationError("This account has been deactivated. Contact your administrator.")
+        if getattr(user, "locked_until", None) and user.locked_until > timezone.now():
+            raise serializers.ValidationError(
+                "This account is temporarily locked. Please try again later or contact support."
+            )
         if user.role == "teacher":
             try:
                 if user.teacher_profile.status != "active":

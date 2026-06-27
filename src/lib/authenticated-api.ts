@@ -1,24 +1,9 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const ACCESS_TOKEN_STORAGE_KEY = "mooreskillup.access-token";
-const REFRESH_TOKEN_STORAGE_KEY = "mooreskillup.refresh-token";
-const USER_STORAGE_KEY = "mooreskillup.user";
 
+let accessTokenMemory: string | null = null;
+let accessTokenRefreshTimer: number | null = null;
+let refreshInFlight: Promise<string | null> | null = null;
 let sessionExpiredHandled = false;
-
-/**
- * When the session genuinely expires (no refresh token, or refresh rejected),
- * clear everything and send the user to a clean login screen with a notice —
- * instead of leaving them on a dashboard full of red error banners.
- */
-export function handleSessionExpired() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
-  localStorage.removeItem(USER_STORAGE_KEY);
-  if (sessionExpiredHandled || window.location.pathname.startsWith("/auth")) return;
-  sessionExpiredHandled = true;
-  window.location.href = "/auth/login?expired=1";
-}
 
 interface PaginatedResponse<T> {
   results?: T[];
@@ -63,33 +48,93 @@ export function normalizeListPayload<T>(payload: unknown): T[] {
   return [];
 }
 
+function decodeJwtPayload(token: string): { exp?: number } {
+  const [, payload] = token.split(".");
+  if (!payload || typeof atob !== "function") return {};
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const json = atob(normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "="));
+    return JSON.parse(json) as { exp?: number };
+  } catch {
+    return {};
+  }
+}
+
+function clearRefreshTimer() {
+  if (accessTokenRefreshTimer) {
+    clearTimeout(accessTokenRefreshTimer);
+    accessTokenRefreshTimer = null;
+  }
+}
+
+function scheduleRefresh(token: string | null) {
+  clearRefreshTimer();
+  if (typeof window === "undefined" || !token) return;
+
+  const payload = decodeJwtPayload(token);
+  if (!payload.exp) return;
+
+  const refreshAt = payload.exp * 1000 - 60_000;
+  const delay = Math.max(5_000, refreshAt - Date.now());
+  accessTokenRefreshTimer = window.setTimeout(() => {
+    void refreshAccessToken().catch(() => {
+      handleSessionExpired();
+    });
+  }, delay);
+}
+
+export function getAccessToken() {
+  return accessTokenMemory;
+}
+
+export function setAccessToken(token: string | null) {
+  accessTokenMemory = token;
+  sessionExpiredHandled = false;
+  scheduleRefresh(token);
+}
+
+export function clearAccessToken() {
+  setAccessToken(null);
+}
+
+export function handleSessionExpired() {
+  clearAccessToken();
+  if (typeof window === "undefined") return;
+  if (window.location.pathname.startsWith("/auth")) return;
+  if (sessionExpiredHandled) return;
+  sessionExpiredHandled = true;
+  window.location.href = "/auth/login?expired=1";
+}
+
+async function refreshAccessTokenInternal() {
+  const response = await fetch(buildApiUrl("/api/auth/refresh/"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+  const payload = await parseJsonSafely(response);
+  if (!response.ok || !payload || typeof payload.access !== "string") {
+    throw new Error(extractErrorMessage(payload, "Your session has expired. Please log in again."));
+  }
+  setAccessToken(payload.access as string);
+  return payload.access as string;
+}
+
 export async function refreshAccessToken() {
   if (typeof window === "undefined") {
     throw new Error("Session refresh is unavailable.");
   }
 
-  const refreshToken = localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY);
-  if (!refreshToken) {
-    handleSessionExpired();
-    throw new Error("Your session has expired. Please log in again.");
-  }
-
-  const response = await fetch(buildApiUrl("/api/auth/refresh/"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh: refreshToken }),
-  });
-  const payload = await parseJsonSafely(response);
-  if (!response.ok || !payload || typeof payload.access !== "string") {
-    handleSessionExpired();
-    throw new Error(extractErrorMessage(payload, "Your session has expired. Please log in again."));
-  }
-
-  localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, payload.access);
-  if (typeof payload.refresh === "string") {
-    localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, payload.refresh);
-  }
-  return payload.access as string;
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = refreshAccessTokenInternal()
+    .catch((error: unknown) => {
+      handleSessionExpired();
+      throw error;
+    })
+    .finally(() => {
+      refreshInFlight = null;
+    });
+  return refreshInFlight;
 }
 
 export async function authenticatedRequest<T = unknown>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -100,6 +145,7 @@ export async function authenticatedRequest<T = unknown>(endpoint: string, option
   const send = async (token: string | null) =>
     fetch(buildApiUrl(endpoint), {
       ...options,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -107,11 +153,10 @@ export async function authenticatedRequest<T = unknown>(endpoint: string, option
       },
     });
 
-  let accessToken = localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-  let response = await send(accessToken);
+  let response = await send(accessTokenMemory);
   if (response.status === 401) {
-    accessToken = await refreshAccessToken();
-    response = await send(accessToken);
+    const nextAccessToken = await refreshAccessToken();
+    response = await send(nextAccessToken);
   }
 
   const payload = await parseJsonSafely(response);

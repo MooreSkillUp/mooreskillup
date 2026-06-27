@@ -1,6 +1,7 @@
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
+from django.utils import timezone
 
 from common.models import TimeStampedModel, UUIDPrimaryKeyModel
 from common.rbac import ADMIN_ROLE_CHOICES, SUPER_ADMIN
@@ -54,6 +55,8 @@ class User(UUIDPrimaryKeyModel, AbstractBaseUser, PermissionsMixin, TimeStampedM
     # Opt-in email one-time-code 2FA for admin accounts.
     two_factor_enabled = models.BooleanField(default=False)
     must_change_password = models.BooleanField(default=False)
+    failed_login_attempts = models.PositiveIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username", "display_name"]
@@ -68,6 +71,10 @@ class User(UUIDPrimaryKeyModel, AbstractBaseUser, PermissionsMixin, TimeStampedM
 
     def __str__(self):
         return self.email
+
+    @property
+    def is_locked(self):
+        return bool(self.locked_until and self.locked_until > timezone.now())
 
 
 class TeacherProfile(UUIDPrimaryKeyModel, TimeStampedModel):
@@ -139,4 +146,30 @@ class PendingRegistration(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def __str__(self):
         return f"Pending: {self.email} ({self.code})"
+
+
+class UserSession(UUIDPrimaryKeyModel, TimeStampedModel):
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="sessions")
+    session_key = models.CharField(max_length=64, unique=True)
+    refresh_jti = models.CharField(max_length=64, unique=True)
+    user_agent = models.CharField(max_length=255, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    last_active = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-last_active",)
+        indexes = [
+            models.Index(fields=["user", "is_active"]),
+            models.Index(fields=["session_key"]),
+            models.Index(fields=["refresh_jti"]),
+            models.Index(fields=["expires_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user.email} session {self.session_key}"
+
+    def is_expired(self):
+        return self.expires_at <= timezone.now()
 

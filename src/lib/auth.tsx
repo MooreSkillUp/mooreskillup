@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -16,7 +15,12 @@ import {
   type UserPlan,
   type UserRole,
 } from "./mock-data";
-import { clearAuthCookies, writeAuthCookies } from "./auth-cookies";
+import {
+  clearAccessToken,
+  getAccessToken,
+  refreshAccessToken,
+  setAccessToken,
+} from "./authenticated-api";
 
 export type AdminRole = "super-admin" | "admin" | "moderator";
 
@@ -93,7 +97,8 @@ interface AuthContextValue {
   completeOnboarding: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<PasswordResetRequestResult>;
   resetPassword: (token: string, nextPassword: string) => Promise<PasswordResetConfirmResult>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
   updateUser: (patch: Partial<AuthUser>) => Promise<AuthUser | null>;
   toggleWishlist: (courseId: string) => Promise<void>;
   refreshCurrentUser: () => Promise<AuthUser | null>;
@@ -102,8 +107,6 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const USER_STORAGE_KEY = "mooreskillup.user";
-const ACCESS_TOKEN_STORAGE_KEY = "mooreskillup.access-token";
-const REFRESH_TOKEN_STORAGE_KEY = "mooreskillup.refresh-token";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const DEFAULT_INTEREST = (allInterests[0] ?? "Backend Development") as Interest;
@@ -247,64 +250,25 @@ function writeStorage(key: string, value: string | null) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const accessTokenRef = useRef<string | null>(null);
-  const refreshTokenRef = useRef<string | null>(null);
 
   const persistUser = useCallback((nextUser: Partial<AuthUser> | AuthUser | null) => {
     const normalized = normalizeUser(nextUser);
     setUser(normalized);
     writeStorage(USER_STORAGE_KEY, normalized ? JSON.stringify(normalized) : null);
-    if (normalized) {
-      writeAuthCookies(normalized.role);
-    } else {
-      clearAuthCookies();
-    }
     return normalized;
   }, []);
 
-  const persistTokens = useCallback((accessToken: string | null, refreshToken?: string | null) => {
-    accessTokenRef.current = accessToken;
-    writeStorage(ACCESS_TOKEN_STORAGE_KEY, accessToken);
-    if (typeof refreshToken !== "undefined") {
-      refreshTokenRef.current = refreshToken;
-      writeStorage(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
-    }
-    if (!accessToken) {
-      clearAuthCookies();
-    }
-  }, []);
-
   const clearSession = useCallback(() => {
-    persistTokens(null, null);
+    clearAccessToken();
     persistUser(null);
-  }, [persistTokens, persistUser]);
-
-  const refreshAccessToken = useCallback(async () => {
-    const refreshToken = refreshTokenRef.current;
-    if (!refreshToken) {
-      throw new Error("Your session has expired. Please log in again.");
-    }
-
-    const response = await fetch(buildApiUrl("/api/auth/refresh/"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh: refreshToken }),
-    });
-    const payload = await parseJsonSafely(response);
-    if (!response.ok || !payload || typeof payload.access !== "string") {
-      clearSession();
-      throw new Error(extractErrorMessage(payload, "Your session has expired. Please log in again."));
-    }
-
-    persistTokens(payload.access, typeof payload.refresh === "string" ? payload.refresh : refreshToken);
-    return payload.access as string;
-  }, [clearSession, persistTokens]);
+  }, [persistUser]);
 
   const authenticatedRequest = useCallback(
     async (endpoint: string, options?: RequestInit) => {
       const send = async (accessToken?: string | null) =>
         fetch(buildApiUrl(endpoint), {
           ...options,
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
             ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -312,8 +276,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         });
 
-      let response = await send(accessTokenRef.current);
-      if (response.status === 401 && refreshTokenRef.current) {
+      let response = await send(getAccessToken());
+      if (response.status === 401) {
         const nextAccessToken = await refreshAccessToken();
         response = await send(nextAccessToken);
       }
@@ -325,15 +289,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return payload;
     },
-    [refreshAccessToken],
+    [],
   );
 
   const refreshCurrentUser = useCallback(async () => {
-    if (!accessTokenRef.current && !refreshTokenRef.current) {
-      clearSession();
-      return null;
-    }
-
     try {
       const payload = await authenticatedRequest("/api/auth/me/", { method: "GET" });
       return persistUser(payload);
@@ -349,8 +308,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const hydrate = async () => {
       try {
         const cachedUser = readStorage(USER_STORAGE_KEY);
-        const accessToken = readStorage(ACCESS_TOKEN_STORAGE_KEY);
-        const refreshToken = readStorage(REFRESH_TOKEN_STORAGE_KEY);
 
         if (cachedUser) {
           try {
@@ -358,18 +315,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (active) {
               setUser(normalizeUser(parsed));
             }
-            if ((accessToken || refreshToken) && parsed.role) {
-              writeAuthCookies(parsed.role);
-            }
           } catch {
             writeStorage(USER_STORAGE_KEY, null);
           }
         }
 
-        accessTokenRef.current = accessToken;
-        refreshTokenRef.current = refreshToken;
-
-        if (accessToken || refreshToken) {
+        if (cachedUser) {
           try {
             await refreshCurrentUser();
           } catch {
@@ -378,7 +329,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
         } else if (active) {
-          clearSession();
+          setIsLoading(false);
+          return;
         }
       } finally {
         if (active) {
@@ -398,6 +350,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string) => {
       const response = await fetch(buildApiUrl("/api/auth/login/"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
@@ -405,18 +358,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.ok && payload?.twoFactorRequired && payload?.userId) {
         return { twoFactorRequired: true as const, userId: payload.userId as string };
       }
-      if (!response.ok || !payload?.user || !payload?.access || !payload?.refresh) {
+      if (!response.ok || !payload?.user || !payload?.access) {
         throw new Error(extractErrorMessage(payload, "Unable to sign in."));
       }
 
-      persistTokens(payload.access as string, payload.refresh as string);
+      setAccessToken(payload.access as string);
       const nextUser = persistUser(payload.user);
       if (!nextUser) {
         throw new Error("Unable to load your account.");
       }
       return nextUser;
     },
-    [persistTokens, persistUser],
+    [persistUser],
   );
 
 
@@ -424,14 +377,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (userId: string, code: string) => {
       const response = await fetch(buildApiUrl("/api/auth/login/verify-2fa/"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, code }),
       });
       const payload = await parseJsonSafely(response);
-      if (!response.ok || !payload?.user || !payload?.access || !payload?.refresh) {
+      if (!response.ok || !payload?.user || !payload?.access) {
         throw new Error(extractErrorMessage(payload, "That code was not accepted."));
       }
-      persistTokens(payload.access as string, payload.refresh as string);
+      setAccessToken(payload.access as string);
       const nextUser = persistUser(payload.user);
       if (!nextUser) {
         throw new Error("Unable to load your account.");
@@ -443,7 +397,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return nextUser;
     },
-    [persistTokens, persistUser],
+    [persistUser],
   );
 
 
@@ -466,6 +420,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const response = await fetch(buildApiUrl(endpoint), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: payload.email,
@@ -482,24 +437,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
       });
       const responsePayload = await parseJsonSafely(response);
-      if (!response.ok || !responsePayload?.user || !responsePayload?.access || !responsePayload?.refresh) {
+      if (!response.ok || !responsePayload?.user || !responsePayload?.access) {
         throw new Error(extractErrorMessage(responsePayload, "Unable to create your account."));
       }
 
-      persistTokens(responsePayload.access as string, responsePayload.refresh as string);
+      setAccessToken(responsePayload.access as string);
       const nextUser = persistUser(responsePayload.user);
       if (!nextUser) {
         throw new Error("Unable to load your account.");
       }
       return nextUser;
     },
-    [persistTokens, persistUser],
+    [persistUser],
   );
 
   const initiateRegister = useCallback(
     async (payload: RegisterPayload) => {
       const response = await fetch(buildApiUrl("/api/auth/register/"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: payload.email,
@@ -531,28 +487,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (pendingId: string, code: string) => {
       const response = await fetch(buildApiUrl("/api/auth/register/verify/"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pendingId, code }),
       });
       const responsePayload = await parseJsonSafely(response);
-      if (!response.ok || !responsePayload?.user || !responsePayload?.access || !responsePayload?.refresh) {
+      if (!response.ok || !responsePayload?.user || !responsePayload?.access) {
         throw new Error(extractErrorMessage(responsePayload, "Verification failed."));
       }
 
-      persistTokens(responsePayload.access as string, responsePayload.refresh as string);
+      setAccessToken(responsePayload.access as string);
       const nextUser = persistUser(responsePayload.user);
       if (!nextUser) {
         throw new Error("Unable to load your account.");
       }
       return nextUser;
     },
-    [persistTokens, persistUser]
+    [persistUser]
   );
 
   const resendRegisterCode = useCallback(
     async (pendingId: string) => {
       const response = await fetch(buildApiUrl("/api/auth/register/resend-code/"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pendingId }),
       });
@@ -580,6 +538,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const requestPasswordReset = useCallback(async (email: string) => {
     const response = await fetch(buildApiUrl("/api/auth/password-reset/request/"), {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
@@ -603,6 +562,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetPassword = useCallback(async (token: string, nextPassword: string) => {
     const response = await fetch(buildApiUrl("/api/auth/password-reset/confirm/"), {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, password: nextPassword }),
     });
@@ -621,9 +581,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const logout = useCallback(() => {
-    clearSession();
-  }, [clearSession]);
+  const logout = useCallback(async () => {
+    try {
+      await authenticatedRequest("/api/auth/logout/", {
+        method: "POST",
+      });
+    } catch {
+      // Best effort: even if the network call fails, the local session should go away.
+    } finally {
+      clearAccessToken();
+      clearSession();
+    }
+  }, [authenticatedRequest, clearSession]);
+
+  const logoutAll = useCallback(async () => {
+    try {
+      await authenticatedRequest("/api/auth/logout-all/", {
+        method: "POST",
+      });
+    } catch {
+      // Best effort: local session still gets cleared below.
+    } finally {
+      clearAccessToken();
+      clearSession();
+    }
+  }, [authenticatedRequest, clearSession]);
 
   const updateUser = useCallback(
     async (patch: Partial<AuthUser>) => {
@@ -644,7 +626,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .map((key) => [key, patch[key]]),
       );
 
-      if (!Object.keys(payload).length || !accessTokenRef.current) {
+      if (!Object.keys(payload).length || !getAccessToken()) {
         return optimisticUser;
       }
 
@@ -673,7 +655,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       persistUser({ ...user, wishlist: optimisticWishlist });
 
-      if (!accessTokenRef.current) return;
+      if (!getAccessToken()) return;
 
       try {
         if (exists) {
@@ -709,6 +691,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       requestPasswordReset,
       resetPassword,
       logout,
+      logoutAll,
       updateUser,
       toggleWishlist,
       refreshCurrentUser,
@@ -729,6 +712,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       toggleWishlist,
       updateUser,
+      logoutAll,
       user,
     ],
   );

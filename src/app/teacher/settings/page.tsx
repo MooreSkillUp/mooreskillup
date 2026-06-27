@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Check, Save, ShieldAlert, UserRound } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
@@ -14,12 +15,14 @@ const TEACHER_AVATARS = AVATARS.slice(0, 8);
 
 export default function TeacherSettingsPage() {
   const { notifyError, notifySuccess } = useFeedback();
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, logoutAll } = useAuth();
   const { profile, updateProfile, error } = useTeacherPlatform();
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [selectedAvatarId, setSelectedAvatarId] = useState<string>(user?.avatarUrl ?? "av-blue");
   const [saving, setSaving] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState({ displayName: profile.displayName, avatarId: user?.avatarUrl ?? "av-blue" });
+  const [logoutAllBusy, setLogoutAllBusy] = useState(false);
 
   useEffect(() => {
     setDisplayName(profile.displayName);
@@ -52,6 +55,19 @@ export default function TeacherSettingsPage() {
       notifyError("Unable to save settings", message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onLogoutAll = async () => {
+    setLogoutAllBusy(true);
+    try {
+      await logoutAll();
+      notifySuccess("Signed out everywhere", "You have been logged out of all devices.");
+      router.push("/auth/login?signed_out=all");
+    } catch (error) {
+      notifyError("Could not sign out everywhere", error instanceof Error ? error.message : "Request failed.");
+    } finally {
+      setLogoutAllBusy(false);
     }
   };
 
@@ -179,6 +195,18 @@ export default function TeacherSettingsPage() {
                 You will receive a new temporary password and must change it on your next sign-in.
               </p>
             </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-4 rounded-2xl border border-border bg-background p-4">
+            <div>
+              <div className="font-medium">Sign out of all devices</div>
+              <p className="text-sm text-muted-foreground">
+                End every active session attached to this teacher account.
+              </p>
+            </div>
+            <Button variant="outline" loading={logoutAllBusy} loadingText="Signing out..." onClick={() => void onLogoutAll()}>
+              Sign out everywhere
+            </Button>
           </div>
         </section>
       </div>

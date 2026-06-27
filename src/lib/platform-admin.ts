@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { authenticatedRequest, buildApiUrl } from "./authenticated-api";
+import { authenticatedRequest, buildApiUrl, getAccessToken } from "./authenticated-api";
 
 export interface AuditLogEntry {
   id: string;
@@ -83,9 +83,9 @@ export function useAuditLogs(filters: AuditLogFilters) {
 }
 
 export async function downloadAuditLogCsv(filters: AuditLogFilters) {
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("mooreskillup.access-token") : null;
+  const token = getAccessToken();
   const response = await fetch(buildApiUrl(`/api/admin/audit-logs/export/${buildQuery(filters)}`), {
+    credentials: "include",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!response.ok) {
