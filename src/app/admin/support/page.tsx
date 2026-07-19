@@ -83,7 +83,7 @@ export default function AdminSupportPage() {
         );
       const matchesStatus = statusFilter === "all" || ticket.status === statusFilter;
       const matchesRole =
-        roleFilter === "all" || (ticket as any).createdByRole === roleFilter;
+        roleFilter === "all" || ticket.createdByRole === roleFilter;
       const matchesPriority = priorityFilter === "all" || ticket.priority === priorityFilter;
       return matchesSearch && matchesStatus && matchesRole && matchesPriority;
     });
@@ -286,8 +286,8 @@ export default function AdminSupportPage() {
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">
                       {ticket.createdBy}
-                      {(ticket as any).createdByRole
-                        ? ` · ${(ticket as any).createdByRole}`
+                      {ticket.createdByRole
+                        ? ` · ${ticket.createdByRole}`
                         : ""}{" "}
                       · {ticket.category}
                     </div>
@@ -352,12 +352,12 @@ export default function AdminSupportPage() {
                   <MetaCard label="Raised by" value={selected.createdBy} />
                   <MetaCard
                     label="Role"
-                    value={(selected as any).createdByRole ?? "—"}
+                    value={selected.createdByRole ?? "—"}
                   />
                   <MetaCard label="Category" value={selected.category} />
                   <MetaCard
                     label="Assigned to"
-                    value={(selected as any).assigned_to ?? "Unassigned"}
+                    value={selected.assigned_to ?? "Unassigned"}
                   />
                   <MetaCard
                     label="Created"

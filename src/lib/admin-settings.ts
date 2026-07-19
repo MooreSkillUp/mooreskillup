@@ -77,7 +77,7 @@ export interface ApiIntegrationSettings {
   rateLimit: number; // requests per minute
 }
 
-let settings: AdminSettings = {
+const settings: AdminSettings = {
   systemName: "MooreSkillUp",
   systemDescription: "Learning platform for skill development",
   maintenanceMode: false,
@@ -91,7 +91,7 @@ let settings: AdminSettings = {
   realtimeRefreshIntervalSeconds: 30,
 };
 
-let securitySettings: SecuritySettings = {
+const securitySettings: SecuritySettings = {
   requireStrongPasswords: true,
   minimumPasswordLength: 8,
   requireNumbersInPassword: true,
@@ -105,7 +105,7 @@ let securitySettings: SecuritySettings = {
   whitelistedIps: [],
 };
 
-let notificationSettings: NotificationSettings = {
+const notificationSettings: NotificationSettings = {
   enableEmailNotifications: true,
   enableInAppNotifications: true,
   enableSlackNotifications: false,
@@ -113,7 +113,7 @@ let notificationSettings: NotificationSettings = {
   maxNotificationsPerBatch: 100,
 };
 
-let apiIntegrationSettings: ApiIntegrationSettings = {
+const apiIntegrationSettings: ApiIntegrationSettings = {
   stripeLiveMode: false,
   stripePublicKey: process.env.NEXT_PUBLIC_STRIPE_KEY ?? "",
   googleAnalyticsId: process.env.NEXT_PUBLIC_GA_ID,
@@ -342,7 +342,7 @@ export function validatePassword(password: string): {
 
   if (
     securitySettings.requireSpecialCharsInPassword &&
-    !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+    !/[!@#$%^&*()_+\-={}[\];':"\\|,.<>/?]/.test(password)
   ) {
     errors.push("Password must contain at least one special character");
   }
