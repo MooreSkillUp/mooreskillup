@@ -21,6 +21,7 @@ import {
   refreshAccessToken,
   setAccessToken,
 } from "./authenticated-api";
+import { writeAuthCookies, clearAuthCookies } from "./auth-cookies";
 
 export type AdminRole = "super-admin" | "admin" | "moderator";
 
@@ -255,6 +256,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalized = normalizeUser(nextUser);
     setUser(normalized);
     writeStorage(USER_STORAGE_KEY, normalized ? JSON.stringify(normalized) : null);
+    if (normalized) {
+      writeAuthCookies(normalized.role);
+    } else {
+      clearAuthCookies();
+    }
     return normalized;
   }, []);
 
