@@ -44,3 +44,14 @@ tsconfig.tsbuildinfo
 public/sw.js
 public/workbox-*.js
 public/fallback-*.js
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

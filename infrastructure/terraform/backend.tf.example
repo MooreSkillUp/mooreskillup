@@ -1,0 +1,10 @@
+terraform {
+  backend "azurerm" {}
+}
+
+## Use an Azure Storage account for remote state.
+## Pass the following values at init time:
+## - resource_group_name
+## - storage_account_name
+## - container_name
+## - key

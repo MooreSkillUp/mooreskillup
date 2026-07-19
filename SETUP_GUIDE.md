@@ -2,7 +2,7 @@
 
 ## What this project is
 
-MooreSkillUp is a Next.js frontend for an online learning platform. It currently uses mock data and client-side state so you can run and review the product before the Django backend exists.
+MooreSkillUp is a Next.js frontend and Django backend for an online learning platform. The app now uses session-backed auth, production Docker files, and deployment docs so you can rehearse launch even while some features remain in progress.
 
 The UI already covers:
 
@@ -81,15 +81,15 @@ npm run dev
 
 ### Authentication
 
-Authentication is mock-only for now.
+Authentication now uses memory-only access tokens, HttpOnly refresh cookies, and server-backed logout/session handling.
 
-- login and register write a user into localStorage
-- `AuthProvider` exposes `user`, `isAuthenticated`, `login`, `register`, `logout`, and `updateUser`
-- protected pages are gated in `AppShell`
+- `AuthProvider` exposes `user`, `isAuthenticated`, `login`, `register`, `logout`, `logoutAll`, and `updateUser`
+- protected pages are gated in `AppShell` and middleware
+- session expiry now redirects back to sign-in
 
 ### Data
 
-All course, lesson, quiz, achievement, leaderboard, and announcement data is in memory from the `src/lib/*` files listed above.
+Some content is still driven by local mock data while backend endpoints are completed. Auth, profiles, and several admin workflows already use the API.
 
 ### Certificates
 
@@ -109,8 +109,10 @@ The contact form posts directly to Formspree using public environment variables.
 
 Use these docs next:
 
-- [DJANGO_INTEGRATION.md](./DJANGO_INTEGRATION.md)
-- [API_SCHEMA.md](./API_SCHEMA.md)
+- `docs/README.md`
+- `docs/architecture/production-architecture.md`
+- `docs/deployment/deployment-guide.md`
+- `docs/ci-cd/ci-cd-guide.md`
 
 ## Validation commands
 

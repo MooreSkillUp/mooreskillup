@@ -5,16 +5,27 @@
 - [README.md](./README.md): project overview and quick start
 - [SETUP_GUIDE.md](./SETUP_GUIDE.md): local setup and frontend architecture
 - [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md): current project state
+- [docs/README.md](./docs/README.md): deployment and operations hub
 
 ## Backend docs
 
 - [DJANGO_INTEGRATION.md](./DJANGO_INTEGRATION.md): implementation plan for the Django backend
 - [API_SCHEMA.md](./API_SCHEMA.md): endpoint and payload contract for the frontend
+- [docs/architecture/production-architecture.md](./docs/architecture/production-architecture.md): target production blueprint
+- [docs/deployment/deployment-guide.md](./docs/deployment/deployment-guide.md): practical deploy steps
+- [docs/deployment/azure-deployment-roadmap.md](./docs/deployment/azure-deployment-roadmap.md): full Azure staging-to-production roadmap
+- [docs/ci-cd/ci-cd-guide.md](./docs/ci-cd/ci-cd-guide.md): pipeline overview
+- [docs/terraform/terraform-guide.md](./docs/terraform/terraform-guide.md): infrastructure-as-code structure
+- [docs/security/security-guide.md](./docs/security/security-guide.md): production security baseline
+- [docs/operations/runbook.md](./docs/operations/runbook.md): incident and recovery guide
 
 ## Operational docs
 
 - [DEVELOPMENT_ROADMAP.md](./DEVELOPMENT_ROADMAP.md): phased execution plan
 - [FORMSPREE_SETUP.md](./FORMSPREE_SETUP.md): contact page setup
+- [BACKEND_DEPLOYMENT_CHECKLIST.md](./BACKEND_DEPLOYMENT_CHECKLIST.md): backend deployment checklist
+- [DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md): Docker workflow and host deployment
+- [VERCEL_SETUP.md](./VERCEL_SETUP.md): frontend deployment path
 
 ## Frontend route map
 
