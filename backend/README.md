@@ -2,6 +2,8 @@
 
 This is the Django REST backend for More SkillUp.
 
+Production notes and deployment guidance now live in `docs/`.
+
 ## Included foundations
 
 - custom user model
@@ -23,6 +25,8 @@ This is the Django REST backend for More SkillUp.
 ## Docker
 
 Use the repository root `docker-compose.yml`.
+
+For a production-style self-hosted stack, use `docker-compose.prod.yml`.
 
 ## Main API groups
 

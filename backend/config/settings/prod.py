@@ -21,5 +21,5 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATIC_URL = "/static/"
 
 # Allow static files to be served
-WHITENOISE_AUTOREFRESH = True
-WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = False
+WHITENOISE_USE_FINDERS = False

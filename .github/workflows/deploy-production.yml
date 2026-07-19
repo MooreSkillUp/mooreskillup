@@ -1,0 +1,102 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_image:
+        description: "API image tag to deploy"
+        required: true
+        type: string
+      web_image:
+        description: "Frontend image tag to deploy"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform init
+        working-directory: infrastructure/terraform
+        run: >
+          terraform init
+          -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}"
+          -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}"
+          -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}"
+          -backend-config="key=production.terraform.tfstate"
+      - name: Terraform apply foundation
+        working-directory: infrastructure/terraform
+        run: >
+          terraform apply -auto-approve
+          -var-file=environments/prod/terraform.tfvars.example
+          -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}"
+          -var="db_admin_password=${{ secrets.DB_ADMIN_PASSWORD }}"
+          -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}"
+      - name: Read ACR details
+        working-directory: infrastructure/terraform
+        run: |
+          ACR_LOGIN_SERVER=$(terraform output -raw acr_login_server)
+          ACR_USERNAME=$(terraform output -raw acr_admin_username)
+          ACR_PASSWORD=$(terraform output -raw acr_admin_password)
+          echo "::add-mask::$ACR_PASSWORD"
+          echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
+          echo "ACR_USERNAME=$ACR_USERNAME" >> $GITHUB_ENV
+          echo "ACR_PASSWORD=$ACR_PASSWORD" >> $GITHUB_ENV
+      - name: Log in to ACR
+        run: echo "$ACR_PASSWORD" | docker login "$ACR_LOGIN_SERVER" -u "$ACR_USERNAME" --password-stdin
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/api:${{ inputs.api_image }}
+            ${{ env.ACR_LOGIN_SERVER }}/api:latest
+      - name: Build and push Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/web:${{ inputs.web_image }}
+            ${{ env.ACR_LOGIN_SERVER }}/web:latest
+      - name: Terraform apply apps
+        working-directory: infrastructure/terraform
+        run: >
+          terraform apply -auto-approve
+          -var-file=environments/prod/terraform.tfvars.example
+          -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}"
+          -var="db_admin_password=${{ secrets.DB_ADMIN_PASSWORD }}"
+          -var="api_image=${{ env.ACR_LOGIN_SERVER }}/api:${{ inputs.api_image }}"
+          -var="web_image=${{ env.ACR_LOGIN_SERVER }}/web:${{ inputs.web_image }}"
+          -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}"
+          -var="next_public_api_url=${{ secrets.PROD_API_URL }}"
+          -var="frontend_url=${{ secrets.PROD_WEB_URL }}"
+      - name: Read production URLs
+        working-directory: infrastructure/terraform
+        run: |
+          echo "PROD_API_URL=$(terraform output -raw api_url)" >> $GITHUB_ENV
+          echo "PROD_WEB_URL=$(terraform output -raw web_url)" >> $GITHUB_ENV
+      - name: Smoke test production
+        run: |
+          curl -fsS "$PROD_WEB_URL" >/dev/null
+          curl -fsS "$PROD_API_URL/api/auth/health/" >/dev/null
