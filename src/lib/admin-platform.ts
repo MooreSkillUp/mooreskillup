@@ -291,12 +291,12 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     results.forEach((result, index) => {
       const key = keys[index];
       if (result.status === "fulfilled") {
-        const val = result.value;
+        const val = result.value as Record<string, unknown>;
         if (key === "dashboard") {
-          setTotals(val.totals);
-          setAnalytics(val.analytics ?? null);
-          setActivityFeed(val.activityFeed ?? []);
-          setSystemAlerts(val.systemAlerts ?? {});
+          setTotals(val.totals as Parameters<typeof setTotals>[0]);
+          setAnalytics((val.analytics ?? null) as Parameters<typeof setAnalytics>[0]);
+          setActivityFeed((val.activityFeed ?? []) as Parameters<typeof setActivityFeed>[0]);
+          setSystemAlerts((val.systemAlerts ?? {}) as Parameters<typeof setSystemAlerts>[0]);
         } else if (key === "teachers") {
           setTeachers(normalizeTeacherPayload(val));
         } else if (key === "students") {
