@@ -152,6 +152,7 @@ export interface AdminSupportTicket {
   updated_at: string;
   createdBy: string;
   createdByRole: string;
+  assigned_to?: string;
 }
 
 
@@ -248,7 +249,7 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
 
     const hasPerm = (p: string) => !!user.permissions?.includes(p);
 
-    const promises: Promise<any>[] = [];
+    const promises: Promise<unknown>[] = [];
     const keys: string[] = [];
 
     if (hasPerm("dashboard:view")) {

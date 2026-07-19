@@ -53,16 +53,17 @@ export default function LessonPage() {
   }, [lessonId, data?.canAccess, data?.isEnrolled]);
 
   // Record a "started" ping + resume video position.
+  const progressStatus = data?.progress.status;
+  const lastPositionSeconds = data?.progress.lastPositionSeconds ?? 0;
   useEffect(() => {
     if (!data?.isEnrolled || !data.canAccess) return;
-    if (data.progress.status === "not_started") {
+    if (progressStatus === "not_started") {
       void saveLessonProgress(lessonId, { status: "in_progress" });
     }
-    const pos = data.progress.lastPositionSeconds;
-    if (pos > 0 && videoRef.current) {
-      videoRef.current.currentTime = pos;
+    if (lastPositionSeconds > 0 && videoRef.current) {
+      videoRef.current.currentTime = lastPositionSeconds;
     }
-  }, [lessonId, data?.isEnrolled, data?.canAccess]);
+  }, [lessonId, data?.isEnrolled, data?.canAccess, progressStatus, lastPositionSeconds]);
 
   if (isLoading) {
     return (

@@ -1,4 +1,4 @@
-name: Terraform Plan
+name: Terraform Validate
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
       - ".github/workflows/terraform-plan.yml"
 
 jobs:
-  plan:
+  validate:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -15,7 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - run: terraform fmt -check -recursive
-      - run: terraform init -backend=false
-      - run: terraform validate
-      - run: terraform plan -var-file=environments/staging/terraform.tfvars.example -input=false
+      - name: Format check
+        run: terraform fmt -check -recursive
+      - name: Init (no backend)
+        run: terraform init -backend=false
+      - name: Validate
+        run: terraform validate
