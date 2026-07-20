@@ -82,54 +82,57 @@ export default function TeacherCoursesPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           {filteredCourses.length ? (
             filteredCourses.map((course) => (
-              <div key={course.id} className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                  <div>
-                    <div className="font-display text-2xl font-bold">{course.title}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {course.status === "published"
-                        ? "Published"
-                        : course.status === "review"
-                          ? "In review"
-                          : course.status === "declined"
-                            ? "Declined"
-                            : course.status === "draft"
-                              ? "Draft"
-                              : "Archived"}{" "}
-                      | {course.analytics.enrollments} learners | updated {new Date(course.lastUpdated).toLocaleString("en-NG")}
+              <div key={course.id} className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
+                <div className="bg-gradient-to-r from-primary/10 via-background to-accent-soft px-6 py-5">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                    <div>
+                      <div className="font-display text-2xl font-bold">{course.title}</div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {course.status === "published"
+                          ? "Published"
+                          : course.status === "review"
+                            ? "In review"
+                            : course.status === "declined"
+                              ? "Declined"
+                              : course.status === "draft"
+                                ? "Draft"
+                                : "Archived"}{" "}
+                        | {course.analytics.enrollments} learners | updated {new Date(course.lastUpdated).toLocaleString("en-NG")}
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {getCategoryName(course.categoryId)} / {getSubcategoryName(course.categoryId, course.subcategoryId)} |{" "}
+                        {course.sections.length} sections | {course.analytics.views} views | {course.track}
+                      </div>
                     </div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {getCategoryName(course.categoryId)} / {getSubcategoryName(course.categoryId, course.subcategoryId)} |{" "}
-                      {course.sections.length} sections | {course.analytics.views} views | {course.track}
-                    </div>
-                  </div>
-                  <div className="rounded-full border border-border px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                    {course.status}
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-3 rounded-2xl bg-background p-4 text-sm text-muted-foreground md:grid-cols-3">
-                  <div>
-                    <div>Views</div>
-                    <div className="mt-1 font-display text-2xl font-bold text-foreground">
-                      {course.analytics.views}
-                    </div>
-                  </div>
-                  <div>
-                    <div>Enrollments</div>
-                    <div className="mt-1 font-display text-2xl font-bold text-foreground">
-                      {course.analytics.enrollments}
-                    </div>
-                  </div>
-                  <div>
-                    <div>Completion</div>
-                    <div className="mt-1 font-display text-2xl font-bold text-foreground">
-                      {course.analytics.completionRate}%
+                    <div className="rounded-full border border-border bg-background px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      {course.status}
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-5 flex flex-wrap gap-2">
+                <div className="px-6 pb-6">
+                  <div className="mt-5 grid gap-3 rounded-[1.5rem] bg-background p-4 text-sm text-muted-foreground md:grid-cols-3">
+                    <div>
+                      <div>Views</div>
+                      <div className="mt-1 font-display text-2xl font-bold text-foreground">
+                        {course.analytics.views}
+                      </div>
+                    </div>
+                    <div>
+                      <div>Enrollments</div>
+                      <div className="mt-1 font-display text-2xl font-bold text-foreground">
+                        {course.analytics.enrollments}
+                      </div>
+                    </div>
+                    <div>
+                      <div>Completion</div>
+                      <div className="mt-1 font-display text-2xl font-bold text-foreground">
+                        {course.analytics.completionRate}%
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-2">
                   <Link href={`/teacher/courses/${course.id}/edit`}>
                     <Button variant="outline" size="sm">
                       <PencilLine className="h-4 w-4" /> Edit
@@ -294,6 +297,7 @@ export default function TeacherCoursesPage() {
                       <Trash2 className="h-4 w-4" /> Request deletion
                     </Button>
                   )}
+                  </div>
                 </div>
               </div>
             ))

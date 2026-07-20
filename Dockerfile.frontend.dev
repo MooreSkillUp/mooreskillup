@@ -1,0 +1,12 @@
+FROM node:20-alpine
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=development
+
+# Only copy package files — node_modules will be installed at startup via entrypoint
+COPY package.json package-lock.json ./
+
+EXPOSE 3000
+
+# The entrypoint installs deps (if needed) then starts the dev server
+CMD ["sh", "-c", "npm install --prefer-offline && npm run dev"]

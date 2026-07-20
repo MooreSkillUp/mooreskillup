@@ -29,6 +29,8 @@ class CategorySerializer(serializers.ModelSerializer):
     program = serializers.CharField(source="name", read_only=True)
     communityUrl = serializers.URLField(source="community_url", required=False, allow_blank=True)
     communityLabel = serializers.CharField(source="community_label", required=False, allow_blank=True)
+    bannerTheme = serializers.CharField(source="banner_theme", required=False, allow_blank=True)
+    accentColor = serializers.CharField(source="accent_color", required=False, allow_blank=True)
     displayOrder = serializers.IntegerField(source="display_order", required=False)
 
     class Meta:
@@ -42,6 +44,8 @@ class CategorySerializer(serializers.ModelSerializer):
             "is_active",
             "communityUrl",
             "communityLabel",
+            "bannerTheme",
+            "accentColor",
             "displayOrder",
             "subcategories",
             "created_at",

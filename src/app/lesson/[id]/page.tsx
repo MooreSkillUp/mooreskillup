@@ -88,6 +88,8 @@ export default function LessonPage() {
   }
 
   const { lesson, course, canAccess, isEnrolled, sectionItems, curriculum, prevLessonId, nextLessonId } = data;
+  const lessonTypeLabel =
+    lesson.type === "video" ? "Video lesson" : lesson.type === "resource" ? "Resource lesson" : "Reading lesson";
 
   const saveNote = async () => {
     try {
@@ -142,184 +144,227 @@ export default function LessonPage() {
 
   return (
     <AppShell allowedRoles={["student"]}>
-      <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
-        {/* Main */}
-        <div className="space-y-5">
-          <div>
-            <Link href={`/course/${course.id}`} className="text-sm text-muted-foreground hover:text-foreground">
-              ← {course.title}
-            </Link>
-            <h1 className="mt-1 font-display text-2xl font-bold">{lesson.title || "Untitled lesson"}</h1>
-            <p className="text-sm text-muted-foreground">{lesson.sectionTitle}</p>
+      <div className="space-y-6">
+        <section className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
+          <div className="bg-gradient-to-r from-primary/10 via-background to-accent-soft px-6 py-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Lesson player</div>
+                <h1 className="mt-2 font-display text-3xl font-bold">{lesson.title || "Untitled lesson"}</h1>
+                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                  {lesson.sectionTitle} · {course.title}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground">
+                  {lessonTypeLabel}
+                </span>
+                <span className="rounded-full border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground">
+                  {curriculum.length} sections in course
+                </span>
+              </div>
+            </div>
           </div>
+        </section>
 
-          {/* Content */}
-          {lesson.type === "video" ? (
-            lesson.embedUrl && getVideoRenderMode(lesson.videoUrl) === "iframe" ? (
-              <div className="aspect-video w-full overflow-hidden rounded-2xl border border-border bg-black">
-                <iframe
-                  src={lesson.embedUrl}
-                  title={lesson.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="h-full w-full"
-                />
+        <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
+          <div className="space-y-5">
+            <div className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
+              <div className="border-b border-border bg-background/70 px-5 py-4">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                    {lesson.type === "video" ? "Video content" : lesson.type === "resource" ? "Resources" : "Reading"}
+                  </span>
+                  <span>Use the controls below to keep your pace steady and save notes as you go.</span>
+                </div>
               </div>
-            ) : lesson.videoUrl ? (
-              <div className="aspect-video w-full overflow-hidden rounded-2xl border border-border bg-black">
-                <video
-                  ref={videoRef}
-                  src={lesson.videoUrl}
-                  controls
-                  controlsList="nodownload"
-                  onPause={saveVideoPosition}
-                  onEnded={saveVideoPosition}
-                  className="h-full w-full"
-                />
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-border p-8 text-center text-muted-foreground">
-                No video added to this lesson yet.
-              </div>
-            )
-          ) : lesson.type === "resource" ? (
-            <div className="rounded-2xl border border-border bg-card p-6">
-              <h3 className="font-display text-lg font-bold">Resources</h3>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {lesson.resourceLinks.filter((l) => l.url).length ? (
-                  lesson.resourceLinks
-                    .filter((l) => l.url)
-                    .map((link, i) => (
-                      <a
-                        key={i}
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium hover:border-primary/40"
-                      >
-                        <FileText className="h-4 w-4 text-primary" />
-                        {link.title || link.type}
-                      </a>
-                    ))
+              <div className="p-5">
+                {lesson.type === "video" ? (
+                  lesson.embedUrl && getVideoRenderMode(lesson.videoUrl) === "iframe" ? (
+                    <div className="aspect-video w-full overflow-hidden rounded-[1.5rem] border border-border bg-black">
+                      <iframe
+                        src={lesson.embedUrl}
+                        title={lesson.title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="h-full w-full"
+                      />
+                    </div>
+                  ) : lesson.videoUrl ? (
+                    <div className="aspect-video w-full overflow-hidden rounded-[1.5rem] border border-border bg-black">
+                      <video
+                        ref={videoRef}
+                        src={lesson.videoUrl}
+                        controls
+                        controlsList="nodownload"
+                        onPause={saveVideoPosition}
+                        onEnded={saveVideoPosition}
+                        className="h-full w-full"
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-[1.5rem] border border-dashed border-border p-8 text-center text-muted-foreground">
+                      No video added to this lesson yet.
+                    </div>
+                  )
+                ) : lesson.type === "resource" ? (
+                  <div className="rounded-[1.5rem] border border-border bg-background p-6">
+                    <h3 className="font-display text-lg font-bold">Resources</h3>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {lesson.resourceLinks.filter((l) => l.url).length ? (
+                        lesson.resourceLinks
+                          .filter((l) => l.url)
+                          .map((link, i) => (
+                            <a
+                              key={i}
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium hover:border-primary/40"
+                            >
+                              <FileText className="h-4 w-4 text-primary" />
+                              {link.title || link.type}
+                            </a>
+                          ))
+                      ) : (
+                        <span className="text-sm text-muted-foreground">No resources added.</span>
+                      )}
+                    </div>
+                  </div>
                 ) : (
-                  <span className="text-sm text-muted-foreground">No resources added.</span>
+                  <div
+                    className="prose prose-sm max-w-none rounded-[1.5rem] border border-border bg-background p-6 text-foreground dark:prose-invert"
+                    dangerouslySetInnerHTML={{ __html: lesson.textContent || "<p>No content yet.</p>" }}
+                  />
                 )}
               </div>
             </div>
-          ) : (
-            <div
-              className="prose prose-sm max-w-none rounded-2xl border border-border bg-card p-6 text-foreground dark:prose-invert"
-              dangerouslySetInnerHTML={{ __html: lesson.textContent || "<p>No content yet.</p>" }}
-            />
-          )}
 
-          {/* Controls */}
-          <div className="flex items-center justify-between gap-3">
-            <Button variant="outline" disabled={!prevLessonId} onClick={() => prevLessonId && router.push(`/lesson/${prevLessonId}`)}>
-              <ArrowLeft className="h-4 w-4" /> Previous
-            </Button>
-            <Button variant="accent" onClick={() => void markComplete()} loading={completing} loadingText="Saving...">
-              <CheckCircle2 className="h-4 w-4" />
-              {nextLessonId ? "Complete & continue" : "Mark complete"}
-            </Button>
-            <Button variant="outline" disabled={!nextLessonId} onClick={() => nextLessonId && router.push(`/lesson/${nextLessonId}`)}>
-              Next <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* Assignments & projects */}
-          {sectionItems.assignments.map((a) => (
-            <div key={a.id} className="rounded-2xl border border-border bg-card p-5">
-              <div className="flex items-center gap-2 font-semibold">
-                <ClipboardCheck className="h-4 w-4 text-primary" /> Assignment: {a.title}
-              </div>
-              <div className="prose prose-sm mt-2 max-w-none text-muted-foreground dark:prose-invert" dangerouslySetInnerHTML={{ __html: a.instructions }} />
-              {a.dueDate && <div className="mt-2 text-xs text-muted-foreground">Due {new Date(a.dueDate).toLocaleDateString("en-NG")}</div>}
-              {a.submissionUrl && (
-                <a href={a.submissionUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block">
-                  <Button variant="outline" size="sm">
-                    {a.submissionType === "whatsapp_group" ? "Join submission group" : "Submit assignment"}
-                  </Button>
-                </a>
-              )}
-              {a.howToSubmit && <p className="mt-2 text-xs text-muted-foreground">{a.howToSubmit}</p>}
-            </div>
-          ))}
-          {sectionItems.projects.map((p) => (
-            <div key={p.id} className="rounded-2xl border border-border bg-card p-5">
-              <div className="flex items-center gap-2 font-semibold">
-                <FolderGit2 className="h-4 w-4 text-primary" /> Project: {p.title}
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">{p.description}</p>
-              {p.requirements && <p className="mt-2 text-sm"><strong>Requirements:</strong> {p.requirements}</p>}
-              {p.deliverables && <p className="mt-1 text-sm"><strong>Deliverables:</strong> {p.deliverables}</p>}
-              {p.submissionUrl && (
-                <a href={p.submissionUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block">
-                  <Button variant="outline" size="sm">Submit project</Button>
-                </a>
-              )}
-            </div>
-          ))}
-
-          {/* Notes */}
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex items-center gap-2 font-semibold">
-              <StickyNote className="h-4 w-4 text-primary" /> My notes
-            </div>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Write notes for this lesson — only you can see them."
-              className="mt-3 min-h-28 w-full rounded-xl border border-input bg-background p-3 text-sm outline-none"
-              style={{ direction: "ltr" }}
-            />
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => void saveNote()} loading={noteSaving} loadingText="Saving...">
-              Save note
-            </Button>
-          </div>
-        </div>
-
-        {/* Curriculum sidebar */}
-        <aside className="space-y-3 xl:sticky xl:top-6 xl:self-start">
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <h3 className="font-display text-lg font-bold">Course content</h3>
-            <div className="mt-3 space-y-3">
-              {curriculum.map((section, index) => (
-                <div key={section.id}>
-                  <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {index + 1}. {section.title}
-                  </div>
-                  <div className="mt-1 space-y-0.5">
-                    {section.lessons.map((l) => {
-                      const active = l.id === lessonId;
-                      return (
-                        <Link
-                          key={l.id}
-                          href={l.locked ? "#" : `/lesson/${l.id}`}
-                          onClick={(e) => l.locked && e.preventDefault()}
-                          className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
-                            active ? "bg-primary/10 font-medium text-primary" : l.locked ? "text-muted-foreground/60" : "hover:bg-muted"
-                          }`}
-                        >
-                          {l.completed ? (
-                            <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
-                          ) : l.locked ? (
-                            <Lock className="h-3.5 w-3.5 shrink-0" />
-                          ) : l.type === "video" ? (
-                            <PlayCircle className="h-3.5 w-3.5 shrink-0" />
-                          ) : (
-                            <ScrollText className="h-3.5 w-3.5 shrink-0" />
-                          )}
-                          <span className="line-clamp-1">{l.title || "Untitled"}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
+            <div className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-display text-xl font-bold">Continue learning</div>
+                  <div className="text-sm text-muted-foreground">Save your place and move through the course smoothly.</div>
                 </div>
-              ))}
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" disabled={!prevLessonId} onClick={() => prevLessonId && router.push(`/lesson/${prevLessonId}`)}>
+                    <ArrowLeft className="h-4 w-4" /> Previous
+                  </Button>
+                  <Button variant="accent" onClick={() => void markComplete()} loading={completing} loadingText="Saving...">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {nextLessonId ? "Complete & continue" : "Mark complete"}
+                  </Button>
+                  <Button variant="outline" disabled={!nextLessonId} onClick={() => nextLessonId && router.push(`/lesson/${nextLessonId}`)}>
+                    Next <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {sectionItems.assignments.map((a) => (
+              <div key={a.id} className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
+                <div className="flex items-center gap-2 font-semibold">
+                  <ClipboardCheck className="h-4 w-4 text-primary" /> Assignment: {a.title}
+                </div>
+                <div className="prose prose-sm mt-2 max-w-none text-muted-foreground dark:prose-invert" dangerouslySetInnerHTML={{ __html: a.instructions }} />
+                {a.dueDate && <div className="mt-2 text-xs text-muted-foreground">Due {new Date(a.dueDate).toLocaleDateString("en-NG")}</div>}
+                {a.submissionUrl && (
+                  <a href={a.submissionUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block">
+                    <Button variant="outline" size="sm">
+                      {a.submissionType === "whatsapp_group" ? "Join submission group" : "Submit assignment"}
+                    </Button>
+                  </a>
+                )}
+                {a.howToSubmit && <p className="mt-2 text-xs text-muted-foreground">{a.howToSubmit}</p>}
+              </div>
+            ))}
+            {sectionItems.projects.map((p) => (
+              <div key={p.id} className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
+                <div className="flex items-center gap-2 font-semibold">
+                  <FolderGit2 className="h-4 w-4 text-primary" /> Project: {p.title}
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">{p.description}</p>
+                {p.requirements && <p className="mt-2 text-sm"><strong>Requirements:</strong> {p.requirements}</p>}
+                {p.deliverables && <p className="mt-1 text-sm"><strong>Deliverables:</strong> {p.deliverables}</p>}
+                {p.submissionUrl && (
+                  <a href={p.submissionUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block">
+                    <Button variant="outline" size="sm">Submit project</Button>
+                  </a>
+                )}
+              </div>
+            ))}
+
+            <div className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2 font-semibold">
+                <StickyNote className="h-4 w-4 text-primary" /> My notes
+              </div>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Write notes for this lesson — only you can see them."
+                className="mt-3 min-h-28 w-full rounded-xl border border-input bg-background p-3 text-sm outline-none"
+                style={{ direction: "ltr" }}
+              />
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => void saveNote()} loading={noteSaving} loadingText="Saving...">
+                Save note
+              </Button>
             </div>
           </div>
-        </aside>
+
+          <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+            <div className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
+              <div className="font-display text-xl font-bold">Course snapshot</div>
+              <div className="mt-3 flex items-center gap-2 rounded-2xl border border-border bg-background p-3 text-sm text-muted-foreground">
+                <div className="rounded-xl bg-primary/10 p-2 text-primary">
+                  <PlayCircle className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-medium text-foreground">{course.title}</div>
+                  <div>{curriculum.length} sections · {sectionItems.assignments.length} assignments</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-border bg-card p-4 shadow-sm">
+              <h3 className="font-display text-lg font-bold">Course content</h3>
+              <div className="mt-3 space-y-3">
+                {curriculum.map((section, index) => (
+                  <div key={section.id}>
+                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      {index + 1}. {section.title}
+                    </div>
+                    <div className="mt-1 space-y-0.5">
+                      {section.lessons.map((l) => {
+                        const active = l.id === lessonId;
+                        return (
+                          <Link
+                            key={l.id}
+                            href={l.locked ? "#" : `/lesson/${l.id}`}
+                            onClick={(e) => l.locked && e.preventDefault()}
+                            className={`flex items-center gap-2 rounded-xl px-2 py-2 text-sm ${
+                              active ? "bg-primary/10 font-medium text-primary" : l.locked ? "text-muted-foreground/60" : "hover:bg-muted"
+                            }`}
+                          >
+                            {l.completed ? (
+                              <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+                            ) : l.locked ? (
+                              <Lock className="h-3.5 w-3.5 shrink-0" />
+                            ) : l.type === "video" ? (
+                              <PlayCircle className="h-3.5 w-3.5 shrink-0" />
+                            ) : (
+                              <ScrollText className="h-3.5 w-3.5 shrink-0" />
+                            )}
+                            <span className="line-clamp-1">{l.title || "Untitled"}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </AppShell>
   );

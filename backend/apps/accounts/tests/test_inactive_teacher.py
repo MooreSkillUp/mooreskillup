@@ -1,6 +1,7 @@
 import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
+from django.core.cache import cache
 
 from apps.accounts.models import TeacherProfile, User
 from common.rbac import SUPER_ADMIN
@@ -13,6 +14,7 @@ def _client_for(user):
 
 
 def test_inactive_teacher_cannot_login(db):
+    cache.clear()  # Clear rate limiter cache
     user = User.objects.create_user(
         email="inactive@teacher.com",
         username="inactive",

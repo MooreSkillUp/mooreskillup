@@ -263,10 +263,34 @@ class CourseSerializer(serializers.ModelSerializer):
     techStack = serializers.JSONField(source="tech_stack", required=False)
     certificateEnabled = serializers.BooleanField(source="certificate_enabled", required=False)
     isRecommended = serializers.BooleanField(source="is_recommended", required=False)
+    bannerImage = serializers.ImageField(source="banner_image", required=False, allow_null=True)
+    bannerImageAlt = serializers.CharField(source="banner_image_alt", required=False, allow_blank=True)
+    bannerTheme = serializers.CharField(source="banner_theme", required=False, allow_blank=True)
     pendingDeletion = serializers.BooleanField(source="pending_deletion", read_only=True)
     deletionReason = serializers.CharField(source="deletion_reason", read_only=True)
     averageRating = serializers.SerializerMethodField()
     reviewCount = serializers.SerializerMethodField()
+    categoryAccentColor = serializers.CharField(source="category.accent_color", read_only=True)
+    categoryBannerTheme = serializers.CharField(source="category.banner_theme", read_only=True)
+
+    def to_internal_value(self, data):
+        import json
+        if hasattr(data, "_mutable") and not data._mutable:
+            data = data.copy()
+
+        for key in ["tags", "tech_stack"]:
+            if key in data:
+                val = data[key]
+                if isinstance(val, str) and val.startswith("[") and val.endswith("]"):
+                    try:
+                        parsed = json.loads(val)
+                        if hasattr(data, "setlist"):
+                            data.setlist(key, parsed)
+                        else:
+                            data[key] = parsed
+                    except Exception:
+                        pass
+        return super().to_internal_value(data)
 
     class Meta:
         model = Course
@@ -297,6 +321,9 @@ class CourseSerializer(serializers.ModelSerializer):
             "certificateEnabled",
             "is_recommended",
             "isRecommended",
+            "bannerImage",
+            "bannerImageAlt",
+            "bannerTheme",
             "pendingDeletion",
             "deletionReason",
             "averageRating",
@@ -324,6 +351,8 @@ class CourseSerializer(serializers.ModelSerializer):
             "subcategory",
             "tags",
             "sections",
+            "categoryAccentColor",
+            "categoryBannerTheme",
         )
 
     def get_teacherName(self, obj):

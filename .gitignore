@@ -55,3 +55,8 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+
+# Scratch directories
+backend/scratch/
+scratch/
+

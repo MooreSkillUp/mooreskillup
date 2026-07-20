@@ -59,6 +59,9 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
     featureAchievementsEnabled = serializers.BooleanField(source="feature_achievements_enabled", required=False)
     featureLeaderboardEnabled = serializers.BooleanField(source="feature_leaderboard_enabled", required=False)
     featureQuizEnabled = serializers.BooleanField(source="feature_quiz_enabled", required=False)
+    defaultCourseBannerTheme = serializers.CharField(source="default_course_banner_theme", required=False, allow_blank=True)
+    defaultCourseBannerAccent = serializers.CharField(source="default_course_banner_accent", required=False, allow_blank=True)
+    defaultCourseBannerTextColor = serializers.CharField(source="default_course_banner_text_color", required=False, allow_blank=True)
     refundWindowDays = serializers.IntegerField(source="refund_window_days", required=False, min_value=0, max_value=365)
     refundMaxProgressPercent = serializers.IntegerField(
         source="refund_max_progress_percent", required=False, min_value=0, max_value=100
@@ -82,6 +85,9 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
             "featureAchievementsEnabled",
             "featureLeaderboardEnabled",
             "featureQuizEnabled",
+            "defaultCourseBannerTheme",
+            "defaultCourseBannerAccent",
+            "defaultCourseBannerTextColor",
             "refundWindowDays",
             "refundMaxProgressPercent",
             "updatedAt",

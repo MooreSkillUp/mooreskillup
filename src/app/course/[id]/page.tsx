@@ -6,20 +6,18 @@ import { useParams, useRouter } from "next/navigation";
 import {
   Award,
   BadgeCheck,
-  ChevronDown,
-  ChevronUp,
   ClipboardCheck,
-  FileText,
-  FolderGit2,
   Heart,
   Lock,
   PlayCircle,
-  ScrollText,
+  Sparkles,
   Star,
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
+import { CourseBanner, CourseBannerHighlight } from "@/components/course/CourseBanner";
+import { SectionAccordion } from "@/components/course/SectionAccordion";
 import { formatNaira } from "@/lib/commerce";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/lib/feedback";
@@ -35,7 +33,6 @@ export default function CoursePage() {
   const { notifyError, notifySuccess } = useFeedback();
   const { course, isLoading, error, refresh } = useCourse(courseId);
   const { reviews, refresh: refreshReviews } = useCourseReviews(courseId);
-  const [openSections, setOpenSections] = useState<string[]>([]);
   const [enrolling, setEnrolling] = useState(false);
   const [myRating, setMyRating] = useState(0);
   const [myComment, setMyComment] = useState("");
@@ -95,9 +92,23 @@ export default function CoursePage() {
   return (
     <AppShell allowedRoles={["student"]}>
       <div className="space-y-8">
-        {/* Hero */}
-        <div className="overflow-hidden rounded-[2rem] border border-border bg-gradient-to-br from-primary/10 via-background to-accent-soft">
-          <div className="grid gap-6 p-6 lg:grid-cols-[1.6fr_1fr] lg:p-8">
+        <div className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
+          <div className="p-4 lg:p-6">
+            <CourseBanner
+              title={course.title}
+              subtitle={course.subtitle}
+              category={course.program}
+              track={course.track}
+              level={LEVEL_LABEL[course.level]}
+              durationLabel={`${totalLessons} lessons`}
+              priceLabel={isFree ? "Free" : showDiscount ? formatNaira(course.discountPrice as number) : formatNaira(course.price)}
+              certificateEnabled={course.certificateEnabled}
+              bannerImage={course.bannerImage}
+              bannerTheme={course.bannerTheme ?? "default"}
+              categoryAccentColor={course.categoryAccentColor}
+            />
+          </div>
+          <div className="grid gap-6 p-6 lg:grid-cols-[1.55fr_0.95fr] lg:p-8">
             <div>
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em]">
                 <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">{LEVEL_LABEL[course.level]}</span>
@@ -127,13 +138,13 @@ export default function CoursePage() {
               </div>
 
               <div className="mt-4 text-sm text-muted-foreground">
-                Produced by <strong className="text-foreground">MooreSkillUp</strong> · Instructor {course.teacherName}
+                Produced by <strong className="text-foreground">MooreSkillUp</strong>
               </div>
 
               {course.techStack.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {course.techStack.map((tech) => (
-                    <span key={tech} className="rounded-full bg-card px-3 py-1 text-xs font-medium text-foreground shadow-sm">
+                    <span key={tech} className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">
                       {tech}
                     </span>
                   ))}
@@ -141,7 +152,6 @@ export default function CoursePage() {
               )}
             </div>
 
-            {/* Pricing card */}
             <div className="self-start rounded-[1.5rem] border border-border bg-card p-6 shadow-lg lg:sticky lg:top-6">
               <div className="font-display text-3xl font-bold">
                 {isFree ? (
@@ -188,109 +198,69 @@ export default function CoursePage() {
           </div>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[1.6fr_1fr]">
+        <div className="grid gap-6 lg:grid-cols-[1.5fr_0.8fr]">
           <div className="space-y-8">
-            {/* About */}
-            <section>
-              <h2 className="font-display text-2xl font-bold">About this course</h2>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <CourseBannerHighlight title="Structured learning" caption="Sections, lessons, and milestones" />
+              <CourseBannerHighlight title="Career-ready" caption="Skills that map to modern roles" />
+              <CourseBannerHighlight title="Premium experience" caption="Professional learning flow" />
+            </div>
+
+            <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-sm">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <h2 className="font-display text-2xl font-bold">About this course</h2>
+              </div>
               <div
-                className="prose prose-sm mt-3 max-w-none text-muted-foreground dark:prose-invert"
+                className="prose prose-sm mt-4 max-w-none text-muted-foreground dark:prose-invert"
                 dangerouslySetInnerHTML={{ __html: course.overview || "<p>No description yet.</p>" }}
               />
               {course.roadmapLink && (
-                <a href={course.roadmapLink} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm font-semibold text-primary">
+                <a href={course.roadmapLink} target="_blank" rel="noreferrer" className="mt-4 inline-block text-sm font-semibold text-primary">
                   View the learning roadmap →
                 </a>
               )}
             </section>
 
-            {/* Curriculum */}
-            <section>
-              <h2 className="font-display text-2xl font-bold">Course content</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
+            <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-sm">
+              <div className="flex items-center gap-2">
+                <PlayCircle className="h-5 w-5 text-primary" />
+                <h2 className="font-display text-2xl font-bold">Course content</h2>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
                 {course.sections.length} sections · {totalLessons} lessons
               </p>
-              <div className="mt-4 space-y-3">
-                {course.sections.map((section, index) => {
-                  const isOpen = openSections.includes(section.id);
-                  const locked = section.isLocked;
-                  return (
-                    <div key={section.id} className="overflow-hidden rounded-2xl border border-border bg-card">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setOpenSections((cur) =>
-                            cur.includes(section.id) ? cur.filter((id) => id !== section.id) : [...cur, section.id],
-                          )
-                        }
-                        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
-                      >
-                        <div className="flex items-center gap-3">
-                          {locked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <PlayCircle className="h-4 w-4 text-primary" />}
-                          <div>
-                            <div className="font-semibold">
-                              Section {index + 1}: {section.title || "Untitled"}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {section.lessons.length} lessons
-                              {section.isFree ? " · Free preview" : " · Paid"}
-                            </div>
-                          </div>
-                        </div>
-                        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </button>
-                      {isOpen && (
-                        <div className="border-t border-border">
-                          {section.lessons.map((lesson) => {
-                            const canPreview = !locked || lesson.isPreviewable || section.isFree;
-                            return (
-                              <div key={lesson.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
-                                <div className="flex items-center gap-3">
-                                  {lesson.type === "video" ? (
-                                    <PlayCircle className="h-4 w-4 text-muted-foreground" />
-                                  ) : lesson.type === "resource" ? (
-                                    <FileText className="h-4 w-4 text-muted-foreground" />
-                                  ) : (
-                                    <ScrollText className="h-4 w-4 text-muted-foreground" />
-                                  )}
-                                  <span>{lesson.title || "Untitled lesson"}</span>
-                                </div>
-                                {canPreview ? (
-                                  <Link href={`/lesson/${lesson.id}`} className="font-medium text-primary">
-                                    {course.isOwned ? "Open" : "Preview"}
-                                  </Link>
-                                ) : (
-                                  <Lock className="h-4 w-4 text-muted-foreground" />
-                                )}
-                              </div>
-                            );
-                          })}
-                          {section.assignments.map((a) => (
-                            <div key={a.id} className="flex items-center gap-3 px-5 py-3 text-sm text-muted-foreground">
-                              <ClipboardCheck className="h-4 w-4" /> Assignment: {a.title || "Untitled"}
-                            </div>
-                          ))}
-                          {section.projects.map((p) => (
-                            <div key={p.id} className="flex items-center gap-3 px-5 py-3 text-sm text-muted-foreground">
-                              <FolderGit2 className="h-4 w-4" /> Project: {p.title || "Untitled"}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="mt-4">
+                <SectionAccordion
+                  sections={course.sections.map((section) => ({
+                    id: section.id,
+                    title: section.title,
+                    lessonCount: section.lessons.length,
+                    lessons: section.lessons.map((lesson) => ({
+                      id: lesson.id,
+                      title: lesson.title,
+                      type: lesson.type,
+                      isPreviewable: lesson.isPreviewable,
+                      isLocked: section.isLocked,
+                    })),
+                    assignments: section.assignments.map((a) => ({ id: a.id, title: a.title })),
+                    projects: section.projects.map((p) => ({ id: p.id, title: p.title })),
+                    isFree: section.isFree,
+                    isLocked: section.isLocked,
+                  }))}
+                  courseOwned={course.isOwned}
+                  previewHrefBuilder={(lessonId) => `/lesson/${lessonId}`}
+                />
               </div>
             </section>
 
-            {/* Reviews */}
-            <section>
+            <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-sm">
               <h2 className="font-display text-2xl font-bold">
                 Reviews {course.reviewCount > 0 && <span className="text-muted-foreground">· {course.averageRating} ★ ({course.reviewCount})</span>}
               </h2>
 
               {course.isOwned && (
-                <div className="mt-4 rounded-2xl border border-border bg-card p-5">
+                <div className="mt-4 rounded-[1.25rem] border border-border bg-background p-5">
                   <div className="text-sm font-medium">Rate this course</div>
                   <div className="mt-2 flex items-center gap-1">
                     {Array.from({ length: 5 }).map((_, i) => (
@@ -342,7 +312,7 @@ export default function CoursePage() {
               ) : (
                 <div className="mt-4 space-y-4">
                   {reviews.map((review) => (
-                    <div key={review.id} className="rounded-2xl border border-border bg-card p-4">
+                    <div key={review.id} className="rounded-[1.25rem] border border-border bg-background p-4">
                       <div className="flex items-center justify-between">
                         <span className="font-medium">{review.studentName}</span>
                         <span className="flex items-center gap-0.5">
@@ -363,7 +333,7 @@ export default function CoursePage() {
           </div>
 
           <aside className="space-y-4">
-            <div className="rounded-2xl border border-border bg-card p-5">
+            <div className="rounded-[1.75rem] border border-border bg-card p-5 shadow-sm">
               <h3 className="font-display text-lg font-bold">This course includes</h3>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                 <li>{totalLessons} lessons across {course.sections.length} sections</li>
@@ -371,6 +341,12 @@ export default function CoursePage() {
                 <li>Assignments &amp; projects</li>
                 {course.certificateEnabled && <li>Certificate of completion</li>}
               </ul>
+            </div>
+            <div className="rounded-[1.75rem] border border-border bg-card p-5 shadow-sm">
+              <h3 className="font-display text-lg font-bold">Learning path</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                This course is part of the MooreSkillUp learning experience and supports your broader career roadmap.
+              </p>
             </div>
           </aside>
         </div>

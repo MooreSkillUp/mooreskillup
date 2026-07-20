@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Award, BookOpen, CheckCircle2, Compass, GraduationCap, PlayCircle, Sparkles } from "lucide-react";
+import { Award, BookOpen, CheckCircle2, Compass, GraduationCap, PlayCircle, Sparkles, TrendingUp } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { CommunityLinks } from "@/components/dashboard/CommunityLinks";
 import { Button } from "@/components/ui-kit/Button";
@@ -22,17 +22,26 @@ export default function DashboardPage() {
   return (
     <AppShell allowedRoles={["student"]}>
       <div className="space-y-8">
-        <div>
-          <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Dashboard</div>
-          <h1 className="mt-2 font-display text-4xl font-bold">
-            Welcome back, {user?.displayName?.split(" ")[0] ?? "learner"} 👋
-          </h1>
-          <p className="mt-2 text-muted-foreground">Keep your momentum going.</p>
+        <div className="overflow-hidden rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Learning hub</div>
+              <h1 className="mt-2 font-display text-4xl font-bold">
+                Welcome back, {user?.displayName?.split(" ")[0] ?? "learner"}
+              </h1>
+              <p className="mt-2 max-w-2xl text-muted-foreground">
+                Your dashboard is now a focused learning center for progress, next steps, and premium course discovery.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-border bg-muted/70 px-3 py-2 text-sm text-muted-foreground">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              Career-ready pathways, built for momentum.
+            </div>
+          </div>
         </div>
 
-        {/* Continue learning */}
         {cont && (
-          <div className="overflow-hidden rounded-[2rem] border border-border bg-gradient-to-r from-primary/10 via-background to-accent-soft p-6">
+          <div className="overflow-hidden rounded-[2rem] border border-border bg-gradient-to-r from-primary/10 via-background to-accent-soft p-6 shadow-sm">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex-1">
                 <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Continue learning</div>
@@ -50,7 +59,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Stats */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard icon={BookOpen} label="Enrolled" value={stats?.enrolled ?? 0} loading={isLoading} />
           <StatCard icon={PlayCircle} label="In progress" value={stats?.inProgress ?? 0} loading={isLoading} />
@@ -58,10 +66,8 @@ export default function DashboardPage() {
           <StatCard icon={Award} label="Certificates" value={stats?.certificates ?? 0} loading={isLoading} />
         </div>
 
-        {/* Program community */}
         <CommunityLinks />
 
-        {/* Recent courses */}
         <section>
           <div className="flex items-center justify-between">
             <h2 className="font-display text-2xl font-bold">Your courses</h2>
@@ -113,7 +119,6 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* Recommended */}
         {recommended.length > 0 && (
           <section>
             <div className="flex items-center justify-between">

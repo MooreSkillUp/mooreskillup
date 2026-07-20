@@ -1,6 +1,9 @@
 """Phase 2 T1 tests: expanded course model, lesson types, assignments, projects."""
 
 import pytest
+from io import BytesIO
+from PIL import Image
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
 from apps.accounts.models import TeacherProfile, User
@@ -66,6 +69,31 @@ class TestCourseModelFields:
         assert course.tech_stack == []
         assert course.certificate_enabled is False
         assert course.meta_title == ""
+
+    def test_teacher_can_upload_and_retrieve_banner_image(self, teacher, taxonomy):
+        user, profile = teacher
+        category, subcategory = taxonomy
+        course = make_course(profile, category, subcategory)
+        image_stream = BytesIO()
+        Image.new("RGB", (120, 60), color="red").save(image_stream, format="PNG")
+        image = SimpleUploadedFile("banner.png", image_stream.getvalue(), content_type="image/png")
+
+        res = client_for(user).patch(
+            f"/api/teacher/courses/{course.id}/",
+            {"bannerImage": image},
+            format="multipart",
+        )
+
+        assert res.status_code == 200, res.json()
+        course.refresh_from_db()
+        assert course.banner_image
+        # Django's file handler generates unique names with random suffix, check directory and extension
+        assert course.banner_image.name.startswith("course-banners/")
+        assert course.banner_image.name.endswith(".png")
+
+        detail = client_for(user).get(f"/api/teacher/courses/{course.id}/")
+        assert detail.status_code == 200
+        assert detail.json()["bannerImage"].endswith(".png")
 
     def test_course_serializer_exposes_camelcase_fields(self, teacher, taxonomy):
         user, profile = teacher

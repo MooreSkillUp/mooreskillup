@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useAuth } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -21,6 +22,8 @@ import { TagInput } from "@/components/ui-kit/TagInput";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/teacher/RichTextEditor";
 import { useFeedback } from "@/lib/feedback";
+import { CourseBanner } from "@/components/course/CourseBanner";
+import { formatNaira } from "@/lib/commerce";
 import {
   useTeacherPlatform,
   type TeacherCourse,
@@ -162,9 +165,11 @@ export function TeacherCourseEditor({
   platformMode?: "teacher" | "admin-owned";
 }) {
   const router = useRouter();
+  const { user } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
   const {
     profile,
+    allowedCategories,
     buildEmptyCourse,
     getCourseById,
     saveCourse,
@@ -179,6 +184,8 @@ export function TeacherCourseEditor({
   const [manualMessage, setManualMessage] = useState("");
   const [manualMessageTone, setManualMessageTone] = useState<"success" | "warning">("success");
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerIdentityOpen, setBannerIdentityOpen] = useState(false);
   const [activeAction, setActiveAction] = useState<
     "draft" | "preview" | "publish" | "unpublish" | "archive" | "restore" | null
   >(null);
@@ -231,7 +238,7 @@ export function TeacherCourseEditor({
       const startSnapshot = JSON.stringify(course);
       if (startSnapshot === lastSnapshot.current) return;
       autosaveBusy.current = true;
-      void saveCourse(course, "draft", { autosave: true })
+      void saveCourse(course, "draft", { autosave: true, bannerFile })
         .then((result) => {
           if (!result.ok) return;
           setCourse((current) => {
@@ -243,6 +250,7 @@ export function TeacherCourseEditor({
             return merged;
           });
           setAutosaveMessage(`Auto-saved ${result.course.lastUpdated}`);
+          setBannerFile(null);
         })
         .finally(() => {
           autosaveBusy.current = false;
@@ -250,16 +258,44 @@ export function TeacherCourseEditor({
     }, 12000);
 
     return () => window.clearInterval(interval);
-  }, [course, saveCourse]);
+  }, [bannerFile, course, saveCourse]);
 
   const updateCourse = <K extends keyof TeacherCourse>(field: K, value: TeacherCourse[K]) => {
     setCourse((current) => ({ ...current, [field]: value }));
   };
 
+  const handleBannerUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBannerFile(file);
+    // Revoke previous blob URL if it exists to avoid memory leaks
+    if (course.bannerImage?.startsWith("blob:")) URL.revokeObjectURL(course.bannerImage);
+    const previewUrl = URL.createObjectURL(file);
+    updateCourse("bannerImage", previewUrl);
+    updateCourse("bannerImageAlt", course.bannerImageAlt || file.name);
+    // Auto-open the section so the teacher sees the preview
+    setBannerIdentityOpen(true);
+  };
+
+  const handleRemoveBanner = () => {
+    if (course.bannerImage?.startsWith("blob:")) {
+      URL.revokeObjectURL(course.bannerImage);
+    }
+    setBannerFile(null);
+    updateCourse("bannerImage", null);
+    updateCourse("bannerImageAlt", "");
+    const fileInput = document.getElementById("banner-file-input") as HTMLInputElement;
+    if (fileInput) fileInput.value = "";
+  };
+
+  // Resolve the category's accent color for the preview (from admin configuration)
+  const currentCategory = allowedCategories.find((cat) => cat.id === course.categoryId);
+  const previewAccentColor = currentCategory?.accentColor ?? "#FC6104";
+
   const openPreview = async () => {
     setActiveAction("preview");
     try {
-      const result = await saveCourse(course, "draft");
+      const result = await saveCourse(course, "draft", { bannerFile });
       if (!result.ok) {
         setManualMessage("Save the course as a draft before previewing.");
         notifyError("Preview unavailable", "Save the course as a draft before previewing.");
@@ -395,7 +431,7 @@ export function TeacherCourseEditor({
     setActiveAction("draft");
     setValidationErrors([]);
     try {
-      const result = await saveCourse({ ...course, status: "draft" }, "draft");
+      const result = await saveCourse({ ...course, status: "draft" }, "draft", { bannerFile });
       if (!result.ok) {
         if (result.issues?.length) {
           setValidationErrors(result.issues);
@@ -423,7 +459,7 @@ export function TeacherCourseEditor({
     setActiveAction("publish");
     setValidationErrors([]);
     try {
-      const result = await saveCourse({ ...course, status: "published" }, "publish");
+      const result = await saveCourse(course, "publish", { bannerFile });
       if (!result.ok) {
         const errs = result.issues?.length
           ? result.issues
@@ -459,7 +495,7 @@ export function TeacherCourseEditor({
     setActiveAction("unpublish");
     setValidationErrors([]);
     try {
-      const result = await saveCourse({ ...course, status: "draft" }, "unpublish");
+      const result = await saveCourse({ ...course, status: "draft" }, "unpublish", { bannerFile });
       if (!result.ok) {
         showManualMessage("Unable to unpublish. Please try again.", "warning");
         notifyError("Unpublish failed", "Please try again.");
@@ -481,7 +517,11 @@ export function TeacherCourseEditor({
     setActiveAction("archive");
     setValidationErrors([]);
     try {
-      const result = await saveCourse({ ...course, status: "archived", visibility: "hidden" }, "archive");
+      const result = await saveCourse(
+        { ...course, status: "archived", visibility: "hidden" },
+        "archive",
+        { bannerFile },
+      );
       if (!result.ok) {
         showManualMessage("Unable to archive. Please try again.", "warning");
         notifyError("Archive failed", "Please try again.");
@@ -503,7 +543,11 @@ export function TeacherCourseEditor({
     setActiveAction("restore");
     setValidationErrors([]);
     try {
-      const result = await saveCourse({ ...course, status: "draft", visibility: "hidden" }, "restore");
+      const result = await saveCourse(
+        { ...course, status: "draft", visibility: "hidden" },
+        "restore",
+        { bannerFile },
+      );
       if (!result.ok) {
         showManualMessage("Unable to restore. Please try again.", "warning");
         notifyError("Restore failed", "Please try again.");
@@ -736,6 +780,90 @@ export function TeacherCourseEditor({
                   }
                   hint="Shown as a slashed original price next to the discounted one."
                 />
+              </div>
+            )}
+          </div>
+
+          {/* Banner & visual identity — collapsible */}
+          <div className="rounded-2xl border border-border bg-background">
+            <button
+              type="button"
+              onClick={() => setBannerIdentityOpen((open) => !open)}
+              className="flex w-full items-center justify-between px-5 py-4 text-sm font-medium text-foreground"
+            >
+              <span>Banner &amp; visual identity</span>
+              {bannerIdentityOpen ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+            </button>
+
+            {bannerIdentityOpen && (
+              <div className="space-y-4 border-t border-border px-5 pb-5 pt-4">
+                {/* File picker */}
+                <div className="rounded-[1.5rem] border border-border p-4">
+                  <label className="text-sm font-medium text-foreground">Course banner image</label>
+                  <input
+                    id="banner-file-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleBannerUpload}
+                    className="mt-2 block w-full text-sm text-muted-foreground file:mr-4 file:rounded-full file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary"
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Upload a hero image for the student course page and course cards. The file is saved with the course.
+                  </p>
+                  {course.bannerImage && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveBanner}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-3.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/20 transition"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Remove Banner Image
+                    </button>
+                  )}
+                </div>
+
+                {/* Alt text only — theme is driven by the category accent color set by admin */}
+                <Input
+                  label="Banner alt text"
+                  value={course.bannerImageAlt}
+                  onChange={(event) => updateCourse("bannerImageAlt", event.target.value)}
+                  hint="Describe the banner image for accessibility."
+                />
+
+                {/* Live preview */}
+                <div className="rounded-[1.25rem] border border-border bg-card p-3">
+                  <div className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground mb-3">Live Preview (Student Card view)</div>
+                  <div className="overflow-hidden rounded-[1.25rem] border border-border">
+                    <CourseBanner
+                      title={course.title || "Untitled course"}
+                      subtitle={course.subtitle || "Your course subtitle will show here."}
+                      category={course.program || profile?.program || "MooreSkillUp"}
+                      track={course.track || "Sample Track"}
+                      level={course.level ? (course.level.charAt(0).toUpperCase() + course.level.slice(1)) : "Beginner"}
+                      durationLabel={`${course.sections.reduce((sum, s) => sum + s.lessons.length, 0)} lessons`}
+                      priceLabel={course.price === 0 ? "Free" : (course.discountPrice !== null && course.discountPrice < course.price ? formatNaira(course.discountPrice) : formatNaira(course.price))}
+                      certificateEnabled={course.certificateEnabled}
+                      compact
+                      bannerImage={course.bannerImage}
+                      bannerTheme={course.bannerTheme || "default"}
+                      categoryAccentColor={previewAccentColor}
+                    />
+                  </div>
+                  {/* Category accent color indicator */}
+                  <div className="mt-3 flex items-center gap-2 px-1">
+                    <div
+                      className="h-3 w-3 rounded-full"
+                      style={{ background: previewAccentColor }}
+                    />
+                    <span className="text-[11px] text-muted-foreground">
+                      Accent color from program &quot;{currentCategory?.name ?? course.program ?? "—"}&quot;: {previewAccentColor}
+                    </span>
+                  </div>
+                </div>
               </div>
             )}
           </div>

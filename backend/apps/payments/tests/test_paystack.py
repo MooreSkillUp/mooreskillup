@@ -7,6 +7,7 @@ import json
 
 import pytest
 from rest_framework.test import APIClient
+from unittest.mock import patch
 
 from apps.accounts.models import StudentProfile, TeacherProfile, User
 from apps.categories.models import Category, Subcategory
@@ -49,7 +50,13 @@ def db_setup(db):
 
 
 class TestInitialize:
-    def test_initialize_creates_pending_payment(self, db_setup):
+    @patch('apps.payments.paystack.initialize_transaction')
+    def test_initialize_creates_pending_payment(self, mock_init, db_setup):
+        # Mock initialize to return sim mode URL
+        mock_init.return_value = {
+            "authorization_url": "http://localhost:3000/payment/callback?reference=MSU-TEST&simulated=1",
+            "reference": "MSU-TEST"
+        }
         course = make_course(price=10000)
         student = make_student()
         res = client_for(student.user).post(
@@ -63,7 +70,12 @@ class TestInitialize:
         assert payment.status == "pending"
         assert payment.amount == 10000
 
-    def test_initialize_uses_discount_price(self, db_setup):
+    @patch('apps.payments.paystack.initialize_transaction')
+    def test_initialize_uses_discount_price(self, mock_init, db_setup):
+        mock_init.return_value = {
+            "authorization_url": "http://localhost:3000/payment/callback?reference=MSU-TEST2&simulated=1",
+            "reference": "MSU-TEST2"
+        }
         course = make_course(price=10000, discount=6000)
         student = make_student()
         client_for(student.user).post(
@@ -83,13 +95,23 @@ class TestInitialize:
 
 
 class TestVerify:
-    def test_verify_simulation_unlocks_and_is_idempotent(self, db_setup):
+    @patch('apps.payments.paystack.verify_transaction')
+    def test_verify_simulation_unlocks_and_is_idempotent(self, mock_verify, db_setup):
+        # Mock the Paystack verify call to return success
+        mock_verify.return_value = {"success": True, "amount_kobo": 1000000, "raw": {"simulated": True}}
+        
         course = make_course(price=10000)
         student = make_student()
-        client_for(student.user).post(
-            "/api/payments/initialize/", {"course_id": str(course.id), "payment_method": "paystack"}, format="json"
+        
+        # Create payment and transaction directly
+        payment = Payment.objects.create(
+            student=student, course=course, amount=10000, currency="NGN",
+            payment_method="paystack", status="pending", description="test",
         )
-        ref = Transaction.objects.get().reference
+        ref = "MSU-TEST123"
+        Transaction.objects.create(
+            payment=payment, provider="paystack", reference=ref, amount=10000, currency="NGN",
+        )
 
         res = client_for(student.user).post("/api/payments/verify/", {"reference": ref}, format="json")
         assert res.status_code == 200
@@ -101,13 +123,22 @@ class TestVerify:
         assert Enrollment.objects.filter(student=student, course=course).count() == 1
         assert Payment.objects.get().status == "successful"
 
-    def test_cannot_verify_another_students_transaction(self, db_setup):
+    @patch('apps.payments.paystack.verify_transaction')
+    def test_cannot_verify_another_students_transaction(self, mock_verify, db_setup):
+        mock_verify.return_value = {"success": True, "amount_kobo": 1000000, "raw": {"simulated": True}}
+        
         course = make_course()
         student = make_student("a@t.dev")
-        client_for(student.user).post(
-            "/api/payments/initialize/", {"course_id": str(course.id), "payment_method": "paystack"}, format="json"
+        
+        payment = Payment.objects.create(
+            student=student, course=course, amount=10000, currency="NGN",
+            payment_method="paystack", status="pending", description="test",
         )
-        ref = Transaction.objects.get().reference
+        ref = "MSU-OTHER123"
+        Transaction.objects.create(
+            payment=payment, provider="paystack", reference=ref, amount=10000, currency="NGN",
+        )
+        
         other = make_student("b@t.dev")
         res = client_for(other.user).post("/api/payments/verify/", {"reference": ref}, format="json")
         assert res.status_code == 403
@@ -179,14 +210,19 @@ class TestRefund:
             role="admin", admin_role=role,
         )
 
-    def test_super_admin_refunds_and_revokes_access(self, db_setup):
+    @patch('apps.payments.paystack.create_refund')
+    def test_super_admin_refunds_and_revokes_access(self, mock_refund, db_setup):
+        # Mock the Paystack refund call
+        mock_refund.return_value = {"success": True, "raw": {"status": True}, "message": "Refund successful"}
+        
         course = make_course(price=10000)
         student = make_student()
         payment = Payment.objects.create(
             student=student, course=course, amount=10000, currency="NGN",
             payment_method="paystack", status="successful", description="x",
         )
-        Transaction.objects.create(payment=payment, provider="paystack", reference="MSU-REF1", amount=10000, currency="NGN")
+        # Ensure transaction exists with valid reference
+        transaction = Transaction.objects.create(payment=payment, provider="paystack", reference="MSU-REF1", amount=10000, currency="NGN")
         enrollment = Enrollment.objects.create(student=student, course=course, access_source="payment")
 
         admin = self._make_admin(SUPER_ADMIN, "super@t.dev")
