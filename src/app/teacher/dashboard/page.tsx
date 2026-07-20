@@ -48,33 +48,42 @@ export default function TeacherDashboardPage() {
       />
 
       <div className="space-y-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-              Teacher dashboard
+        <section className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
+          <div className="bg-gradient-to-r from-primary/10 via-background to-accent-soft px-6 py-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
+                  Teacher dashboard
+                </div>
+                <h1 className="mt-2 font-display text-4xl font-bold">
+                  Welcome back, {profile.displayName}
+                </h1>
+                <p className="mt-2 max-w-3xl text-muted-foreground">
+                  Manage your course pipeline, learner reach, draft progress, and recent instructor activity from one
+                  polished LMS workspace.
+                </p>
+                {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Link href="/teacher/create-course">
+                  <Button variant="accent">
+                    <Upload className="h-4 w-4" /> Create course
+                  </Button>
+                </Link>
+                <Link href="/teacher/courses">
+                  <Button variant="outline">
+                    <LayoutList className="h-4 w-4" /> My courses
+                  </Button>
+                </Link>
+              </div>
             </div>
-            <h1 className="mt-2 font-display text-4xl font-bold">
-              Welcome back, {profile.displayName}
-            </h1>
-            <p className="mt-2 max-w-3xl text-muted-foreground">
-              Manage your course pipeline, learner reach, draft progress, and recent instructor activity from one
-              professional LMS workspace.
-            </p>
-            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+            <div className="mt-5 flex flex-wrap gap-2 text-sm text-muted-foreground">
+              <span className="rounded-full border border-border bg-background px-3 py-1.5">{stats.publishedCourses} published</span>
+              <span className="rounded-full border border-border bg-background px-3 py-1.5">{stats.pendingReviewCourses} awaiting review</span>
+              <span className="rounded-full border border-border bg-background px-3 py-1.5">{stats.totalLearners} learners enrolled</span>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/teacher/create-course">
-              <Button variant="accent">
-                <Upload className="h-4 w-4" /> Create course
-              </Button>
-            </Link>
-            <Link href="/teacher/courses">
-              <Button variant="outline">
-                <LayoutList className="h-4 w-4" /> My courses
-              </Button>
-            </Link>
-          </div>
-        </div>
+        </section>
 
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
           {[

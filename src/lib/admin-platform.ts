@@ -48,6 +48,8 @@ export interface AdminCategory {
   id: string;
   name: string;
   program: string;
+  accentColor?: string;
+  bannerTheme?: string;
   communityUrl?: string;
   communityLabel?: string;
   displayOrder?: number;
@@ -196,6 +198,8 @@ function normalizeCategoryPayload(payload: unknown): AdminCategory[] {
   return normalizeListPayload<AdminCategory>(payload).map((category) => ({
     ...category,
     program: category.program ?? category.name,
+    accentColor: (category.accentColor as string | undefined) ?? "#FC6104",
+    bannerTheme: (category.bannerTheme as string | undefined) ?? "default",
     communityUrl: category.communityUrl ?? "",
     communityLabel: category.communityLabel ?? "",
     displayOrder: category.displayOrder ?? 0,
@@ -425,13 +429,15 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     [load, runAction],
   );
 
-  const addCategory = useCallback(async (input: { name: string; description?: string }) => {
+  const addCategory = useCallback(async (input: { name: string; description?: string; accentColor?: string; bannerTheme?: string }) => {
       const category = await runAction(() =>
         authenticatedRequest<AdminCategory>("/api/admin/categories/", {
         method: "POST",
         body: JSON.stringify({
           name: input.name,
           description: input.description ?? "",
+          accentColor: input.accentColor ?? "#FC6104",
+          bannerTheme: input.bannerTheme ?? "default",
         }),
         }),
       );
@@ -440,7 +446,7 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     return normalizedCategory;
   }, [runAction]);
 
-  const updateCategory = useCallback(async (categoryId: string, patch: { name?: string; description?: string; communityUrl?: string; communityLabel?: string; displayOrder?: number }) => {
+  const updateCategory = useCallback(async (categoryId: string, patch: { name?: string; description?: string; accentColor?: string; bannerTheme?: string; communityUrl?: string; communityLabel?: string; displayOrder?: number }) => {
     const category = await runAction(() =>
       authenticatedRequest<AdminCategory>(`/api/admin/categories/${categoryId}/`, {
         method: "PATCH",

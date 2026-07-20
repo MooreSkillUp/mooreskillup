@@ -142,12 +142,13 @@ export async function authenticatedRequest<T = unknown>(endpoint: string, option
     throw new Error("Authenticated requests are unavailable.");
   }
 
+  const isFormData = typeof FormData !== "undefined" && options?.body instanceof FormData;
   const send = async (token: string | null) =>
     fetch(buildApiUrl(endpoint), {
       ...options,
       credentials: "include",
       headers: {
-        "Content-Type": "application/json",
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options?.headers ?? {}),
       },

@@ -5,7 +5,7 @@ import {
   authenticatedRequest,
   normalizeListPayload,
 } from "@/lib/authenticated-api";
-
+import { resolveMediaUrl } from "@/lib/student";
 
 export type TeacherCourseStatus =
   | "draft"
@@ -45,6 +45,8 @@ export interface TeacherCategory {
   id: string;
   name: string;
   program: string;
+  accentColor?: string;
+  bannerTheme?: string;
   subcategories: TeacherCategorySubcategory[];
 }
 
@@ -123,6 +125,9 @@ export interface TeacherCourse {
   metaDescription: string;
   techStack: string[];
   certificateEnabled: boolean;
+  bannerImage?: string | null;
+  bannerImageAlt: string;
+  bannerTheme: string;
   pendingDeletion: boolean;
   status: TeacherCourseStatus;
   visibility: TeacherCourseVisibility;
@@ -202,6 +207,8 @@ function normalizeCategory(category: Record<string, unknown>): TeacherCategory {
     id: String(category.id ?? ""),
     name: String(category.name ?? ""),
     program: String(category.program ?? category.name ?? ""),
+    accentColor: String(category.accentColor ?? category.accent_color ?? "#FC6104"),
+    bannerTheme: String(category.bannerTheme ?? category.banner_theme ?? "default"),
     subcategories: Array.isArray(category.subcategories)
       ? category.subcategories.map((subcategory) => ({
           id: String((subcategory as Record<string, unknown>).id ?? ""),
@@ -241,6 +248,9 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
         ? (raw.tech_stack as unknown[]).map((item) => String(item))
         : [],
     certificateEnabled: Boolean(raw.certificateEnabled ?? raw.certificate_enabled ?? false),
+    bannerImage: resolveMediaUrl((raw.bannerImage ?? raw.banner_image) as string | null),
+    bannerImageAlt: String(raw.bannerImageAlt ?? raw.banner_image_alt ?? ""),
+    bannerTheme: String(raw.bannerTheme ?? raw.banner_theme ?? "default"),
     pendingDeletion: Boolean(raw.pendingDeletion ?? raw.pending_deletion ?? false),
     status: (String(raw.status ?? "draft") as TeacherCourseStatus),
     visibility: (String(raw.visibility ?? "hidden") as TeacherCourseVisibility),
@@ -554,6 +564,9 @@ export function useTeacherPlatform(
       metaDescription: "",
       techStack: [],
       certificateEnabled: false,
+      bannerImage: null,
+      bannerImageAlt: "",
+      bannerTheme: "default",
       pendingDeletion: false,
       status: "draft",
       visibility: "hidden",
@@ -603,6 +616,8 @@ export function useTeacherPlatform(
         categoryId: category?.id ?? course.categoryId,
         track: subcategory?.name ?? selectedTrack,
         subcategoryId: subcategory?.id ?? course.subcategoryId,
+        // Inherit banner theme from the admin-configured category (not hardcoded)
+        bannerTheme: category?.bannerTheme ?? course.bannerTheme ?? "default",
       };
     },
     [allowedCategories, profile.program, profile.track, profile.tracks],
@@ -865,7 +880,7 @@ export function useTeacherPlatform(
     async (
       course: TeacherCourse,
       intent: "draft" | "publish" | "unpublish" | "archive" | "restore",
-      options?: { autosave?: boolean },
+      options?: { autosave?: boolean; bannerFile?: File | null },
     ) => {
       const nextCourse = syncCourseClassification(course);
       const issues = validateCourse(nextCourse);
@@ -876,27 +891,29 @@ export function useTeacherPlatform(
       const previousCourse = getCourseById(nextCourse.id);
 
       if (intent === "publish") {
-        const currentStatus = previousCourse?.status ?? nextCourse.status;
-        if (currentStatus === "review") {
-          return {
-            ok: false,
-            course: nextCourse,
-            issues: ["This course is already awaiting admin review."],
-          };
-        }
-        if (currentStatus === "approved") {
-          return {
-            ok: false,
-            course: nextCourse,
-            issues: ["This course has been approved. An admin will publish it soon."],
-          };
-        }
-        if (currentStatus === "published") {
-          return {
-            ok: false,
-            course: nextCourse,
-            issues: ["This course is already published. Use Unpublish to move it back to draft."],
-          };
+        if (previousCourse) {
+          const currentStatus = previousCourse.status;
+          if (currentStatus === "review") {
+            return {
+              ok: false,
+              course: nextCourse,
+              issues: ["This course is already awaiting admin review."],
+            };
+          }
+          if (currentStatus === "approved") {
+            return {
+              ok: false,
+              course: nextCourse,
+              issues: ["This course has been approved. An admin will publish it soon."],
+            };
+          }
+          if (currentStatus === "published") {
+            return {
+              ok: false,
+              course: nextCourse,
+              issues: ["This course is already published. Use Unpublish to move it back to draft."],
+            };
+          }
         }
       }
 
@@ -926,6 +943,8 @@ export function useTeacherPlatform(
         meta_description: nextCourse.metaDescription,
         tech_stack: nextCourse.techStack,
         certificate_enabled: nextCourse.certificateEnabled,
+        banner_image_alt: nextCourse.bannerImageAlt,
+        banner_theme: nextCourse.bannerTheme,
         status:
           intent === "publish"
             ? "review"
@@ -937,21 +956,48 @@ export function useTeacherPlatform(
         visibility: intent === "publish" ? "hidden" : nextCourse.visibility,
         tags: nextCourse.tags,
       };
-      // URLField on the backend rejects empty string — only send when non-empty.
+
+      if (nextCourse.bannerImage === null) {
+        payload.bannerImage = null;
+      }
+
       if (nextCourse.roadmapLink.trim()) {
         payload.roadmap_link = nextCourse.roadmapLink;
       }
 
+      const buildFormData = () => {
+        const formData = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value === undefined) return;
+          if (value === null) {
+            if (key === "bannerImage") {
+              formData.append(key, "");
+            }
+            return;
+          }
+          if (Array.isArray(value) || typeof value === "object") {
+            formData.append(key, JSON.stringify(value));
+            return;
+          }
+          formData.append(key, String(value));
+        });
+        if (options?.bannerFile) {
+          formData.append("bannerImage", options.bannerFile);
+        }
+        return formData;
+      };
+
       let saved: Record<string, unknown>;
       try {
+        const useFormData = Boolean(options?.bannerFile);
         saved = previousCourse
           ? await authenticatedRequest<Record<string, unknown>>(endpoints.courseDetail(nextCourse.id), {
               method: "PATCH",
-              body: JSON.stringify(payload),
+              body: useFormData ? buildFormData() : JSON.stringify(payload),
             })
           : await authenticatedRequest<Record<string, unknown>>(endpoints.courseCollection, {
               method: "POST",
-              body: JSON.stringify(payload),
+              body: useFormData ? buildFormData() : JSON.stringify(payload),
             });
 
         await syncSections(String(saved.id), nextCourse, previousCourse);

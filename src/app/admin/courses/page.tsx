@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, PencilLine, Plus, Sparkles, Star, ThumbsUp, Trash2, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Palette, PencilLine, Plus, Sparkles, Star, ThumbsUp, Trash2, Users } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
@@ -57,6 +57,8 @@ export default function AdminCoursesPage() {
     }
   };
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryColor, setNewCategoryColor] = useState("#FC6104");
+  const [newCategoryTheme, setNewCategoryTheme] = useState("default");
   const [newSubcategoryByCategory, setNewSubcategoryByCategory] = useState<Record<string, string>>({});
   const [courseSearch, setCourseSearch] = useState("");
   const [selectedProgramId, setSelectedProgramId] = useState("all");
@@ -64,6 +66,8 @@ export default function AdminCoursesPage() {
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedTeacherId, setSelectedTeacherId] = useState("all");
   const [communityDrafts, setCommunityDrafts] = useState<Record<string, { url: string; label: string }>>({});
+  // Per-category inline visual-identity edit panel
+  const [visualEditById, setVisualEditById] = useState<Record<string, { color: string; theme: string } | undefined>>({});
 
   const sortedCategories = useMemo(
     () => [...categories].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)),
@@ -162,16 +166,23 @@ export default function AdminCoursesPage() {
   return (
     <AppShell allowedRoles={["admin"]}>
       <div className="space-y-6">
-        <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-          <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-            Course structure
+        <section className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
+          <div className="bg-gradient-to-r from-primary/10 via-background to-accent-soft px-6 py-6">
+            <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
+              Course structure
+            </div>
+            <h1 className="mt-2 font-display text-3xl font-bold">Admin courses configuration</h1>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              This area is only for platform structure: programs, tracks, course organization rules, and featured course setup. Admin-owned course editing lives in its own module.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2 text-sm text-muted-foreground">
+              <span className="rounded-full border border-border bg-background px-3 py-1.5">{categories.length} programs</span>
+              <span className="rounded-full border border-border bg-background px-3 py-1.5">{totalTracks} tracks</span>
+              <span className="rounded-full border border-border bg-background px-3 py-1.5">{featuredCourses.length} featured</span>
+            </div>
+            {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
           </div>
-          <h1 className="mt-2 font-display text-3xl font-bold">Admin courses configuration</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            This area is only for platform structure: programs, tracks, course organization rules, and featured course setup. Admin-owned course editing lives in its own module.
-          </p>
-          {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
-        </div>
+        </section>
 
         <div className="grid gap-5 md:grid-cols-3">
           {[
@@ -196,19 +207,54 @@ export default function AdminCoursesPage() {
             </div>
 
             <div className="rounded-2xl border border-border bg-background p-4">
-              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-primary">Add program</div>
+              <div className="grid gap-3">
                 <input
                   value={newCategoryName}
                   onChange={(event) => setNewCategoryName(event.target.value)}
-                  className="h-11 rounded-lg border border-input bg-card px-3.5 text-sm text-foreground shadow-sm outline-none"
+                  className="h-11 rounded-lg border border-input bg-card px-3.5 text-sm text-foreground shadow-sm outline-none focus:ring-2 focus:ring-primary/30"
                   placeholder="Program name"
                 />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Accent color</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={newCategoryColor}
+                        onChange={(e) => setNewCategoryColor(e.target.value)}
+                        className="h-10 w-14 cursor-pointer rounded-lg border border-input bg-card p-1 shadow-sm"
+                      />
+                      <input
+                        value={newCategoryColor}
+                        onChange={(e) => setNewCategoryColor(e.target.value)}
+                        className="h-10 flex-1 rounded-lg border border-input bg-card px-3 text-sm font-mono text-foreground shadow-sm outline-none focus:ring-2 focus:ring-primary/30"
+                        placeholder="#FC6104"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Banner theme</label>
+                    <input
+                      value={newCategoryTheme}
+                      onChange={(e) => setNewCategoryTheme(e.target.value)}
+                      className="h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground shadow-sm outline-none focus:ring-2 focus:ring-primary/30"
+                      placeholder="e.g. cloud, python, design"
+                    />
+                  </div>
+                </div>
                 <Button
                   variant="accent"
                   onClick={() => {
                     if (!newCategoryName.trim()) return;
-                    void addCategory({ name: newCategoryName.trim() });
+                    void addCategory({
+                      name: newCategoryName.trim(),
+                      accentColor: newCategoryColor,
+                      bannerTheme: newCategoryTheme.trim() || "default",
+                    });
                     setNewCategoryName("");
+                    setNewCategoryColor("#FC6104");
+                    setNewCategoryTheme("default");
                   }}
                 >
                   <Plus className="h-4 w-4" /> Add Program
@@ -222,6 +268,12 @@ export default function AdminCoursesPage() {
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <div className="flex items-center gap-2">
+                        {/* Accent-color swatch */}
+                        <div
+                          className="h-4 w-4 shrink-0 rounded-full border border-white/20 shadow-sm"
+                          style={{ background: category.accentColor ?? "#FC6104" }}
+                          title={category.accentColor ?? "#FC6104"}
+                        />
                         <div className="flex flex-col">
                           <button
                             type="button"
@@ -305,6 +357,23 @@ export default function AdminCoursesPage() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => {
+                          const isOpen = !!visualEditById[category.id];
+                          setVisualEditById((current) => ({
+                            ...current,
+                            [category.id]: isOpen
+                              ? undefined
+                              : { color: category.accentColor ?? "#FC6104", theme: category.bannerTheme ?? "default" },
+                          }));
+                        }}
+                        className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+                      >
+                        <Palette className="h-3.5 w-3.5" />
+                        {visualEditById[category.id] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        Visual
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => void deleteCategory(category.id)}
                         className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
                       >
@@ -381,6 +450,106 @@ export default function AdminCoursesPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Visual identity panel — collapsed by default, opens when admin clicks Visual */}
+                  {visualEditById[category.id] && (
+                    <div className="mt-4 rounded-2xl border border-border bg-card p-3">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                        <Palette className="h-3.5 w-3.5" /> Visual identity
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Accent color drives the banner and course-card highlight across all courses in this program. Banner theme is a style variant name used by the frontend.
+                      </p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Accent color</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={visualEditById[category.id]?.color ?? "#FC6104"}
+                              onChange={(e) =>
+                                setVisualEditById((current) => ({
+                                  ...current,
+                                  [category.id]: { ...current[category.id]!, color: e.target.value },
+                                }))
+                              }
+                              className="h-10 w-14 cursor-pointer rounded-lg border border-input bg-background p-1 shadow-sm"
+                            />
+                            <input
+                              value={visualEditById[category.id]?.color ?? "#FC6104"}
+                              onChange={(e) =>
+                                setVisualEditById((current) => ({
+                                  ...current,
+                                  [category.id]: { ...current[category.id]!, color: e.target.value },
+                                }))
+                              }
+                              className="h-10 flex-1 rounded-lg border border-input bg-background px-3 text-sm font-mono text-foreground shadow-sm outline-none focus:ring-2 focus:ring-primary/30"
+                              placeholder="#FC6104"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Banner theme slug</label>
+                          <input
+                            value={visualEditById[category.id]?.theme ?? "default"}
+                            onChange={(e) =>
+                              setVisualEditById((current) => ({
+                                ...current,
+                                [category.id]: { ...current[category.id]!, theme: e.target.value },
+                              }))
+                            }
+                            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm outline-none focus:ring-2 focus:ring-primary/30"
+                            placeholder="e.g. cloud, python, design"
+                          />
+                        </div>
+                      </div>
+                      {/* Live preview swatch */}
+                      <div className="mt-3 flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2">
+                        <div
+                          className="h-8 w-8 shrink-0 rounded-lg shadow"
+                          style={{ background: visualEditById[category.id]?.color ?? "#FC6104" }}
+                        />
+                        <div>
+                          <div className="text-xs font-semibold text-foreground">{category.name}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            Theme: {visualEditById[category.id]?.theme ?? "default"} &nbsp;|&nbsp;
+                            Color: {visualEditById[category.id]?.color ?? "#FC6104"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setVisualEditById((current) => ({ ...current, [category.id]: undefined }))
+                          }
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="accent"
+                          size="sm"
+                          onClick={async () => {
+                            const draft = visualEditById[category.id];
+                            if (!draft) return;
+                            try {
+                              await updateCategory(category.id, {
+                                accentColor: draft.color,
+                                bannerTheme: draft.theme || "default",
+                              });
+                              notifySuccess("Visual identity saved", `${category.name} accent color updated.`);
+                              setVisualEditById((current) => ({ ...current, [category.id]: undefined }));
+                            } catch (e) {
+                              notifyError("Save failed", e instanceof Error ? e.message : "Request failed.");
+                            }
+                          }}
+                        >
+                          Save visual identity
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

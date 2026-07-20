@@ -1,5 +1,7 @@
 from .base import *  # noqa: F403,F401
 
+ALLOWED_HOSTS = ["*"]
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",

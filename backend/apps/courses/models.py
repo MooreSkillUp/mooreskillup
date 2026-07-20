@@ -1,7 +1,15 @@
+from django.core.files.storage import FileSystemStorage
 from django.db import models
 from django.utils.text import slugify
 
 from common.models import TimeStampedModel, UUIDPrimaryKeyModel
+
+
+class CourseBannerStorage(FileSystemStorage):
+    def get_available_name(self, name, max_length=None):
+        if self.exists(name):
+            return super().get_available_name(name, max_length)
+        return name
 
 
 class CourseTag(UUIDPrimaryKeyModel, TimeStampedModel):
@@ -52,6 +60,9 @@ class Course(UUIDPrimaryKeyModel, TimeStampedModel):
     # Teacher/admin can flag a course to surface in students' "Recommended".
     is_recommended = models.BooleanField(default=False)
     total_lessons = models.PositiveIntegerField(default=0)
+    banner_image = models.ImageField(upload_to="course-banners/%Y/%m/", blank=True, null=True)
+    banner_image_alt = models.CharField(max_length=160, blank=True)
+    banner_theme = models.CharField(max_length=40, default="default", blank=True)
     # SEO
     meta_title = models.CharField(max_length=160, blank=True)
     meta_description = models.TextField(blank=True)

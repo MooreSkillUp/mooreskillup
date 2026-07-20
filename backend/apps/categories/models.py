@@ -12,6 +12,8 @@ class Category(UUIDPrimaryKeyModel, TimeStampedModel):
     # Community link shown to students on this track (WhatsApp/Discord group, etc.).
     community_url = models.URLField(blank=True)
     community_label = models.CharField(max_length=60, blank=True)
+    banner_theme = models.CharField(max_length=40, default="default", blank=True)
+    accent_color = models.CharField(max_length=20, default="#FC6104", blank=True)
     # Lower numbers appear first in browse and admin lists.
     display_order = models.PositiveIntegerField(default=0)
 

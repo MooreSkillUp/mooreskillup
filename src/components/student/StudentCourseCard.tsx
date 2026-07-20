@@ -2,28 +2,13 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BookOpen, Heart, PlayCircle, Star, Users } from "lucide-react";
+import { Clock3, Heart, PlayCircle, Sparkles, Star, Users } from "lucide-react";
 import { formatNaira } from "@/lib/commerce";
 import type { EnrolledCourse, StudentCourse } from "@/lib/student";
 import { ProgressBar } from "@/components/ui-kit/ProgressBar";
+import { CourseBanner } from "@/components/course/CourseBanner";
 
 const LEVEL_LABEL = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" } as const;
-
-// A deterministic gradient per course (no uploaded images, by design).
-const GRADIENTS = [
-  "from-indigo-500 via-purple-500 to-pink-500",
-  "from-sky-500 via-cyan-500 to-emerald-500",
-  "from-amber-500 via-orange-500 to-rose-500",
-  "from-fuchsia-500 via-violet-500 to-indigo-500",
-  "from-teal-500 via-emerald-500 to-lime-500",
-  "from-rose-500 via-red-500 to-orange-500",
-];
-
-function gradientFor(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i += 1) hash = (hash + id.charCodeAt(i)) % GRADIENTS.length;
-  return GRADIENTS[hash];
-}
 
 export function StudentCourseCard({
   course,
@@ -44,31 +29,43 @@ export function StudentCourseCard({
       transition={{ type: "spring", stiffness: 300, damping: 24 }}
       className="group flex flex-col overflow-hidden rounded-[1.5rem] border border-border bg-card shadow-sm"
     >
-      <Link href={course.id ? `/course/${course.id}` : "#"} className={`relative block bg-gradient-to-br ${gradientFor(course.id)} p-5 text-white`}>
-        <BookOpen className="absolute right-4 top-4 h-12 w-12 text-white/15" />
-        <div className="text-[11px] font-medium uppercase tracking-wider text-white/80">
-          {course.program} · {LEVEL_LABEL[course.level]}
-        </div>
-        <div className="mt-2 line-clamp-2 font-display text-lg font-bold leading-tight">
-          {course.title || "Untitled course"}
-        </div>
-        {onToggleWishlist && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              onToggleWishlist(course);
-            }}
-            className="absolute bottom-4 right-4 rounded-full bg-white/15 p-2 backdrop-blur transition hover:bg-white/25"
-            aria-label={course.isInWatchlist ? "Remove from wishlist" : "Add to wishlist"}
-          >
-            <Heart className={`h-4 w-4 ${course.isInWatchlist ? "fill-white" : ""}`} />
-          </button>
-        )}
+      <Link href={course.id ? `/course/${course.id}` : "#"} className="block p-2">
+        <CourseBanner
+          title={course.title || "Untitled course"}
+          subtitle={course.subtitle}
+          category={course.program}
+          track={course.track}
+          level={LEVEL_LABEL[course.level]}
+          durationLabel={`${course.totalLessons || 0} lessons`}
+          priceLabel={isFree ? "Free" : showDiscount ? formatNaira(course.discountPrice as number) : formatNaira(course.price)}
+          certificateEnabled={course.certificateEnabled}
+          compact
+          bannerImage={course.bannerImage ?? undefined}
+          bannerTheme={course.bannerTheme ?? "default"}
+          categoryAccentColor={course.categoryAccentColor}
+        />
       </Link>
 
       <div className="flex flex-1 flex-col p-4">
-        <p className="line-clamp-2 text-sm text-muted-foreground">{course.subtitle}</p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">{course.program}</p>
+            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{course.subtitle}</p>
+          </div>
+          {onToggleWishlist && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                onToggleWishlist(course);
+              }}
+              className="rounded-full border border-border bg-background p-2 text-muted-foreground transition hover:border-primary/35 hover:text-primary"
+              aria-label={course.isInWatchlist ? "Remove from wishlist" : "Add to wishlist"}
+            >
+              <Heart className={`h-4 w-4 ${course.isInWatchlist ? "fill-primary text-primary" : ""}`} />
+            </button>
+          )}
+        </div>
 
         {course.techStack.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -90,6 +87,10 @@ export function StudentCourseCard({
           <span className="flex items-center gap-1">
             <Users className="h-3.5 w-3.5" />
             {course.enrollments}
+          </span>
+          <span className="flex items-center gap-1">
+            <Clock3 className="h-3.5 w-3.5" />
+            {course.totalLessons} lessons
           </span>
         </div>
 
@@ -125,8 +126,8 @@ export function StudentCourseCard({
                 formatNaira(course.price)
               )}
             </div>
-            <Link href={`/course/${course.id}`} className="text-sm font-semibold text-primary">
-              View course →
+            <Link href={`/course/${course.id}`} className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
+              <Sparkles className="h-4 w-4" /> View course
             </Link>
           </div>
         )}

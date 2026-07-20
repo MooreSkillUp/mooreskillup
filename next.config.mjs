@@ -10,11 +10,17 @@ const withPWA = withPWAInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Type errors fail the build on purpose: broken code must not reach production.
-  // ESLint stays advisory for now (run `npm run lint` locally); it will be
-  // promoted to build-blocking once legacy warnings are cleared.
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  images: {
+    remotePatterns: [
+      { protocol: 'http',  hostname: 'localhost',       port: '8000', pathname: '/media/**' },
+      { protocol: 'https', hostname: 'localhost',       port: '8000', pathname: '/media/**' },
+      { protocol: 'http',  hostname: '*.railway.app',               pathname: '/media/**' },
+      { protocol: 'https', hostname: '*.railway.app',               pathname: '/media/**' },
+      { protocol: 'https', hostname: '*.mooreskillup.*',            pathname: '/media/**' },
+    ],
   },
 };
 

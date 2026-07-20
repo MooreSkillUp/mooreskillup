@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authenticatedRequest, buildApiUrl, getAccessToken, parseJsonSafely } from "./authenticated-api";
 
+// Convert a relative Django media path like "/media/course-banners/x.jpg" into
+// an absolute URL like "http://localhost:8000/media/course-banners/x.jpg".
+// If the value is already absolute (starts with http), return it as-is.
+const MEDIA_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/api$/, "");
+export function resolveMediaUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  return `${MEDIA_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export type CourseLevel = "beginner" | "intermediate" | "advanced";
 
 export interface StudentCourse {
@@ -21,6 +31,11 @@ export interface StudentCourse {
   averageRating: number;
   reviewCount: number;
   certificateEnabled: boolean;
+  bannerImage?: string | null;
+  bannerImageAlt?: string;
+  bannerTheme?: string;
+  categoryAccentColor?: string;
+  categoryBannerTheme?: string;
   isOwned: boolean;
   isInWatchlist: boolean;
   totalLessons: number;
@@ -58,6 +73,11 @@ export function normalizeStudentCourse(raw: Record<string, unknown>): StudentCou
     averageRating: num(raw.averageRating),
     reviewCount: num(raw.reviewCount),
     certificateEnabled: Boolean(raw.certificateEnabled),
+    bannerImage: resolveMediaUrl(raw.bannerImage as string | null),
+    bannerImageAlt: String(raw.bannerImageAlt ?? ""),
+    bannerTheme: String(raw.bannerTheme ?? "default"),
+    categoryAccentColor: raw.categoryAccentColor ? String(raw.categoryAccentColor) : undefined,
+    categoryBannerTheme: raw.categoryBannerTheme ? String(raw.categoryBannerTheme) : undefined,
     isOwned: Boolean(raw.isOwned),
     isInWatchlist: Boolean(raw.isInWatchlist),
     totalLessons: num(raw.total_lessons ?? raw.totalLessons),

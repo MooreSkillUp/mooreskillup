@@ -68,6 +68,9 @@ class PlatformSettings(models.Model):
     feature_achievements_enabled = models.BooleanField(default=False)
     feature_leaderboard_enabled = models.BooleanField(default=False)
     feature_quiz_enabled = models.BooleanField(default=False)
+    default_course_banner_theme = models.CharField(max_length=40, default="default")
+    default_course_banner_accent = models.CharField(max_length=20, default="#FC6104")
+    default_course_banner_text_color = models.CharField(max_length=20, default="#FFFFFF")
     # Refund policy: refundable only within N days AND under X% course progress.
     refund_window_days = models.PositiveIntegerField(default=14)
     refund_max_progress_percent = models.PositiveIntegerField(default=30)

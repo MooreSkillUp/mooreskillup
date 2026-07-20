@@ -1,0 +1,49 @@
+# docker-compose.dev.yml  — Development override
+# Usage:
+#   Start:   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#   Stop:    docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+#   Rebuild: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build web
+#
+# What this does differently from the base compose:
+#   - Next.js runs in hot-reload dev mode (npm run dev) instead of a production build
+#   - src/, public/, and config files are mounted directly from your host
+#   - Any file you save is immediately reflected in the browser (no rebuild needed)
+#   - Django already uses volume ./backend:/app so it also hot-reloads automatically
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.dev
+    environment:
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - WATCHPACK_POLLING=true   # needed on Windows/WSL2 for reliable hot-reload
+    volumes:
+      # Mount source code — changes here hot-reload instantly
+      - ./src:/app/src
+      - ./public:/app/public
+      # Mount config files
+      - ./next.config.mjs:/app/next.config.mjs
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./tailwind.config.js:/app/tailwind.config.js
+      - ./postcss.config.js:/app/postcss.config.js
+      - ./components.json:/app/components.json
+      - ./eslint.config.js:/app/eslint.config.js
+      # node_modules lives in a named volume — installed once, cached across restarts
+      - web_node_modules:/app/node_modules
+      # Cache Next.js build artifacts across restarts for faster startup
+      - nextjs_cache:/app/.next
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  web_node_modules:
+  nextjs_cache:
+
