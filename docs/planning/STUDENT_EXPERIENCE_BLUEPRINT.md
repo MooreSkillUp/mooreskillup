@@ -93,12 +93,65 @@ Agreed with the owner. Recorded so we don't relitigate them.
 | Wishlist location | A **tab on `/dashboard/courses`**, not a new route |
 | Assignment completion tracking | **Not possible** — submission is off-platform by design |
 | Historical activity backfill | **Not possible** — counting starts at ship date |
+| Build order | **Follow the student's journey**, front door first — not defect severity |
+| Landing page content | **Pure gateway** — name, one line, sign in, create account, verify a certificate |
+| Live students today | **None.** So shipping the time recorder at S4 rather than first costs nothing |
 
 ## 5. The roadmap
 
-### S1 — The dashboard tells the truth
+**We build in the order a student meets the product**, not in order of how badly
+each part is broken. Front door, then the doors they walk through, then the room
+they live in. Each stage is finished properly before the next begins.
 
-*Goal: every number on the student's first screen comes from something real.*
+### S1 — The front door (`/`)
+
+*Goal: someone who lands here knows what this is and how to get in.*
+
+- Delete the 420 commented-out lines — the page is 624 lines, two-thirds dead.
+- Rebuild as a **pure gateway**: the MooreSkillUp name, one line on what it is,
+  **Sign in**, **Create account**, **Verify a certificate**. Nothing else.
+- No marketing copy, no pricing, no course browsing — the separate marketing
+  site owns all of that and routes people here.
+- Responsive, correct in light and dark, sane as a PWA launch screen.
+
+**Done when:** a cold visitor lands and immediately knows what to do; nothing on
+the page is commented out; every link works.
+
+### S2 — Auth
+
+*Goal: getting in is quick, clear, and never leaves you stuck.*
+
+Covers register → 6-digit email OTP → login → forgot password → reset password.
+The polish pass the old Stage 1B never received. These already work; this stage
+is about whether they're *good*.
+
+- Every error state says what to do next, not just what went wrong
+- Loading and disabled states on every submit
+- The OTP step: expiry, resend timer, wrong-code recovery, and what happens if
+  you close the tab mid-flow
+- Consistent layout across all five pages
+- Mobile keyboards, autofill, and password managers behave
+
+**Done when:** each of the five pages can be completed and failed gracefully on
+desktop and mobile without a dead end.
+
+### S3 — The shell
+
+*Goal: the frame around every logged-in page is honest.*
+
+- **Fix the wishlist 404** — `TopNavbar` links to a deleted route.
+- **Feature-flag the sidebar** so Quiz Shop, Leaderboard and Achievements only
+  appear when enabled. Wire `useFeatureFlags`; the hook already exists. Gate the
+  pages too, so a direct URL can't reach a dead end.
+- Onboarding tour: review what it actually says to a first-time student.
+- Sidebar, top nav, avatar, notification badge — mobile behaviour.
+
+**Done when:** every nav item leads somewhere real, and the Admin Settings
+toggles visibly change what students see.
+
+### S4 — Dashboard
+
+*Goal: every number on the student's home screen comes from something real.*
 
 **Backend**
 - Write real time into `LessonProgress.time_spent_seconds`, computed
@@ -118,58 +171,55 @@ Agreed with the owner. Recorded so we don't relitigate them.
 **Frontend**
 - Rewire `StatsGrid`, `LearningStreak`, `DailyGoal`, `LearningTracks`,
   `UpcomingTasks` to real data.
-- Track cards click through to a filtered catalog — "View all" is currently dead
-  text.
+- Track cards click through to a filtered catalog — "View all" is dead text now.
 - Real empty states on every widget.
 - Daily goal control in `/settings`.
 
+Starting point is branch `wip/student-dashboard`, which holds the redesign.
+
 **Done when:** a brand-new student sees honest zeros with encouraging empty
-states; a student who completes a lesson sees their minutes, streak and stats
-move; no component on the page contains a hardcoded data array.
+states; completing a lesson visibly moves their minutes, streak and stats; no
+component on the page contains a hardcoded data array.
 
-### S2 — Close the leaks
+### S5 — Courses
 
-*Goal: nothing in the student UI promises something it can't deliver.*
+Browse, filters, sort, pagination, recommended — and the **wishlist tab**,
+backed by the existing `/api/watchlist/` endpoint.
 
-- **Wishlist tab** on `/dashboard/courses`, backed by the existing
-  `/api/watchlist/` endpoint. Fix the TopNavbar heart to point at it.
-- **Feature-flag the sidebar** so Quiz Shop, Leaderboard and Achievements only
-  appear when enabled. Wire `useFeatureFlags` — the hook already exists.
-  Flag-gate the pages themselves too, so a direct URL can't reach a dead end.
-- **Landing page**: delete the 420 commented-out lines; leave a clean gateway —
-  sign in, sign up, verify a certificate.
+**Done when:** a student can find a course by any sensible route, and saved
+courses are retrievable.
 
-**Done when:** every student nav item leads somewhere real; saved courses are
-retrievable; the Admin Settings toggles visibly change what students see.
+### S6 — Course detail and checkout
 
-### S3 — Walk the journey end to end
+The buying decision: curriculum, free-preview vs locked, reviews, pricing and
+discount, free enrolment, and the Paystack flow through to callback.
 
-*Goal: prove the whole thing works on real data, not just in isolation.*
+**Done when:** both a free enrolment and a real test-mode payment complete and
+grant access.
 
-Register → verify email → onboard → browse → open a course → enrol free →
-pay for a paid one → learn → take notes → resume → complete → review → collect
-the certificate → verify it publicly. Both a free and a paid course, on desktop
-and on mobile/PWA.
+### S7 — The lesson player
 
-This stage **needs the owner clicking**. Code review can prove data flows; it
-cannot tell us a button is in the wrong place or a flow feels clumsy.
+Where students spend the most time. Video, text, resource, assignment and
+project lesson types; notes; resume position; progress; prev/next; completion.
 
-**Done when:** the owner can complete the full journey twice without hitting
-anything broken or confusing.
+**Done when:** a student can learn a full course start to finish, leave, and
+come back exactly where they were.
 
-### S4 — Polish the learning experience
+### S8 — Completion
 
-*Goal: make the part students spend the most time in genuinely good.*
+Reviews, certificate issue, PDF download, public verification.
 
-Scope set after S3, from what we actually find. Candidates: lesson player
-details, note-taking quality, mobile/PWA behaviour, the review prompt at
-completion, notification usefulness.
+**Done when:** finishing a course produces a certificate the student can
+download and a stranger can verify.
 
-### S5 — Growth features (Phase 7)
+### S9 — Account
+
+Notifications, payments history, support tickets, settings, avatars, sessions.
+
+### S10 — Growth features (Phase 7)
 
 XP, quizzes, leaderboard seasons, badges. Built on the `DailyActivity` table
-from S1. Deliberately last: they are worthless on top of a broken core, and
-excellent on top of a solid one.
+from S4. Deliberately last: worthless on a broken core, excellent on a solid one.
 
 ## 6. Explicitly out of scope
 
