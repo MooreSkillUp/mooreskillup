@@ -193,6 +193,17 @@
   }
 }
 
+/* Indeterminate sweep for the app launch screen, where we know the session is
+   resolving but not how long it will take. */
+@keyframes msuIndeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
 @keyframes bounce {
   0%,
   80%,
