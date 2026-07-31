@@ -12,6 +12,22 @@ import { PasswordInput } from "@/components/ui-kit/PasswordInput";
 import { getHomeRouteForUser, useAuth } from "@/lib/auth";
 import { useFeedback } from "@/lib/feedback";
 
+/**
+ * Where to land after signing in.
+ *
+ * Middleware appends ?next=<path> when it bounces someone off a protected page,
+ * so a deep link into a course survives the detour instead of dumping them on
+ * the dashboard. Only same-origin relative paths are honoured — anything
+ * starting with "//" or carrying a scheme would be an open redirect.
+ */
+function safeNextPath(raw: string | null): string | null {
+  if (!raw) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+  // Bouncing back into the auth flow would loop.
+  if (raw.startsWith("/auth/")) return null;
+  return raw;
+}
+
 export default function AuthLoginPage() {
   const { login, verifyTwoFactor } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
@@ -22,14 +38,19 @@ export default function AuthLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expiredNotice, setExpiredNotice] = useState(false);
+  const [nextPath, setNextPath] = useState<string | null>(null);
   const [twoFactorUserId, setTwoFactorUserId] = useState<string | null>(null);
   const [code, setCode] = useState("");
 
   useEffect(() => {
-    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("expired")) {
-      setExpiredNotice(true);
-    }
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("expired")) setExpiredNotice(true);
+    setNextPath(safeNextPath(params.get("next")));
   }, []);
+
+  const landingRoute = (user: Parameters<typeof getHomeRouteForUser>[0]) =>
+    nextPath ?? getHomeRouteForUser(user);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -44,7 +65,7 @@ export default function AuthLoginPage() {
         setLoading(false);
         return;
       }
-      router.push(getHomeRouteForUser(result));
+      router.push(landingRoute(result));
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Unable to sign in.";
       setError(message);
@@ -60,7 +81,7 @@ export default function AuthLoginPage() {
     setError("");
     try {
       const nextUser = await verifyTwoFactor(twoFactorUserId, code.trim());
-      router.push(getHomeRouteForUser(nextUser));
+      router.push(landingRoute(nextUser));
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "That code was not accepted.";
