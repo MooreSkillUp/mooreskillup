@@ -191,6 +191,49 @@ export function useMyCourses(enabled = true) {
   return { enrollments, isLoading, error, refresh };
 }
 
+/**
+ * Courses the student has saved with the heart icon.
+ *
+ * The backend has always stored these and the save buttons have always worked —
+ * there was simply nowhere to see them, so saved courses effectively vanished.
+ */
+export function useWatchlist(enabled = true) {
+  const [courses, setCourses] = useState<StudentCourse[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!enabled) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setError("");
+    try {
+      const payload = await authenticatedRequest<unknown>("/api/watchlist/");
+      const rows = Array.isArray(payload)
+        ? payload
+        : ((payload as { results?: unknown[] })?.results ?? []);
+      setCourses(
+        rows
+          .map((raw) => (raw as Record<string, unknown>).course)
+          .filter(Boolean)
+          .map((course) => normalizeStudentCourse(course as Record<string, unknown>)),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to load your saved courses.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [enabled]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { courses, isLoading, error, refresh };
+}
+
 export function useRecommended(enabled = true) {
   const [courses, setCourses] = useState<StudentCourse[]>([]);
   const [isLoading, setIsLoading] = useState(true);

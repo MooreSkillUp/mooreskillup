@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { BookOpen, Compass, GraduationCap, Search, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { BookOpen, Compass, GraduationCap, Heart, Search, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
@@ -13,18 +13,26 @@ import {
   useMyCourses,
   useRecommended,
   useStudentTaxonomy,
+  useWatchlist,
   type CatalogFilters,
   type StudentCourse,
 } from "@/lib/student";
 
-type TabKey = "my-courses" | "browse" | "recommended" | "all-courses";
+type TabKey = "my-courses" | "saved" | "browse" | "recommended" | "all-courses";
 
 const TABS: { key: TabKey; label: string; icon: typeof BookOpen }[] = [
   { key: "my-courses", label: "My Courses", icon: GraduationCap },
+  { key: "saved", label: "Saved", icon: Heart },
   { key: "browse", label: "Browse", icon: Compass },
   { key: "recommended", label: "Recommended", icon: Sparkles },
   { key: "all-courses", label: "All Courses", icon: BookOpen },
 ];
+
+const TAB_KEYS = TABS.map((t) => t.key);
+
+function isTabKey(value: string | null): value is TabKey {
+  return Boolean(value) && TAB_KEYS.includes(value as TabKey);
+}
 
 const LEVELS = [
   { value: "", label: "All levels" },
@@ -73,7 +81,30 @@ export default function StudentCoursesPage() {
   const isStudent = user?.role === "student";
   const { enrollments, isLoading: myLoading } = useMyCourses(isStudent);
   const { courses: recommended, isLoading: recLoading } = useRecommended(isStudent);
+  const {
+    courses: savedCourses,
+    isLoading: savedLoading,
+    refresh: refreshSaved,
+  } = useWatchlist(isStudent);
   const { taxonomy, categories } = useStudentTaxonomy();
+
+  // The wishlist icon in the top bar links straight to ?tab=saved, so the tab
+  // has to be addressable rather than living purely in component state.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    if (isTabKey(requested)) setTab(requested);
+  }, []);
+
+  const selectTab = useCallback((key: TabKey) => {
+    setTab(key);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", key);
+    // replaceState keeps the back button meaning "the page before this one"
+    // rather than filling history with tab changes.
+    window.history.replaceState(null, "", url.toString());
+  }, []);
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
@@ -97,6 +128,8 @@ export default function StudentCoursesPage() {
   const onWishlist = async (course: StudentCourse) => {
     try {
       await toggleWishlist(course.id);
+      // Keep the Saved tab honest when a course is un-saved from another tab.
+      void refreshSaved();
     } catch (error) {
       notifyError("Wishlist failed", error instanceof Error ? error.message : "Request failed.");
     }
@@ -122,7 +155,7 @@ export default function StudentCoursesPage() {
             <button
               key={key}
               type="button"
-              onClick={() => setTab(key)}
+              onClick={() => selectTab(key)}
               className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
                 tab === key
                   ? "border-primary bg-primary text-primary-foreground"
@@ -178,6 +211,26 @@ export default function StudentCoursesPage() {
                   </section>
                 )}
               </>
+            )}
+          </div>
+        )}
+
+        {tab === "saved" && (
+          <div>
+            {savedLoading ? (
+              <SkeletonGrid />
+            ) : !savedCourses.length ? (
+              <EmptyState
+                icon={Heart}
+                title="Nothing saved yet"
+                hint="Tap the heart on any course to keep it here for later."
+              />
+            ) : (
+              <CourseGrid>
+                {savedCourses.map((course) => (
+                  <StudentCourseCard key={course.id} course={course} onToggleWishlist={onWishlist} />
+                ))}
+              </CourseGrid>
             )}
           </div>
         )}

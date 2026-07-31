@@ -2,14 +2,17 @@
 
 import { AppShell } from "@/components/dashboard/AppShell";
 import { ComingSoonPanel } from "@/components/shared/ComingSoonPanel";
+import { FeatureGate } from "@/components/shared/FeatureGate";
 
 export default function DashboardQuizShopPage() {
   return (
     <AppShell>
-      <ComingSoonPanel
-        title="Quiz Shop is coming soon"
-        body="Quiz Shop stays active on the landing page for now, but the student dashboard shortcut is intentionally paused until the full gamification flow is ready."
-      />
+      <FeatureGate flag="quiz">
+        <ComingSoonPanel
+          title="Quiz Shop is coming soon"
+          body="Quizzes and the rewards you spend them on land together, once the learning activity behind them is being tracked."
+        />
+      </FeatureGate>
     </AppShell>
   );
 }
