@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Interest, TrackName } from "./mock-data";
+import type { Interest, TrackName } from "./taxonomy-types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 

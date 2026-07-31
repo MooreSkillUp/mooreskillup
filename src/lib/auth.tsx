@@ -8,13 +8,13 @@ import {
   type ReactNode,
 } from "react";
 import {
-  interests as allInterests,
-  trackOptionsByInterest,
+  FALLBACK_INTERESTS,
+  FALLBACK_TRACKS_BY_INTEREST,
   type Interest,
   type TrackName,
   type UserPlan,
   type UserRole,
-} from "./mock-data";
+} from "./taxonomy-types";
 import {
   clearAccessToken,
   getAccessToken,
@@ -110,7 +110,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const USER_STORAGE_KEY = "mooreskillup.user";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const DEFAULT_INTEREST = (allInterests[0] ?? "Backend Development") as Interest;
+const DEFAULT_INTEREST = (FALLBACK_INTERESTS[0] ?? "Backend Development") as Interest;
 
 export function toDisplayName(username: string) {
   return username
@@ -199,7 +199,7 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
   if (!raw?.id || !raw.email) return null;
 
   const selectedInterest = (raw.selectedInterest ?? raw.interests?.[0] ?? DEFAULT_INTEREST) as Interest;
-  const fallbackTrack = ((trackOptionsByInterest as Record<string, TrackName[]>)[selectedInterest]?.[0] ?? "Backend with Python") as TrackName;
+  const fallbackTrack = ((FALLBACK_TRACKS_BY_INTEREST as Record<string, TrackName[]>)[selectedInterest]?.[0] ?? "Backend with Python") as TrackName;
   const selectedTracks =
     Array.isArray(raw.selectedTracks) && raw.selectedTracks.length
       ? (raw.selectedTracks as TrackName[])
