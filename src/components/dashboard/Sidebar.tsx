@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useAdminPlatform } from "@/lib/admin-platform";
+import { useFeatureFlags } from "@/lib/feature-flags";
 import { usePlatformNotifications } from "@/lib/platform-notifications";
 import { hasUserPermission } from "@/lib/admin-rbac";
 import { getHomeRouteForUser, getRoleLabel, useAuth } from "../../lib/auth";
@@ -39,21 +40,26 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const homeHref = getHomeRouteForUser(user);
   const role = user?.role ?? "student";
   const platformNotifications = usePlatformNotifications(role !== "admin" && !!user);
+  const { flags } = useFeatureFlags();
   const { systemAlerts } = useAdminPlatform({ enabled: role === "admin" && !!user });
   const adminNotificationBadge = (systemAlerts.pendingReviews ?? 0) + (systemAlerts.failedPayments ?? 0);
 
+  // Quiz Shop, Leaderboard and Achievements have no backend yet. They are shown
+  // only when a Super Admin turns the matching flag on in Admin Settings —
+  // otherwise three of ten menu items lead to a "coming soon" dead end, and the
+  // toggles do nothing.
   const studentLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/courses", label: "Courses", icon: BookOpen },
     { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
     { href: "/notifications", label: "Notifications", icon: Bell, badge: platformNotifications.unreadCount },
-    { href: "/dashboard/quiz-shop", label: "Quiz Shop", icon: ShoppingBag },
-    { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-    { href: "/achievements", label: "Achievements", icon: Medal },
-    { href: "/certificates", label: "Certificates", icon: Award },
+    { href: "/dashboard/quiz-shop", label: "Quiz Shop", icon: ShoppingBag, flag: "quiz" as const },
+    { href: "/leaderboard", label: "Leaderboard", icon: Trophy, flag: "leaderboard" as const },
+    { href: "/achievements", label: "Achievements", icon: Medal, flag: "achievements" as const },
+    { href: "/certificates", label: "Certificates", icon: Award, flag: "certificates" as const },
     { href: "/support", label: "Support", icon: LifeBuoy },
     { href: "/settings", label: "Settings", icon: Settings },
-  ];
+  ].filter((link) => !link.flag || flags[link.flag]);
 
   // Each admin link is gated by the backend-granted permission that its page needs.
   const canAdmin = (permission: string) =>

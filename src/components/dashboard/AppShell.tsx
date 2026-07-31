@@ -39,7 +39,19 @@ export function AppShell({
   if (allowedRoles && user && !allowedRoles.includes(user.role)) return null;
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    // 100dvh rather than h-screen: mobile browsers shrink the viewport when the
+    // address bar collapses, and h-screen leaves a dead strip at the bottom.
+    <div
+      className="flex h-[100dvh] w-full overflow-hidden bg-background"
+      style={{
+        // Keeps the sidebar and top bar clear of the notch, and the last row of
+        // content clear of the home indicator, when running as an installed PWA.
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+      }}
+    >
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopNavbar onMenu={() => setSidebarOpen(true)} />

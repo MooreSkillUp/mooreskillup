@@ -2,14 +2,17 @@
 
 import { AppShell } from "@/components/dashboard/AppShell";
 import { ComingSoonPanel } from "@/components/shared/ComingSoonPanel";
+import { FeatureGate } from "@/components/shared/FeatureGate";
 
 export default function LeaderboardPage() {
   return (
     <AppShell>
-      <ComingSoonPanel
-        title="Leaderboard is coming soon"
-        body="The leaderboard structure stays in the project, but we are not making it active until the course and progress system is fully ready."
-      />
+      <FeatureGate flag="leaderboard">
+        <ComingSoonPanel
+          title="Leaderboard is coming soon"
+          body="Rankings arrive once we're recording real learning activity, so the board reflects genuine progress rather than a placeholder."
+        />
+      </FeatureGate>
     </AppShell>
   );
 }

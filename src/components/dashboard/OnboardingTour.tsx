@@ -18,18 +18,21 @@ const STEPS: TourStep[] = [
     description: "We are thrilled to have you here. Let's take a quick 1-minute tour to show you around your personalized learning space.",
   },
   {
-    title: "Your Learning Command Center 📊",
-    description: "This is your main dashboard content. Here you can track your stats (Enrolled, In Progress, and Completed courses), view your certificates, and resume your recent lessons with a single click.",
+    title: "Your dashboard 📊",
+    description:
+      "Everything you're working on lives here — courses in progress, what you've finished, and a one-click way back into your last lesson.",
     targetId: "tour-content",
   },
   {
-    title: "Navigate with Ease 🗺️",
-    description: "The Sidebar is your map. Browse all available courses, track your payments, purchase rewards in the Quiz Shop, and check your rank on the global leaderboard.",
+    title: "Find your way around 🗺️",
+    description:
+      "The sidebar is your map. Browse and continue courses, check your certificates, review payments, and get help from Support.",
     targetId: "tour-sidebar",
   },
   {
-    title: "Quick Controls & Settings ⚙️",
-    description: "Use the Top Navbar to check your notifications, toggle between Light and Dark mode, or click your profile avatar to update your account settings.",
+    title: "Quick controls ⚙️",
+    description:
+      "Up here you can check notifications, jump to courses you've saved with the heart, switch between light and dark, and open your settings.",
     targetId: "tour-header",
   },
   {

@@ -17,8 +17,12 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
   const adminPlatform = useAdminPlatform({ enabled: role === "admin" });
   const platformNotifications = usePlatformNotifications(role !== "admin" && !!user);
   const wishlistCount = user?.wishlist.length ?? 0;
-  const quickHref = role === "student" ? "/courses?view=saved" : getHomeRouteForUser(user);
-  const quickLabel = role === "student" ? "Wishlist" : "Workspace";
+  // This used to point at /courses?view=saved — a route deleted during an
+  // earlier cleanup — so the heart 404'd on every student page while the save
+  // buttons kept working. Saved courses live on the Courses page now.
+  const quickHref =
+    role === "student" ? "/dashboard/courses?tab=saved" : getHomeRouteForUser(user);
+  const quickLabel = role === "student" ? "Saved courses" : "Workspace";
 
   const visibleNotifications = useMemo(() => {
     if (role !== "admin") {
