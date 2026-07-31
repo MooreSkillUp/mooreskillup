@@ -392,7 +392,7 @@ volumes:
 
 ### Option B: Kubernetes
 
-For multi-server, high-availability setups, see [KUBERNETES_DEPLOYMENT.md](./KUBERNETES_DEPLOYMENT.md).
+For multi-server, high-availability setups, see the [production architecture guide](../architecture/production-architecture.md).
 
 ---
 

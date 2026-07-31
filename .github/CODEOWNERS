@@ -1,0 +1,11 @@
+# Every pull request requests a review from the owner by default.
+# See https://docs.github.com/articles/about-code-owners
+
+* @Ericmoore207
+
+# Areas where a mistake is expensive — called out so they are never skimmed.
+/backend/apps/payments/          @Ericmoore207
+/backend/apps/accounts/          @Ericmoore207
+/backend/common/rbac.py          @Ericmoore207
+/.github/workflows/              @Ericmoore207
+/infrastructure/                 @Ericmoore207

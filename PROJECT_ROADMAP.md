@@ -29,7 +29,7 @@
 Three admin ranks enforced by the server, admin team management, permanent
 audit trail, platform settings, scheduled broadcasts, security hardening.
 
-➡ Full details: [PHASE_1_ADMIN_SYSTEM.md](./PHASE_1_ADMIN_SYSTEM.md)
+➡ Full details: [PHASE_1_ADMIN_SYSTEM.md](./docs/phases/PHASE_1_ADMIN_SYSTEM.md)
 
 **Note:** some refinements are still wanted on the admin system — they are
 listed in the "Still to work on" section of the Phase 1 document and will be
@@ -47,7 +47,7 @@ permission toggles, and a full MooreSkillUp certificate system (template,
 auto-issue on completion, `MSU-XXXX` IDs, public verification page, revoke).
 Plus: fixed the studio's backwards-typing bug. 55 backend tests passing.
 
-➡ Details: [PHASE_2_TEACHER_ROADMAP.md](./PHASE_2_TEACHER_ROADMAP.md)
+➡ Details: [PHASE_2_TEACHER_ROADMAP.md](./docs/phases/PHASE_2_TEACHER_ROADMAP.md)
 
 ## Phase 3 — Student Learning Loop (the big one)
 
