@@ -37,3 +37,33 @@ class LessonNote(UUIDPrimaryKeyModel, TimeStampedModel):
 
     class Meta:
         unique_together = ("enrollment", "lesson")
+
+
+class DailyActivity(UUIDPrimaryKeyModel, TimeStampedModel):
+    """One row per student per day of learning.
+
+    LessonProgress records time against a *lesson*, which cannot answer "did
+    this student study yesterday" without scanning every enrolment. This can,
+    cheaply — it is what the streak, the daily goal and the weekly bars all read.
+
+    It is also the table Phase 7's XP system will build on, which is why it
+    stores counts rather than a single opaque score.
+
+    Note this can only ever describe activity from the day it shipped. There is
+    no way to reconstruct history, so every student starts at zero.
+    """
+
+    student = models.ForeignKey(
+        "accounts.StudentProfile", on_delete=models.CASCADE, related_name="daily_activity"
+    )
+    date = models.DateField()
+    minutes = models.PositiveIntegerField(default=0)
+    lessons_completed = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("student", "date")
+        ordering = ("-date",)
+        indexes = [models.Index(fields=["student", "-date"])]
+
+    def __str__(self):
+        return f"{self.student_id} on {self.date}"

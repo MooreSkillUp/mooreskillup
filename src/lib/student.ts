@@ -522,6 +522,48 @@ export async function saveLessonNote(lessonId: string, content: string) {
   });
 }
 
+/** A single day in the weekly activity strip. */
+export interface ActivityDay {
+  date: string;
+  minutes: number;
+  lessonsCompleted: number;
+  isToday: boolean;
+}
+
+/**
+ * Real recorded learning activity.
+ *
+ * Every field here comes from time the server actually banked while a student
+ * had a lesson open. It only describes activity since the recorder shipped —
+ * there is no history to backfill — so a new student legitimately sees zeros.
+ */
+export interface StudentActivity {
+  streakDays: number;
+  minutesToday: number;
+  dailyGoalMinutes: number;
+  totalMinutes: number;
+  week: ActivityDay[];
+}
+
+/** An assignment with a due date still ahead, in a course you're enrolled in. */
+export interface UpcomingWork {
+  id: string;
+  title: string;
+  courseId: string;
+  courseTitle: string;
+  dueDate: string;
+  daysUntilDue: number;
+  submissionType: string;
+  submissionUrl: string;
+}
+
+export type DashboardCourse = StudentCourse & {
+  progressPercent: number;
+  lastLessonId: string | null;
+  enrollmentStatus: string;
+  enrollmentId: string;
+};
+
 export interface StudentDashboard {
   user: { id: string; displayName: string; avatar: string; avatarUrl: string; selectedTrack: string };
   stats: { enrolled: number; inProgress: number; completed: number; certificates: number };
@@ -529,23 +571,27 @@ export interface StudentDashboard {
     courseId: string;
     courseTitle: string;
     lessonId: string | null;
+    lessonTitle: string | null;
     progressPercent: number;
   } | null;
-  recentCourses: {
-    id: string;
-    title: string;
-    subtitle: string;
-    level: string;
-    progressPercent: number;
-    lastLessonId: string | null;
-    status: string;
-  }[];
+  activity: StudentActivity;
+  upcoming: UpcomingWork[];
+  recentCourses: DashboardCourse[];
   unreadNotifications: number;
 }
+
+const EMPTY_ACTIVITY: StudentActivity = {
+  streakDays: 0,
+  minutesToday: 0,
+  dailyGoalMinutes: 30,
+  totalMinutes: 0,
+  week: [],
+};
 
 export function useStudentDashboard(enabled = true) {
   const [data, setData] = useState<StudentDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -553,11 +599,32 @@ export function useStudentDashboard(enabled = true) {
       setIsLoading(false);
       return;
     }
-    authenticatedRequest<StudentDashboard>("/api/dashboard/student/")
+    authenticatedRequest<Record<string, unknown>>("/api/dashboard/student/")
       .then((payload) => {
-        if (active) setData(payload);
+        if (!active || !payload) return;
+
+        // Courses arrive as the full catalog shape so dashboard cards render
+        // identically to catalog cards.
+        const recentCourses = Array.isArray(payload.recentCourses)
+          ? (payload.recentCourses as Record<string, unknown>[]).map((raw) => ({
+              ...normalizeStudentCourse(raw),
+              progressPercent: Number(raw.progressPercent ?? 0),
+              lastLessonId: raw.lastLessonId ? String(raw.lastLessonId) : null,
+              enrollmentStatus: String(raw.enrollmentStatus ?? "active"),
+              enrollmentId: String(raw.enrollmentId ?? ""),
+            }))
+          : [];
+
+        setData({
+          ...(payload as unknown as StudentDashboard),
+          activity: { ...EMPTY_ACTIVITY, ...((payload.activity as StudentActivity) ?? {}) },
+          upcoming: Array.isArray(payload.upcoming) ? (payload.upcoming as UpcomingWork[]) : [],
+          recentCourses,
+        });
       })
-      .catch(() => {})
+      .catch((e: unknown) => {
+        if (active) setError(e instanceof Error ? e.message : "Unable to load your dashboard.");
+      })
       .finally(() => {
         if (active) setIsLoading(false);
       });
@@ -566,7 +633,53 @@ export function useStudentDashboard(enabled = true) {
     };
   }, [enabled]);
 
-  return { data, isLoading };
+  return { data, isLoading, error };
+}
+
+/** Categories with a real count of published courses, for the track cards. */
+export interface StudentTrack {
+  id: string;
+  name: string;
+  courseCount: number;
+}
+
+export function useStudentTracks() {
+  const [tracks, setTracks] = useState<StudentTrack[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    fetch(buildApiUrl("/api/categories/"))
+      .then(parseJsonSafely)
+      .then((payload) => {
+        if (!active) return;
+        const rows = Array.isArray(payload) ? payload : (payload?.results ?? []);
+        setTracks(
+          rows.map((c: Record<string, unknown>) => ({
+            id: String(c.id ?? ""),
+            name: String(c.name ?? ""),
+            courseCount: Number(c.courseCount ?? 0),
+          })),
+        );
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return { tracks, isLoading };
+}
+
+/** Update the student's own daily learning target. */
+export async function saveDailyGoal(minutes: number) {
+  return authenticatedRequest("/api/auth/me/", {
+    method: "PATCH",
+    body: JSON.stringify({ dailyGoalMinutes: minutes }),
+  });
 }
 
 // Avatar catalogue lives in a React-free module so server components can use it.

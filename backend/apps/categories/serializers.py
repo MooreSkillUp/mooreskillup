@@ -32,6 +32,9 @@ class CategorySerializer(serializers.ModelSerializer):
     bannerTheme = serializers.CharField(source="banner_theme", required=False, allow_blank=True)
     accentColor = serializers.CharField(source="accent_color", required=False, allow_blank=True)
     displayOrder = serializers.IntegerField(source="display_order", required=False)
+    # Annotated by the view. Lets track cards say "12 courses" truthfully
+    # instead of hardcoding a number or firing a request per category.
+    courseCount = serializers.IntegerField(source="published_course_count", read_only=True, default=0)
 
     class Meta:
         model = Category
@@ -47,6 +50,7 @@ class CategorySerializer(serializers.ModelSerializer):
             "bannerTheme",
             "accentColor",
             "displayOrder",
+            "courseCount",
             "subcategories",
             "created_at",
             "updated_at",

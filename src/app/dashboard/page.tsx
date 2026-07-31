@@ -1,164 +1,91 @@
 "use client";
 
-import Link from "next/link";
-import { Award, BookOpen, CheckCircle2, Compass, GraduationCap, PlayCircle, Sparkles, TrendingUp } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { CommunityLinks } from "@/components/dashboard/CommunityLinks";
-import { Button } from "@/components/ui-kit/Button";
-import { ProgressBar } from "@/components/ui-kit/ProgressBar";
-import { StudentCourseCard } from "@/components/student/StudentCourseCard";
+import { ContinueLearningCard } from "@/components/student/dashboard/ContinueLearningCard";
+import { DailyGoal } from "@/components/student/dashboard/DailyGoal";
+import { LearningStreak } from "@/components/student/dashboard/LearningStreak";
+import { LearningTracks } from "@/components/student/dashboard/LearningTracks";
+import { MyCoursesList } from "@/components/student/dashboard/MyCoursesList";
+import { RecommendedCourses } from "@/components/student/dashboard/RecommendedCourses";
+import { StatsGrid } from "@/components/student/dashboard/StatsGrid";
+import { UpcomingTasks } from "@/components/student/dashboard/UpcomingTasks";
 import { useAuth } from "@/lib/auth";
-import { useRecommended, useStudentDashboard } from "@/lib/student";
+import { useRecommended, useStudentDashboard, useStudentTracks } from "@/lib/student";
 
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+/**
+ * The student's home screen.
+ *
+ * Its one job is answering "what do I do next?", so it leads with the lesson
+ * they stopped on. Everything below that is context.
+ *
+ * Every number here is recorded, not derived for effect — the streak, the daily
+ * goal and the hours all come from time the server banked while a lesson was
+ * open. A new student sees zeros, which is the honest answer, so each widget
+ * carries an empty state that reads as a starting point rather than a failure.
+ */
 export default function DashboardPage() {
   const { user } = useAuth();
   const isStudent = user?.role === "student";
-  const { data, isLoading } = useStudentDashboard(isStudent);
-  const { courses: recommended } = useRecommended(isStudent);
 
-  const stats = data?.stats;
-  const cont = data?.continueLearning;
+  const { data, isLoading } = useStudentDashboard(isStudent);
+  const { courses: recommended, isLoading: recLoading } = useRecommended(isStudent);
+  const { tracks, isLoading: tracksLoading } = useStudentTracks();
+
+  const continueLearning = data?.continueLearning ?? null;
+  // The same course in full catalog shape, so its banner matches its card.
+  const continueCourse = data?.recentCourses.find((c) => c.id === continueLearning?.courseId);
+
+  const firstName = user?.displayName?.split(" ")[0];
 
   return (
     <AppShell allowedRoles={["student"]}>
       <div className="space-y-8">
-        <div className="overflow-hidden rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Learning hub</div>
-              <h1 className="mt-2 font-display text-4xl font-bold">
-                Welcome back, {user?.displayName?.split(" ")[0] ?? "learner"}
-              </h1>
-              <p className="mt-2 max-w-2xl text-muted-foreground">
-                Your dashboard is now a focused learning center for progress, next steps, and premium course discovery.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-border bg-muted/70 px-3 py-2 text-sm text-muted-foreground">
-              <TrendingUp className="h-4 w-4 text-primary" />
-              Career-ready pathways, built for momentum.
-            </div>
-          </div>
+        <div>
+          <h1 className="font-display text-3xl font-bold text-foreground">
+            {greeting()}
+            {firstName ? `, ${firstName}` : ""}
+          </h1>
+          <p className="mt-1 text-muted-foreground">Here&apos;s where you left off.</p>
         </div>
 
-        {cont && (
-          <div className="overflow-hidden rounded-[2rem] border border-border bg-gradient-to-r from-primary/10 via-background to-accent-soft p-6 shadow-sm">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex-1">
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Continue learning</div>
-                <h2 className="mt-1 font-display text-2xl font-bold">{cont.courseTitle}</h2>
-                <div className="mt-3 max-w-md">
-                  <ProgressBar value={cont.progressPercent} label={`${Math.round(cont.progressPercent)}% complete`} />
-                </div>
-              </div>
-              <Link href={cont.lessonId ? `/lesson/${cont.lessonId}` : `/course/${cont.courseId}`}>
-                <Button variant="accent" size="lg">
-                  <PlayCircle className="h-4 w-4" /> Resume
-                </Button>
-              </Link>
-            </div>
-          </div>
-        )}
+        <ContinueLearningCard
+          continueLearning={continueLearning}
+          course={continueCourse}
+          loading={isLoading}
+        />
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard icon={BookOpen} label="Enrolled" value={stats?.enrolled ?? 0} loading={isLoading} />
-          <StatCard icon={PlayCircle} label="In progress" value={stats?.inProgress ?? 0} loading={isLoading} />
-          <StatCard icon={CheckCircle2} label="Completed" value={stats?.completed ?? 0} loading={isLoading} />
-          <StatCard icon={Award} label="Certificates" value={stats?.certificates ?? 0} loading={isLoading} />
+        <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+          <div className="min-w-0 space-y-8">
+            <LearningTracks tracks={tracks} loading={tracksLoading} />
+            <MyCoursesList courses={data?.recentCourses ?? []} isLoading={isLoading} />
+            <RecommendedCourses courses={recommended} isLoading={recLoading} />
+            <CommunityLinks />
+          </div>
+
+          <div className="space-y-6">
+            <StatsGrid stats={data?.stats} activity={data?.activity} loading={isLoading} />
+            <DailyGoal
+              targetMinutes={data?.activity.dailyGoalMinutes}
+              earnedMinutes={data?.activity.minutesToday}
+              loading={isLoading}
+            />
+            <LearningStreak
+              streakDays={data?.activity.streakDays}
+              week={data?.activity.week}
+              loading={isLoading}
+            />
+            <UpcomingTasks tasks={data?.upcoming} loading={isLoading} />
+          </div>
         </div>
-
-        <CommunityLinks />
-
-        <section>
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-2xl font-bold">Your courses</h2>
-            <Link href="/dashboard/courses" className="text-sm font-semibold text-primary">
-              View all →
-            </Link>
-          </div>
-          {isLoading ? (
-            <div className="mt-4 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-44 animate-pulse rounded-2xl bg-muted/40" />
-              ))}
-            </div>
-          ) : !data?.recentCourses.length ? (
-            <div className="mt-4 rounded-[2rem] border border-dashed border-border bg-card p-10 text-center">
-              <GraduationCap className="mx-auto h-10 w-10 text-muted-foreground" />
-              <h3 className="mt-3 font-display text-xl font-bold">Start your first course</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Browse the catalog and enroll — free courses unlock instantly.</p>
-              <Link href="/dashboard/courses" className="mt-4 inline-block">
-                <Button variant="accent">
-                  <Compass className="h-4 w-4" /> Browse courses
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {data.recentCourses.map((course) => (
-                <Link
-                  key={course.id}
-                  href={course.lastLessonId ? `/lesson/${course.lastLessonId}` : `/course/${course.id}`}
-                  className="rounded-2xl border border-border bg-card p-5 transition hover:border-primary/30"
-                >
-                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    {course.level}
-                  </div>
-                  <div className="mt-1 line-clamp-2 font-display text-lg font-bold">{course.title}</div>
-                  <div className="mt-3">
-                    <ProgressBar value={course.progressPercent} />
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{Math.round(course.progressPercent)}% complete</span>
-                    <span className="font-semibold text-primary">
-                      {course.status === "completed" ? "Completed" : course.progressPercent > 0 ? "Continue" : "Start"}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {recommended.length > 0 && (
-          <section>
-            <div className="flex items-center justify-between">
-              <h2 className="flex items-center gap-2 font-display text-2xl font-bold">
-                <Sparkles className="h-5 w-5 text-primary" /> Recommended for you
-              </h2>
-              <Link href="/dashboard/courses" className="text-sm font-semibold text-primary">
-                More →
-              </Link>
-            </div>
-            <div className="mt-4 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {recommended.slice(0, 3).map((course) => (
-                <StudentCourseCard key={course.id} course={course} />
-              ))}
-            </div>
-          </section>
-        )}
       </div>
     </AppShell>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  loading,
-}: {
-  icon: typeof BookOpen;
-  label: string;
-  value: number;
-  loading?: boolean;
-}) {
-  return (
-    <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-        <Icon className="h-5 w-5" />
-      </div>
-      <div className="mt-4 font-display text-3xl font-bold">{loading ? "—" : value}</div>
-      <div className="mt-1 text-sm text-muted-foreground">{label}</div>
-    </div>
   );
 }

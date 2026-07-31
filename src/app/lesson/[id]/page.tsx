@@ -26,6 +26,15 @@ import {
   usePlayer,
 } from "@/lib/student";
 
+/**
+ * How often an open lesson tells the server it is still being studied.
+ *
+ * Comfortably under the server's per-ping cap (120s) so an honest student's
+ * time is credited in full, while still being infrequent enough that a long
+ * lesson costs only a handful of requests.
+ */
+const HEARTBEAT_MS = 60_000;
+
 export default function LessonPage() {
   const params = useParams();
   const router = useRouter();
@@ -64,6 +73,36 @@ export default function LessonPage() {
       videoRef.current.currentTime = lastPositionSeconds;
     }
   }, [lessonId, data?.isEnrolled, data?.canAccess, progressStatus, lastPositionSeconds]);
+
+  /**
+   * Heartbeat, so learning time is actually measured.
+   *
+   * The server banks the gap between consecutive pings, capped per ping. Before
+   * this, the only pings were "lesson opened", "video paused" and "marked
+   * complete" — so half an hour spent reading a text lesson produced two pings
+   * and banked a couple of minutes. This keeps the clock honest.
+   *
+   * It stops while the tab is hidden: a lesson left open in a background tab is
+   * not study, and the server-side cap alone would still let it drip time.
+   */
+  const canRecordTime = Boolean(data?.isEnrolled && data?.canAccess);
+  useEffect(() => {
+    if (!canRecordTime) return;
+
+    const beat = () => {
+      if (document.visibilityState !== "visible") return;
+      void saveLessonProgress(lessonId, { status: "in_progress" });
+    };
+
+    const timer = window.setInterval(beat, HEARTBEAT_MS);
+    // Bank the stretch just spent away before the tab went quiet.
+    document.addEventListener("visibilitychange", beat);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", beat);
+    };
+  }, [canRecordTime, lessonId]);
 
   if (isLoading) {
     return (
