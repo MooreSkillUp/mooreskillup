@@ -123,6 +123,14 @@ CORS_ALLOWED_ORIGINS = [
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+# Auth cookie policy. The browser app and this API run on different registrable
+# domains in production, which makes the token refresh a cross-site request —
+# browsers only send a cookie on those if it is marked SameSite=None, and they
+# reject SameSite=None unless the cookie is also Secure (enforced in
+# session_auth). Defaults to Lax so local and same-domain setups are unaffected;
+# production overrides it.
+AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "Lax")
+
 # Paystack (the only gateway). Leave the secret key empty in dev/test to run in
 # "simulation mode" — checkout completes locally without contacting Paystack.
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
