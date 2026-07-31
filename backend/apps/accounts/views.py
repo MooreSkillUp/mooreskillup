@@ -2,40 +2,28 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
-from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, permissions, response, status
-from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
-from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from common.rbac import SUPER_ADMIN, AdminAction, AdminActionsPerMethod
-from apps.platform.audit import record_audit
-
 from apps.courses.models import Course
+from apps.platform.audit import record_audit
+from common.rbac import SUPER_ADMIN, AdminAction, AdminActionsPerMethod
 
 from .models import PasswordResetToken
-from .session_auth import (
-    AUTH_REFRESH_COOKIE,
-    build_session_auth_response,
-    clear_auth_cookies,
-    clear_failed_logins,
-    register_failed_login,
-    refresh_session_from_token,
-    revoke_all_sessions,
-    revoke_session,
-    set_auth_cookies,
-)
 from .password_reset_email import try_send_password_reset_email
 from .serializers import (
     AdminAccountCreateSerializer,
     AdminAccountSerializer,
     AdminAccountUpdateSerializer,
-    AdminTeacherCreateSerializer,
     AdminStudentSerializer,
+    AdminTeacherCreateSerializer,
     ChangePasswordSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
@@ -44,6 +32,17 @@ from .serializers import (
     TeacherProfileSerializer,
     UserSerializer,
     UserUpdateSerializer,
+)
+from .session_auth import (
+    AUTH_REFRESH_COOKIE,
+    build_session_auth_response,
+    clear_auth_cookies,
+    clear_failed_logins,
+    refresh_session_from_token,
+    register_failed_login,
+    revoke_all_sessions,
+    revoke_session,
+    set_auth_cookies,
 )
 
 
@@ -85,9 +84,11 @@ class RegisterView(generics.CreateAPIView):
         return context
 
     def create(self, request, *args, **kwargs):
-        from apps.platform.models import PlatformSettings
         from django.contrib.auth.hashers import make_password
+
+        from apps.platform.models import PlatformSettings
         from common.email import send_transactional_email
+
         from .models import PendingRegistration
 
         if not PlatformSettings.get_solo().student_registration_open:
@@ -153,7 +154,7 @@ class VerifyRegisterView(APIView):
     throttle_scope = "auth-register"
 
     def post(self, request):
-        from .models import PendingRegistration, User, StudentProfile
+        from .models import PendingRegistration, StudentProfile, User
 
         pending_id = request.data.get("pendingId") or request.data.get("pending_id")
         code = request.data.get("code")
@@ -231,8 +232,9 @@ class ResendRegisterCodeView(APIView):
     throttle_scope = "auth-register"
 
     def post(self, request):
-        from .models import PendingRegistration
         from common.email import send_transactional_email
+
+        from .models import PendingRegistration
 
         pending_id = request.data.get("pendingId") or request.data.get("pending_id")
         if not pending_id:
@@ -314,8 +316,9 @@ class AdminRegisterView(generics.CreateAPIView):
 
 def _send_login_otp(user):
     """Generate a 6-digit code, store it, and email it to the user."""
-    from .models import EmailOtp
     from common.email import send_transactional_email
+
+    from .models import EmailOtp
 
     code = f"{secrets.randbelow(1_000_000):06d}"
     EmailOtp.objects.filter(user=user, used_at__isnull=True).delete()
@@ -756,8 +759,9 @@ class AdminStudentGrantAccessView(AdminActionsPerMethod, APIView):
     admin_actions = {"POST": ("students:edit",)}
 
     def post(self, request, student_id):
-        from .models import StudentProfile
         from apps.enrollments.models import Enrollment
+
+        from .models import StudentProfile
 
         student = get_object_or_404(StudentProfile.objects.select_related("user"), id=student_id)
         course_id = request.data.get("courseId") or request.data.get("course_id")

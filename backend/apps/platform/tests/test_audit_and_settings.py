@@ -10,7 +10,7 @@ from rest_framework.test import APIClient
 from apps.accounts.models import User
 from apps.notifications.delivery import deliver_due_broadcasts
 from apps.notifications.models import BroadcastNotification, Notification
-from apps.platform.models import AuditLog, PlatformSettings
+from apps.platform.models import AuditLog
 from common.rbac import ADMIN, MODERATOR, SUPER_ADMIN
 
 

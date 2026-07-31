@@ -1,9 +1,9 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, response, status, views
+from rest_framework import response, status, views
 from rest_framework.generics import ListAPIView
 
-from common.permissions import IsStudentUserRole
 from apps.courses.models import Course
+from common.permissions import IsStudentUserRole
 
 from .models import Enrollment, Watchlist
 from .serializers import EnrollmentSerializer, WatchlistSerializer

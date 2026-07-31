@@ -1,21 +1,21 @@
+import contextlib
 import csv
-from decimal import Decimal
 from datetime import timedelta
+from decimal import Decimal
 
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import response, status, views
 
-from common.permissions import IsStudentUserRole, IsTeacherUserRole
-from common.rbac import AdminAction
-from apps.courses.models import Course, Lesson
+from apps.accounts.models import User
+from apps.courses.activity import prune_teacher_activity_logs
+from apps.courses.models import Course, Lesson, TeacherActivityLog
 from apps.courses.serializers import CourseSerializer, TeacherActivitySerializer
 from apps.enrollments.models import Enrollment
 from apps.notifications.models import Notification
 from apps.payments.models import Payment
-from apps.courses.activity import prune_teacher_activity_logs
-from apps.courses.models import TeacherActivityLog
-from apps.accounts.models import User
+from common.permissions import IsStudentUserRole, IsTeacherUserRole
+from common.rbac import AdminAction
 
 from .models import CourseProgress, LessonNote, LessonProgress
 from .serializers import CourseProgressSerializer, LessonNoteSerializer, LessonProgressSerializer
@@ -90,10 +90,9 @@ class LessonProgressUpdateView(views.APIView):
         progress.last_accessed_at = timezone.now()
         position = request.data.get("position_seconds")
         if position is not None:
-            try:
+            # A malformed position from the client just means "no resume point".
+            with contextlib.suppress(TypeError, ValueError):
                 progress.last_position_seconds = max(0, int(position))
-            except (TypeError, ValueError):
-                pass
         if next_status == "completed":
             progress.completed_at = timezone.now()
         if not progress.first_accessed_at:

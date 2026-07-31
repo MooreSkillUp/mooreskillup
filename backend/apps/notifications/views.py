@@ -1,11 +1,11 @@
-from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import response, status, views
 from rest_framework.permissions import BasePermission
 
+from apps.platform.audit import record_audit
 from common.permissions import IsStudentUserRole, IsTeacherUserRole
 from common.rbac import AdminActionsPerMethod, get_admin_role, user_has_admin_permission
-from apps.platform.audit import record_audit
 
 from .delivery import deliver_due_broadcasts, fan_out_broadcast
 from .models import BroadcastNotification, Notification, SupportTicket
@@ -25,9 +25,7 @@ class CanBroadcast(BasePermission):
             return True
         from apps.platform.models import PlatformSettings
 
-        if get_admin_role(user) == "moderator" and PlatformSettings.get_solo().allow_moderator_announcements:
-            return True
-        return False
+        return get_admin_role(user) == "moderator" and PlatformSettings.get_solo().allow_moderator_announcements
 
 
 class NotificationListView(views.APIView):
@@ -230,8 +228,8 @@ class TeacherAnnouncementView(views.APIView):
     permission_classes = [IsTeacherUserRole]
 
     def post(self, request):
-        from apps.platform.models import PlatformSettings
         from apps.enrollments.models import Enrollment
+        from apps.platform.models import PlatformSettings
 
         if not PlatformSettings.get_solo().allow_teacher_announcements:
             return response.Response(

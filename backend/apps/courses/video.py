@@ -2,7 +2,6 @@ from urllib.parse import parse_qs, urlparse
 
 from rest_framework import serializers
 
-
 DIRECT_VIDEO_EXTENSIONS = (".mp4", ".webm", ".ogg", ".m3u8")
 
 

@@ -1,7 +1,7 @@
 from rest_framework import permissions, viewsets
 
-from common.rbac import AdminActionsPerViewSetAction
 from apps.platform.audit import record_audit
+from common.rbac import AdminActionsPerViewSetAction
 
 from .models import Category, Subcategory
 from .serializers import CategorySerializer, SubcategorySerializer

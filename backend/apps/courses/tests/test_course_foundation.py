@@ -1,9 +1,10 @@
 """Phase 2 T1 tests: expanded course model, lesson types, assignments, projects."""
 
-import pytest
 from io import BytesIO
-from PIL import Image
+
+import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.accounts.models import TeacherProfile, User
@@ -46,15 +47,15 @@ def taxonomy(db):
 
 
 def make_course(profile, category, subcategory, **extra):
-    defaults = dict(
-        teacher=profile,
-        category=category,
-        subcategory=subcategory,
-        title="Mastering React",
-        subtitle="From zero to production",
-        overview="A complete course.",
-        scheme_of_work="Week by week.",
-    )
+    defaults = {
+        "teacher": profile,
+        "category": category,
+        "subcategory": subcategory,
+        "title": "Mastering React",
+        "subtitle": "From zero to production",
+        "overview": "A complete course.",
+        "scheme_of_work": "Week by week.",
+    }
     defaults.update(extra)
     return Course.objects.create(**defaults)
 

@@ -4,10 +4,10 @@ signature, amount tampering guard, refunds, idempotency."""
 import hashlib
 import hmac
 import json
+from unittest.mock import patch
 
 import pytest
 from rest_framework.test import APIClient
-from unittest.mock import patch
 
 from apps.accounts.models import StudentProfile, TeacherProfile, User
 from apps.categories.models import Category, Subcategory
@@ -222,7 +222,7 @@ class TestRefund:
             payment_method="paystack", status="successful", description="x",
         )
         # Ensure transaction exists with valid reference
-        transaction = Transaction.objects.create(payment=payment, provider="paystack", reference="MSU-REF1", amount=10000, currency="NGN")
+        Transaction.objects.create(payment=payment, provider="paystack", reference="MSU-REF1", amount=10000, currency="NGN")
         enrollment = Enrollment.objects.create(student=student, course=course, access_source="payment")
 
         admin = self._make_admin(SUPER_ADMIN, "super@t.dev")

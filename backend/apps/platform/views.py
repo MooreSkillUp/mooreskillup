@@ -9,7 +9,6 @@ from rest_framework.pagination import PageNumberPagination
 from common.rbac import AdminActionsPerMethod
 
 from .audit import record_audit
-
 from .models import AuditLog, AuthenticationSettings, PlatformSettings
 from .serializers import AuditLogSerializer, AuthenticationSettingsSerializer, PlatformSettingsSerializer
 
