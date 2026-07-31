@@ -19,7 +19,7 @@ import { UserAvatar } from "../../components/shared/UserAvatar";
 import { AVATARS } from "../../lib/avatars";
 import { toDisplayName, useAuth } from "../../lib/auth";
 import { useFeedback } from "../../lib/feedback";
-import { trackOptionsByInterest } from "../../lib/mock-data";
+import { FALLBACK_TRACKS_BY_INTEREST } from "../../lib/taxonomy-types";
 import { usePlatformTaxonomy } from "../../lib/taxonomy";
 
 export default function SettingsPage() {
@@ -69,7 +69,7 @@ export default function SettingsPage() {
       .flatMap((category) => category.subcategories.map((subcategory) => subcategory.name));
 
     const fallbackTracks =
-      trackOptionsByInterest[academicPath as keyof typeof trackOptionsByInterest] ?? [];
+      FALLBACK_TRACKS_BY_INTEREST[academicPath as keyof typeof FALLBACK_TRACKS_BY_INTEREST] ?? [];
 
     return Array.from(new Set(categoryTracks.length ? categoryTracks : fallbackTracks));
   }, [academicPath, categories]);

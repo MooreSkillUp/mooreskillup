@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { hasUserPermission } from "@/lib/admin-rbac";
 import { useFeedback } from "@/lib/feedback";
 import { useAdminPlatform, type AdminTeacher } from "@/lib/admin-platform";
-import { type Interest, type TrackName } from "@/lib/mock-data";
+import { type Interest, type TrackName } from "@/lib/taxonomy-types";
 import { usePlatformTaxonomy } from "@/lib/taxonomy";
 
 export default function AdminTeachersPage() {

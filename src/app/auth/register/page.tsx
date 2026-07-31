@@ -11,7 +11,7 @@ import { PasswordInput } from "@/components/ui-kit/PasswordInput";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/lib/feedback";
-import { type Interest, type TrackName } from "@/lib/mock-data";
+import { type Interest, type TrackName } from "@/lib/taxonomy-types";
 import { usePlatformTaxonomy } from "@/lib/taxonomy";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 

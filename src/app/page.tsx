@@ -17,7 +17,7 @@
 // import { ProgramCard } from "@/components/marketing/ProgramCard";
 // import { PublicShell } from "@/components/marketing/PublicShell";
 // import { Button } from "@/components/ui-kit/Button";
-// import { academyPrograms, faqItems, pricingPlans, quizShopItems } from "@/lib/mock-data";
+// Marketing content lives on the separate MooreSkillUp marketing site.
 // import { publicEnv } from "@/lib/public-env";
 
 // export default function HomePage() {

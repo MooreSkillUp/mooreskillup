@@ -7,7 +7,7 @@ import { AppLoader } from "@/components/shared/AppLoader";
 import { Sidebar } from "./Sidebar";
 import { TopNavbar } from "./TopNavbar";
 import { getHomeRouteForUser, useAuth } from "../../lib/auth";
-import type { UserRole } from "../../lib/mock-data";
+import type { UserRole } from "../../lib/taxonomy-types";
 import { OnboardingTour } from "./OnboardingTour";
 
 export function AppShell({
