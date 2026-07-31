@@ -23,6 +23,20 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // "/" is the PWA's start_url, so launching the installed app lands here. Send
+  // a signed-in user straight to their workspace at the edge — doing it on the
+  // client instead means the gateway paints for a frame on every cold launch.
+  // The page keeps its own redirect as a fallback for when the cookie is absent
+  // but a session exists in local storage.
+  if (pathname === "/") {
+    const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
+    if (sessionCookie) {
+      const currentRole = request.cookies.get(ROLE_COOKIE)?.value;
+      return NextResponse.redirect(new URL(homeRouteForRole(currentRole), request.url));
+    }
+    return NextResponse.next();
+  }
+
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
