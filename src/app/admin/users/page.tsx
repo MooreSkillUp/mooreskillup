@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { type Interest, type TrackName } from "@/lib/mock-data";
+import { type Interest, type TrackName } from "@/lib/taxonomy-types";
 import { usePlatformTaxonomy } from "@/lib/taxonomy";
 
 export default function AdminUsersPage() {
