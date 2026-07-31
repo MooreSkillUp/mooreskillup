@@ -101,6 +101,9 @@ class StudentProfile(UUIDPrimaryKeyModel, TimeStampedModel):
     selected_tracks = models.JSONField(default=list, blank=True)
     plan = models.CharField(max_length=20, choices=PLAN_CHOICES, default="free")
     onboarded = models.BooleanField(default=False)
+    # How many minutes a day this student is aiming for. Theirs to set, because
+    # a number that motivates a casual learner discourages a serious one.
+    daily_goal_minutes = models.PositiveIntegerField(default=30)
 
     def __str__(self):
         return self.user.display_name

@@ -17,6 +17,14 @@ from apps.payments.models import Payment
 from common.permissions import IsStudentUserRole, IsTeacherUserRole
 from common.rbac import AdminAction
 
+from .activity import (
+    current_streak,
+    minutes_today,
+    record_daily_activity,
+    record_learning_time,
+    total_learning_minutes,
+    week_activity,
+)
 from .models import CourseProgress, LessonNote, LessonProgress
 from .serializers import CourseProgressSerializer, LessonNoteSerializer, LessonProgressSerializer
 
@@ -86,6 +94,11 @@ class LessonProgressUpdateView(views.APIView):
             defaults={"first_accessed_at": timezone.now(), "last_accessed_at": timezone.now()},
         )
         next_status = request.data.get("status", "in_progress")
+        was_completed = progress.status == "completed"
+
+        # Bank the gap since the last ping *before* moving last_accessed_at.
+        seconds_credited = record_learning_time(progress)
+
         progress.status = next_status
         progress.last_accessed_at = timezone.now()
         position = request.data.get("position_seconds")
@@ -98,6 +111,15 @@ class LessonProgressUpdateView(views.APIView):
         if not progress.first_accessed_at:
             progress.first_accessed_at = timezone.now()
         progress.save()
+
+        # Only count a completion the first time, so re-opening a finished
+        # lesson doesn't inflate the day.
+        record_daily_activity(
+            enrollment.student,
+            seconds=seconds_credited,
+            lesson_completed=next_status == "completed" and not was_completed,
+        )
+
         enrollment.last_lesson = lesson
         enrollment.last_accessed_at = timezone.now()
         enrollment.save(update_fields=["last_lesson", "last_accessed_at", "updated_at"])
@@ -143,6 +165,43 @@ class LessonNoteView(views.APIView):
         return response.Response(LessonNoteSerializer(note).data)
 
 
+def build_upcoming_work(student, limit=5):
+    """Assignments with a due date still ahead, across enrolled courses.
+
+    Only assignments — `Project` has no due date field, so including projects
+    would mean inventing one. Submission happens off-platform by design
+    (WhatsApp, Google Forms), so we can say what is *due* but never what is
+    outstanding; the UI is worded accordingly.
+    """
+    from apps.courses.models import Task
+
+    today = timezone.localtime().date()
+    tasks = (
+        Task.objects.filter(
+            section__course__enrollments__student=student,
+            section__course__enrollments__status__in=["active", "completed"],
+            due_date__gte=today,
+        )
+        .select_related("section__course")
+        .order_by("due_date")
+        .distinct()[:limit]
+    )
+
+    return [
+        {
+            "id": str(task.id),
+            "title": task.title,
+            "courseId": str(task.section.course_id),
+            "courseTitle": task.section.course.title,
+            "dueDate": task.due_date.isoformat(),
+            "daysUntilDue": (task.due_date - today).days,
+            "submissionType": task.submission_type,
+            "submissionUrl": task.submission_url,
+        }
+        for task in tasks
+    ]
+
+
 class StudentDashboardView(views.APIView):
     permission_classes = [IsStudentUserRole]
 
@@ -164,20 +223,19 @@ class StudentDashboardView(views.APIView):
         certificates_count = Certificate.objects.filter(student=student, is_revoked=False).count()
 
         continue_enrollment = enrollments.filter(last_lesson__isnull=False).first() or enrollments.first()
+
+        # Full course payload so dashboard cards render identically to catalog
+        # cards — same gradient, level, rating and pricing — instead of a
+        # thinner shape the card has to guess at.
         recent_courses = []
         for enrollment in enrollments[:6]:
             progress = getattr(enrollment, "course_progress", None)
-            recent_courses.append(
-                {
-                    "id": str(enrollment.course.id),
-                    "title": enrollment.course.title,
-                    "subtitle": enrollment.course.subtitle,
-                    "level": enrollment.course.level,
-                    "progressPercent": float(progress.progress_percent) if progress else 0.0,
-                    "lastLessonId": str(enrollment.last_lesson_id) if enrollment.last_lesson_id else None,
-                    "status": enrollment.status,
-                }
-            )
+            course_data = CourseSerializer(enrollment.course, context={"request": request}).data
+            course_data["progressPercent"] = float(progress.progress_percent) if progress else 0.0
+            course_data["lastLessonId"] = str(enrollment.last_lesson_id) if enrollment.last_lesson_id else None
+            course_data["enrollmentStatus"] = enrollment.status
+            course_data["enrollmentId"] = str(enrollment.id)
+            recent_courses.append(course_data)
 
         continue_progress = (
             float(continue_enrollment.course_progress.progress_percent)
@@ -206,10 +264,23 @@ class StudentDashboardView(views.APIView):
                     "lessonId": str(continue_enrollment.last_lesson.id)
                     if continue_enrollment and continue_enrollment.last_lesson
                     else None,
+                    "lessonTitle": continue_enrollment.last_lesson.title
+                    if continue_enrollment and continue_enrollment.last_lesson
+                    else None,
                     "progressPercent": continue_progress,
                 }
                 if continue_enrollment
                 else None,
+                # Everything here comes from time we actually recorded. A brand
+                # new student sees zeros, which is the honest answer.
+                "activity": {
+                    "streakDays": current_streak(student),
+                    "minutesToday": minutes_today(student),
+                    "dailyGoalMinutes": student.daily_goal_minutes,
+                    "totalMinutes": total_learning_minutes(student),
+                    "week": week_activity(student),
+                },
+                "upcoming": build_upcoming_work(student),
                 "recentCourses": recent_courses,
                 "unreadNotifications": Notification.objects.filter(user=request.user, is_read=False).count(),
             }

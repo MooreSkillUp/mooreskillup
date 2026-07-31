@@ -1,3 +1,4 @@
+from django.db.models import Count, Q
 from rest_framework import permissions, viewsets
 
 from apps.platform.audit import record_audit
@@ -13,7 +14,17 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        return Category.objects.filter(is_active=True).prefetch_related("subcategories")
+        return (
+            Category.objects.filter(is_active=True)
+            .prefetch_related("subcategories")
+            # Only published courses count — a track advertising drafts nobody
+            # can open would be a lie.
+            .annotate(
+                published_course_count=Count(
+                    "courses", filter=Q(courses__status="published"), distinct=True
+                )
+            )
+        )
 
 
 class AdminCategoryViewSet(AdminActionsPerViewSetAction, viewsets.ModelViewSet):

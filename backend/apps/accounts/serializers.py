@@ -258,6 +258,10 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     selectedTrack = serializers.CharField(required=False, allow_blank=True)
     selectedTracks = serializers.ListField(child=serializers.CharField(), required=False)
     interests = serializers.ListField(child=serializers.CharField(), required=False)
+    # Students set their own daily learning target — a number that motivates a
+    # casual learner discourages a serious one. Bounded so the dashboard ring
+    # stays meaningful at both ends.
+    dailyGoalMinutes = serializers.IntegerField(required=False, min_value=5, max_value=480)
 
     class Meta:
         model = User
@@ -269,6 +273,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             "selectedTrack",
             "selectedTracks",
             "interests",
+            "dailyGoalMinutes",
         )
 
     def validate(self, attrs):
@@ -299,6 +304,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         selected_track = validated_data.pop("selectedTrack", None)
         selected_tracks = validated_data.pop("selectedTracks", None)
         interests = validated_data.pop("interests", None)
+        daily_goal_minutes = validated_data.pop("dailyGoalMinutes", None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -306,6 +312,8 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
         if hasattr(instance, "student_profile"):
             profile = instance.student_profile
+            if daily_goal_minutes is not None:
+                profile.daily_goal_minutes = daily_goal_minutes
             if selected_interest is not None:
                 profile.selected_interest = selected_interest
             elif interests:

@@ -21,6 +21,10 @@ import { toDisplayName, useAuth } from "../../lib/auth";
 import { useFeedback } from "../../lib/feedback";
 import { FALLBACK_TRACKS_BY_INTEREST } from "../../lib/taxonomy-types";
 import { usePlatformTaxonomy } from "../../lib/taxonomy";
+import { saveDailyGoal, useStudentDashboard } from "../../lib/student";
+
+/** Spread wide enough that a casual learner and a serious one both fit. */
+const DAILY_GOAL_OPTIONS = [10, 15, 30, 45, 60, 90, 120];
 
 export default function SettingsPage() {
   const { notifyError, notifySuccess } = useFeedback();
@@ -34,6 +38,27 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [twoFactorBusy, setTwoFactorBusy] = useState(false);
   const [logoutAllBusy, setLogoutAllBusy] = useState(false);
+
+  // The saved goal lives on the student profile, which the dashboard payload
+  // already returns — no extra endpoint needed just to read it back.
+  const { data: dashboard } = useStudentDashboard(user?.role === "student");
+  const [dailyGoalOverride, setDailyGoalOverride] = useState<number | null>(null);
+  const dailyGoal = dailyGoalOverride ?? dashboard?.activity.dailyGoalMinutes ?? 30;
+
+  const onDailyGoal = async (minutes: number) => {
+    const previous = dailyGoal;
+    setDailyGoalOverride(minutes);
+    try {
+      await saveDailyGoal(minutes);
+      notifySuccess("Daily goal updated", `Aiming for ${minutes} minutes a day.`);
+    } catch (error) {
+      setDailyGoalOverride(previous);
+      notifyError(
+        "Could not save your goal",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    }
+  };
 
   const onToggleTwoFactor = async (enabled: boolean) => {
     setTwoFactorBusy(true);
@@ -228,6 +253,33 @@ export default function SettingsPage() {
                 onChange={(event) => setUsername(event.target.value)}
               />
               <Input label="Email" type="email" value={user?.email ?? ""} readOnly />
+            </div>
+
+            <div className="rounded-3xl border border-border bg-muted/30 p-5">
+              <div className="text-sm font-medium text-foreground">Daily learning goal</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                How long you&apos;re aiming to learn each day. Your dashboard tracks today&apos;s
+                minutes against it — pick something you&apos;ll actually hit.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {DAILY_GOAL_OPTIONS.map((minutes) => {
+                  const active = dailyGoal === minutes;
+                  return (
+                    <button
+                      key={minutes}
+                      type="button"
+                      onClick={() => void onDailyGoal(minutes)}
+                      className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                        active
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                      }`}
+                    >
+                      {minutes < 60 ? `${minutes} min` : `${minutes / 60} hr`}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="rounded-3xl border border-border bg-muted/30 p-5">
