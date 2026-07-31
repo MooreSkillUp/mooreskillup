@@ -1,0 +1,7 @@
+# Requirements files are parsed by pip, which cannot read UTF-16 and is picky
+# about line endings. base.txt was committed as UTF-16 once and broke CI on
+# Linux; pin these to LF text so it cannot happen again.
+backend/requirements/*.txt text eol=lf
+
+# Shell scripts must keep LF or they fail to execute on Linux containers.
+*.sh text eol=lf
