@@ -23,13 +23,36 @@ ACCESS_LIFETIMES = {
     "admin": timedelta(minutes=10),
 }
 
+# Refresh lifetimes slide: every successful refresh pushes the expiry out again
+# (see refresh_session_from_token). So these are "how long you can stay away
+# before being signed out", not "how long you may stay signed in".
+# Students get a long window on purpose — being signed out of a course you are
+# midway through is worse for them than the marginal risk it buys us. Staff
+# windows stay short because their accounts can change other people's data.
 REFRESH_LIFETIMES = {
-    "student": timedelta(days=30),
+    "student": timedelta(days=90),
     "teacher": timedelta(days=14),
     "admin": timedelta(days=7),
 }
 
+
+def _cookie_samesite():
+    """SameSite policy for the auth cookies.
+
+    When the browser app and the API sit on different registrable domains, the
+    refresh call is a cross-site request and browsers will only send a cookie
+    marked SameSite=None. Defaults to Lax (the safer setting) so local and
+    same-domain deployments are unaffected; production overrides it.
+    """
+    value = str(getattr(settings, "AUTH_COOKIE_SAMESITE", "Lax") or "Lax").strip().capitalize()
+    return value if value in {"Lax", "Strict", "None"} else "Lax"
+
+
 def _cookie_secure(request=None):
+    # Browsers reject SameSite=None unless the cookie is also Secure, so that
+    # combination has to force it on regardless of how we are being reached.
+    if _cookie_samesite() == "None":
+        return True
     if getattr(settings, "SESSION_COOKIE_SECURE", False):
         return True
     return bool(request and request.is_secure())
@@ -121,34 +144,22 @@ def register_failed_login(user, lock_after=5, lock_minutes=15):
 
 def set_auth_cookies(response: Response, refresh_token: str, session: UserSession, request=None):
     secure = _cookie_secure(request)
+    samesite = _cookie_samesite()
     refresh_age = int(get_refresh_lifetime(session.user).total_seconds())
-    response.set_cookie(
-        AUTH_REFRESH_COOKIE,
-        refresh_token,
-        max_age=refresh_age,
-        httponly=True,
-        secure=secure,
-        samesite="Lax",
-        path="/api/auth/",
-    )
-    response.set_cookie(
-        AUTH_SESSION_COOKIE,
-        session.session_key,
-        max_age=refresh_age,
-        httponly=True,
-        secure=secure,
-        samesite="Lax",
-        path="/",
-    )
-    response.set_cookie(
-        AUTH_ROLE_COOKIE,
-        session.user.role,
-        max_age=refresh_age,
-        httponly=True,
-        secure=secure,
-        samesite="Lax",
-        path="/",
-    )
+    for name, value, path in (
+        (AUTH_REFRESH_COOKIE, refresh_token, "/api/auth/"),
+        (AUTH_SESSION_COOKIE, session.session_key, "/"),
+        (AUTH_ROLE_COOKIE, session.user.role, "/"),
+    ):
+        response.set_cookie(
+            name,
+            value,
+            max_age=refresh_age,
+            httponly=True,
+            secure=secure,
+            samesite=samesite,
+            path=path,
+        )
     return response
 
 

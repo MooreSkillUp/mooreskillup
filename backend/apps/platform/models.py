@@ -98,7 +98,11 @@ class PlatformSettings(models.Model):
 
 
 class AuthenticationSettings(models.Model):
-    max_student_devices = models.PositiveIntegerField(default=2)
+    # Students legitimately use a phone, a laptop and a tablet, often with two
+    # browsers between them. A tight cap silently signed them out of the oldest
+    # device with no explanation, which read as "the app logs me out randomly".
+    # The cap still exists so one shared password cannot serve a whole class.
+    max_student_devices = models.PositiveIntegerField(default=5)
     max_teacher_devices = models.PositiveIntegerField(default=3)
     max_admin_devices = models.PositiveIntegerField(default=1)
     updated_at = models.DateTimeField(auto_now=True)

@@ -83,6 +83,37 @@ function scheduleRefresh(token: string | null) {
   }, delay);
 }
 
+/**
+ * Refresh when the app comes back to the foreground.
+ *
+ * The scheduled timer above is not enough on its own: browsers throttle timers
+ * in background tabs, and a phone that sleeps stops firing them entirely. An
+ * installed PWA reopened after a few hours would otherwise carry a long-dead
+ * access token into its first request. That request recovers via the 401 retry
+ * path, but only after failing once — refreshing on focus means the app is
+ * already authenticated by the time anything asks.
+ */
+function refreshIfTokenIsStale() {
+  if (!accessTokenMemory) return;
+
+  const { exp } = decodeJwtPayload(accessTokenMemory);
+  if (!exp) return;
+
+  const expiresWithinAMinute = exp * 1000 - Date.now() < 60_000;
+  if (expiresWithinAMinute) {
+    void refreshAccessToken().catch(() => {
+      // refreshAccessToken already routes to login when the session is gone.
+    });
+  }
+}
+
+if (typeof window !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshIfTokenIsStale();
+  });
+  window.addEventListener("focus", refreshIfTokenIsStale);
+}
+
 export function getAccessToken() {
   return accessTokenMemory;
 }

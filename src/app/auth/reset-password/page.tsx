@@ -1,18 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
-import { useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { GraduationCap } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
+
+import { AuthScreen } from "@/components/auth/AuthScreen";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { PasswordInput } from "@/components/ui-kit/PasswordInput";
-import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/lib/feedback";
-import { BrandLogo } from "@/components/shared/BrandLogo";
+
+const MIN_PASSWORD_LENGTH = 8;
 
 export default function ResetPasswordPage() {
   return (
@@ -31,117 +31,139 @@ function ResetPasswordShell({ initialToken = "" }: { initialToken?: string }) {
   const { resetPassword } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
   const router = useRouter();
+
   const [token, setToken] = useState(initialToken);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [message, setMessage] = useState("");
-  const [messageTone, setMessageTone] = useState<"neutral" | "success" | "error">("neutral");
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+
   const fromEmailLink = Boolean(initialToken);
+  const tooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
+  const mismatch = confirm.length > 0 && password !== confirm;
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    setError("");
+
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
     if (password !== confirm) {
-      setMessageTone("error");
-      setMessage("Passwords do not match.");
-      notifyError("Password mismatch", "Passwords do not match.");
+      setError("Those two passwords don't match.");
       return;
     }
     if (!token.trim()) {
-      setMessageTone("error");
-      setMessage("Reset link is missing or invalid. Open the link from your email again.");
-      notifyError("Reset link invalid", "Open the reset link from your email again.");
+      setError("This reset link is missing its token. Open the link from your email again.");
       return;
     }
+
     setLoading(true);
-    setMessage("");
     const result = await resetPassword(token.trim(), password);
-    setMessageTone(result.ok ? "success" : "error");
-    setMessage(result.message);
-    if (result.ok) {
-      notifySuccess("Password reset complete", result.message);
-    } else {
-      notifyError("Password reset failed", result.message);
-    }
-    if (result.ok) {
-      setTimeout(() => router.push("/auth/login"), 2000);
-    }
     setLoading(false);
+
+    if (result.ok) {
+      setDone(true);
+      notifySuccess("Password updated", result.message);
+      setTimeout(() => router.push("/auth/login"), 2000);
+      return;
+    }
+
+    setError(result.message);
+    notifyError("Password reset failed", result.message);
   };
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md rounded-[2rem] border border-border bg-card p-8 shadow-sm"
-      >
-        <div className="mb-8 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-          <BrandLogo href="/" />
-          </Link>
-          <ThemeToggle />
+  if (done) {
+    return (
+      <AuthScreen title="Password updated" subtitle="You can sign in with your new password now.">
+        <div className="flex items-start gap-3 rounded-xl border border-emerald-300 bg-emerald-50/70 p-4 text-sm text-emerald-900 dark:border-emerald-800/60 dark:bg-emerald-500/10 dark:text-emerald-100">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+          <span>
+            Taking you to sign in&hellip; or{" "}
+            <Link href="/auth/login" className="font-semibold underline underline-offset-2">
+              go now
+            </Link>
+            .
+          </span>
         </div>
+      </AuthScreen>
+    );
+  }
 
-        <h1 className="font-display text-3xl font-bold">Reset password</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {fromEmailLink
-            ? "Choose a new password below. You will be redirected to sign in when it succeeds."
-            : "Paste the reset link from your email into the address bar, or enter the token from the email and choose a new password."}
-        </p>
-
-        <form onSubmit={onSubmit} className="mt-8 space-y-4">
-          {!fromEmailLink ? (
-            <Input
-              label="Reset token"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-              placeholder="From your reset email"
-              required
-            />
-          ) : null}
-          <PasswordInput
-            label="New Password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
+  return (
+    <AuthScreen
+      title="Choose a new password"
+      subtitle={
+        fromEmailLink
+          ? "Pick something you haven't used here before."
+          : "Enter the token from your reset email, then choose a new password."
+      }
+      error={error}
+      footer={
+        <Link href="/auth/login" className="font-semibold text-primary hover:text-accent">
+          Back to sign in
+        </Link>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        {!fromEmailLink && (
+          <Input
+            label="Reset token"
+            value={token}
+            onChange={(event) => {
+              setToken(event.target.value);
+              setError("");
+            }}
+            placeholder="From your reset email"
+            autoFocus
             required
           />
-          <PasswordInput
-            label="Confirm Password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-            required
-          />
-          <Button type="submit" variant="accent" size="lg" className="w-full" loading={loading} loadingText="Resetting...">
-            Reset password
-          </Button>
-        </form>
-
-        {message && (
-          <div
-            className={
-              messageTone === "success"
-                ? "mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
-                : messageTone === "error"
-                  ? "mt-6 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
-                  : "mt-6 text-sm text-muted-foreground"
-            }
-          >
-            {message}
-            {messageTone === "success" && (
-              <p className="mt-2 text-xs text-emerald-800/90 dark:text-emerald-200/90">
-                Taking you to the login page… or{" "}
-                <Link href="/auth/login" className="font-semibold underline underline-offset-2">
-                  go now
-                </Link>
-                .
-              </p>
-            )}
-          </div>
         )}
-      </motion.div>
-    </div>
+
+        <PasswordInput
+          label="New password"
+          autoComplete="new-password"
+          value={password}
+          onChange={(event) => {
+            setPassword(event.target.value);
+            setError("");
+          }}
+          autoFocus={fromEmailLink}
+          required
+        />
+        {tooShort && (
+          <p className="-mt-2 text-xs text-muted-foreground">
+            {MIN_PASSWORD_LENGTH - password.length} more character
+            {MIN_PASSWORD_LENGTH - password.length === 1 ? "" : "s"} to go.
+          </p>
+        )}
+
+        <PasswordInput
+          label="Confirm password"
+          autoComplete="new-password"
+          value={confirm}
+          onChange={(event) => {
+            setConfirm(event.target.value);
+            setError("");
+          }}
+          required
+        />
+        {mismatch && <p className="-mt-2 text-xs text-destructive">These don&apos;t match yet.</p>}
+
+        <Button
+          type="submit"
+          variant="accent"
+          size="lg"
+          className="w-full"
+          loading={loading}
+          loadingText="Updating..."
+          disabled={!password || !confirm || mismatch || tooShort}
+        >
+          Update password
+        </Button>
+      </form>
+    </AuthScreen>
   );
 }
