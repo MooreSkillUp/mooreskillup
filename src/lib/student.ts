@@ -488,15 +488,12 @@ export interface StudentDashboard {
     lessonId: string | null;
     progressPercent: number;
   } | null;
-  recentCourses: {
-    id: string;
-    title: string;
-    subtitle: string;
-    level: string;
+  recentCourses: (StudentCourse & {
     progressPercent: number;
     lastLessonId: string | null;
-    status: string;
-  }[];
+    enrollmentStatus: string;
+    enrollmentId: string;
+  })[];
   unreadNotifications: number;
 }
 
@@ -510,9 +507,26 @@ export function useStudentDashboard(enabled = true) {
       setIsLoading(false);
       return;
     }
-    authenticatedRequest<StudentDashboard>("/api/dashboard/student/")
+    authenticatedRequest<any>("/api/dashboard/student/")
       .then((payload) => {
-        if (active) setData(payload);
+        if (active && payload) {
+          const recentCourses = Array.isArray(payload.recentCourses)
+            ? payload.recentCourses.map((c: any) => {
+                const normalized = normalizeStudentCourse(c);
+                return {
+                  ...normalized,
+                  progressPercent: Number(c.progressPercent ?? 0),
+                  lastLessonId: c.lastLessonId ? String(c.lastLessonId) : null,
+                  enrollmentStatus: String(c.enrollmentStatus ?? "active"),
+                  enrollmentId: String(c.enrollmentId ?? ""),
+                };
+              })
+            : [];
+          setData({
+            ...payload,
+            recentCourses,
+          });
+        }
       })
       .catch(() => {})
       .finally(() => {

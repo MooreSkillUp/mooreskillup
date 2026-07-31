@@ -168,17 +168,12 @@ class StudentDashboardView(views.APIView):
         recent_courses = []
         for enrollment in enrollments[:6]:
             progress = getattr(enrollment, "course_progress", None)
-            recent_courses.append(
-                {
-                    "id": str(enrollment.course.id),
-                    "title": enrollment.course.title,
-                    "subtitle": enrollment.course.subtitle,
-                    "level": enrollment.course.level,
-                    "progressPercent": float(progress.progress_percent) if progress else 0.0,
-                    "lastLessonId": str(enrollment.last_lesson_id) if enrollment.last_lesson_id else None,
-                    "status": enrollment.status,
-                }
-            )
+            course_data = CourseSerializer(enrollment.course, context={"request": request}).data
+            course_data["progressPercent"] = float(progress.progress_percent) if progress else 0.0
+            course_data["lastLessonId"] = str(enrollment.last_lesson_id) if enrollment.last_lesson_id else None
+            course_data["enrollmentStatus"] = enrollment.status
+            course_data["enrollmentId"] = str(enrollment.id)
+            recent_courses.append(course_data)
 
         continue_progress = (
             float(continue_enrollment.course_progress.progress_percent)

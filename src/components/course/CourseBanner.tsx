@@ -1,4 +1,4 @@
-import { Award, BookOpen, Clock3, Sparkles } from "lucide-react";
+import { Award, BookOpen, Bookmark, Clock3, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type BannerVariant = "cloud" | "python" | "design" | "ai" | "cyber" | "engineering" | "default";
@@ -52,6 +52,44 @@ const VARIANT_CLASSNAMES: Record<BannerVariant, { shell: string; glow: string; b
   },
 };
 
+function BannerGraphic({ category, certificateEnabled }: { category?: string; certificateEnabled?: boolean }) {
+  const isCode = category?.toLowerCase().includes("web") || 
+                 category?.toLowerCase().includes("python") || 
+                 category?.toLowerCase().includes("program") || 
+                 category?.toLowerCase().includes("engineer") || 
+                 category?.toLowerCase().includes("code") ||
+                 category?.toLowerCase().includes("devops");
+  
+  if (certificateEnabled) {
+    return (
+      <svg className="absolute right-2 bottom-2 md:right-4 md:bottom-4 h-20 w-20 text-white opacity-20 pointer-events-none md:block hidden" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="15" y="15" width="70" height="55" rx="5" />
+        <rect x="20" y="20" width="60" height="45" rx="3" strokeWidth="1.5" />
+        <line x1="30" y1="32" x2="70" y2="32" strokeWidth="2" />
+        <line x1="30" y1="42" x2="60" y2="42" />
+        <line x1="30" y1="52" x2="50" y2="52" />
+        <circle cx="70" cy="52" r="8" fill="currentColor" className="text-white/40" stroke="currentColor" strokeWidth="2" />
+        <path d="M66 58l-2 8 6-3 6 3-2-8" strokeWidth="2" />
+      </svg>
+    );
+  }
+
+  if (isCode) {
+    return (
+      <svg className="absolute right-2 bottom-2 md:right-4 md:bottom-4 h-20 w-20 text-white opacity-20 pointer-events-none md:block hidden" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="10" y="15" width="80" height="60" rx="6" />
+        <line x1="10" y1="30" x2="90" y2="30" />
+        <circle cx="18" cy="22" r="1.5" fill="currentColor" />
+        <circle cx="24" cy="22" r="1.5" fill="currentColor" />
+        <circle cx="30" cy="22" r="1.5" fill="currentColor" />
+        <path d="M38 42l-8 8 8 8M62 42l8 8-8 8M53 40l-6 20" strokeWidth="3" />
+      </svg>
+    );
+  }
+
+  return null;
+}
+
 export function CourseBanner({
   title,
   subtitle,
@@ -66,6 +104,8 @@ export function CourseBanner({
   bannerTheme,
   categoryAccentColor,
   className,
+  isBookmarked,
+  onBookmarkToggle,
 }: {
   title: string;
   subtitle?: string;
@@ -80,23 +120,20 @@ export function CourseBanner({
   bannerTheme?: string;
   categoryAccentColor?: string;
   className?: string;
+  isBookmarked?: boolean;
+  onBookmarkToggle?: () => void;
 }) {
   const variant = resolveVariant(category ?? "");
   const classes = VARIANT_CLASSNAMES[variant];
   const resolvedTheme = bannerTheme && bannerTheme !== "default" ? bannerTheme : variant;
   const themeClasses = VARIANT_CLASSNAMES[resolvedTheme as BannerVariant] ?? classes;
 
-  // Outer container background:
-  // - If there is a banner image: show the raw image (no color tint), outer bg is transparent
-  // - If there is a category accent color: use it as the gradient background
-  // - Otherwise: fall back to the Tailwind theme class gradient
   const outerBgStyle: React.CSSProperties | undefined = bannerImage
-    ? undefined  // image itself covers the background
+    ? undefined
     : categoryAccentColor
       ? { background: `linear-gradient(135deg, ${categoryAccentColor} 0%, ${categoryAccentColor}bb 100%)`, }
       : undefined;
 
-  // Dark overlay for readability on top of a banner image only
   const imageOverlayStyle: React.CSSProperties | undefined = bannerImage
     ? { background: "linear-gradient(to top, rgba(15, 23, 42, 0.88) 0%, rgba(15, 23, 42, 0.35) 55%, transparent 100%)" }
     : undefined;
@@ -113,7 +150,6 @@ export function CourseBanner({
       }
     : undefined;
 
-  // Use Tailwind theme gradient only when no image and no dynamic accent color
   const useSolidThemeGradient = !bannerImage && !categoryAccentColor;
 
   return (
@@ -130,14 +166,16 @@ export function CourseBanner({
       {bannerImage ? (
         <img src={bannerImage} alt={title} className="absolute inset-0 h-full w-full object-cover" />
       ) : null}
-      {/* Dark gradient overlay — only for images so text stays legible */}
       {imageOverlayStyle && <div className="absolute inset-0" style={imageOverlayStyle} />}
-      {/* Glow orb — only when using accent color without an image */}
       <div
         className={cn("absolute right-[-18px] top-[-24px] h-28 w-28 rounded-full blur-3xl", useSolidThemeGradient && themeClasses.glow)}
         style={dynamicGlowStyle}
       />
       <div className="absolute bottom-[-28px] left-[-10px] h-24 w-24 rounded-full bg-white/10 blur-3xl" />
+      
+      {/* Dynamic Graphic */}
+      <BannerGraphic category={category || track} certificateEnabled={certificateEnabled} />
+
       <div className="relative flex h-full flex-col">
         <div className="flex items-center justify-between gap-3">
           <span
@@ -147,14 +185,30 @@ export function CourseBanner({
             <BookOpen className="h-3.5 w-3.5" />
             {category || "MooreSkillUp"}
           </span>
-          {certificateEnabled ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/90">
-              <Award className="h-3.5 w-3.5" /> Certificate
-            </span>
-          ) : null}
+          <div className="flex items-center gap-2">
+            {certificateEnabled ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/90">
+                <Award className="h-3.5 w-3.5" /> Certificate
+              </span>
+            ) : null}
+            {onBookmarkToggle ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onBookmarkToggle();
+                }}
+                className="rounded-full border border-white/20 bg-white/15 p-2 text-white hover:bg-white/30 transition shadow-sm"
+                aria-label="Bookmark course"
+              >
+                <Bookmark className={cn("h-4 w-4", isBookmarked && "fill-current text-white")} />
+              </button>
+            ) : null}
+          </div>
         </div>
 
-        <div className="mt-auto space-y-2">
+        <div className="mt-auto space-y-2 pr-12 md:pr-16">
           {track ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/75">{track}</p> : null}
           <h3 className={cn("font-display font-semibold leading-tight", compact ? "text-lg" : "text-2xl")}>{title}</h3>
           {subtitle ? <p className="max-w-xl text-sm text-white/80 line-clamp-2">{subtitle}</p> : null}
