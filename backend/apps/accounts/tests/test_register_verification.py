@@ -1,12 +1,14 @@
+from datetime import timedelta
+
 import pytest
 from django.core import mail
 from django.utils import timezone
-from datetime import timedelta
-from rest_framework.test import APIClient
 from rest_framework import status
+from rest_framework.test import APIClient
 
-from apps.accounts.models import PendingRegistration, User, StudentProfile
+from apps.accounts.models import PendingRegistration, StudentProfile, User
 from apps.platform.models import PlatformSettings
+
 
 @pytest.fixture
 def api_client():

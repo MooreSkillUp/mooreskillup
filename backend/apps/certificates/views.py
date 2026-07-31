@@ -1,9 +1,9 @@
 from django.utils import timezone
 from rest_framework import response, status, views
 
+from apps.enrollments.models import Enrollment
 from common.permissions import IsStudentUserRole
 from common.rbac import AdminAction
-from apps.enrollments.models import Enrollment
 
 from .models import Certificate, CertificateTemplate
 from .serializers import CertificateSerializer, CertificateTemplateSerializer

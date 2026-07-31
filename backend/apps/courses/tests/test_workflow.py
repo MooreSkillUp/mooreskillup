@@ -1,6 +1,7 @@
 """Phase 2 T6: duplicate, version history/restore, approval hierarchy."""
 
 import pytest
+from django.core.cache import cache
 from rest_framework.test import APIClient
 
 from apps.accounts.models import TeacherProfile, User
@@ -8,7 +9,6 @@ from apps.categories.models import Category, Subcategory
 from apps.courses.models import Course, CourseVersion, Lesson, Project, Section, Task
 from apps.platform.models import PlatformSettings
 from common.rbac import ADMIN, MODERATOR, SUPER_ADMIN
-from django.core.cache import cache
 
 
 def make_teacher(email="t@test.dev"):

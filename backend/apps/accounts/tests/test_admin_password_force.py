@@ -1,8 +1,9 @@
 import pytest
-from rest_framework import status
 from django.contrib.auth import get_user_model
-from common.rbac import SUPER_ADMIN, ADMIN, MODERATOR
+from rest_framework import status
+
 from apps.accounts.models import PasswordResetToken
+from common.rbac import ADMIN, SUPER_ADMIN
 
 User = get_user_model()
 

@@ -1,3 +1,4 @@
+import contextlib
 import secrets
 from datetime import timedelta
 
@@ -178,10 +179,10 @@ def refresh_session_from_token(refresh_token: str):
         raise TokenError("Session expired.")
     if str(old_refresh["jti"]) != session.refresh_jti:
         raise TokenError("Refresh token has been rotated.")
-    try:
+    # Blacklisting is best-effort: a token already blacklisted (or a backend
+    # hiccup) must not block an otherwise valid refresh.
+    with contextlib.suppress(Exception):
         old_refresh.blacklist()
-    except Exception:
-        pass
     session.last_active = timezone.now()
     session.expires_at = timezone.now() + get_refresh_lifetime(session.user)
     new_refresh = RefreshToken.for_user(session.user)

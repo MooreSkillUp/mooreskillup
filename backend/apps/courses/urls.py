@@ -1,6 +1,19 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
+from .admin_views import (
+    AdminCourseDetailView,
+    AdminOwnedCourseDetailView,
+    AdminOwnedCoursePublishView,
+    AdminOwnedCourseSectionCreateView,
+    AdminOwnedLessonView,
+    AdminOwnedProjectView,
+    AdminOwnedSectionLessonCreateView,
+    AdminOwnedSectionProjectCreateView,
+    AdminOwnedSectionTaskCreateView,
+    AdminOwnedSectionView,
+    AdminOwnedTaskView,
+)
 from .views import (
     AdminCourseApproveView,
     AdminCourseArchiveView,
@@ -15,10 +28,10 @@ from .views import (
     CourseViewSet,
     RecommendedCoursesView,
     StudentLessonView,
+    TeacherActivityListView,
     TeacherCoursePricingView,
     TeacherCourseSectionCreateView,
     TeacherCourseViewSet,
-    TeacherActivityListView,
     TeacherLessonViewSet,
     TeacherProjectViewSet,
     TeacherSectionLessonCreateView,
@@ -26,19 +39,6 @@ from .views import (
     TeacherSectionTaskCreateView,
     TeacherSectionViewSet,
     TeacherTaskViewSet,
-)
-from .admin_views import (
-    AdminCourseDetailView,
-    AdminOwnedCourseDetailView,
-    AdminOwnedCoursePublishView,
-    AdminOwnedCourseSectionCreateView,
-    AdminOwnedLessonView,
-    AdminOwnedProjectView,
-    AdminOwnedSectionLessonCreateView,
-    AdminOwnedSectionProjectCreateView,
-    AdminOwnedSectionTaskCreateView,
-    AdminOwnedSectionView,
-    AdminOwnedTaskView,
 )
 
 router = DefaultRouter()

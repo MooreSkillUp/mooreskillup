@@ -1,11 +1,11 @@
-from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import response, status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.views import APIView
 
-from common.rbac import AdminActionsPerMethod, user_has_admin_permission
 from apps.platform.audit import record_audit
+from common.rbac import AdminActionsPerMethod, user_has_admin_permission
 
 from .models import Course, Lesson, Project, Section, Task
 from .serializers import (

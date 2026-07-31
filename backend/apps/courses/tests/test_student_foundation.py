@@ -27,10 +27,10 @@ def make_course(category, subcategory, title="Course", **extra):
         email=f"t-{title}@t.dev", username=f"t{title}", display_name="T", password="pass12345", role="teacher"
     )
     teacher = TeacherProfile.objects.create(user=teacher_user, program="Web", track="React")
-    defaults = dict(
-        teacher=teacher, category=category, subcategory=subcategory, title=title,
-        subtitle="s", overview="o", scheme_of_work="w", status="published", visibility="visible",
-    )
+    defaults = {
+        "teacher": teacher, "category": category, "subcategory": subcategory, "title": title,
+        "subtitle": "s", "overview": "o", "scheme_of_work": "w", "status": "published", "visibility": "visible",
+    }
     defaults.update(extra)
     course = Course.objects.create(**defaults)
     section = Section.objects.create(course=course, title="S", description="", order=1, is_published=True)
@@ -122,7 +122,7 @@ class TestRecommendations:
     def test_recommended_prioritizes_student_track(self, taxonomy, db):
         category, subcategory = taxonomy
         other_sub = Subcategory.objects.create(category=category, name="Vue")
-        in_track = make_course(category, subcategory, title="React course")
+        make_course(category, subcategory, title="React course")
         make_course(category, other_sub, title="Vue course")
         student = make_student("r1@t.dev", track="React")
         res = client_for(student.user).get("/api/courses/recommended/")

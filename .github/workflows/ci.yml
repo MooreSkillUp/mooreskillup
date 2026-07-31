@@ -49,6 +49,9 @@ jobs:
       # dev.txt pulls in base.txt plus pytest — the prod set has no test runner.
       - run: pip install -r requirements/dev.txt
 
+      - name: Lint
+        run: python -m ruff check .
+
       - name: Django system checks
         env:
           DJANGO_SETTINGS_MODULE: config.settings.dev

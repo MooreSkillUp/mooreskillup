@@ -1,9 +1,8 @@
+from django.db.models import Avg
 from rest_framework import serializers
 
 from apps.enrollments.models import Enrollment, Watchlist
 from apps.progress.models import LessonProgress
-
-from django.db.models import Avg, Count
 
 from .models import (
     Course,

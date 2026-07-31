@@ -1,7 +1,7 @@
 import pytest
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APIClient
-from django.core.cache import cache
 
 from apps.accounts.models import TeacherProfile, User
 from common.rbac import SUPER_ADMIN

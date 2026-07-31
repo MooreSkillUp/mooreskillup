@@ -1,12 +1,12 @@
-from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import permissions, response, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.views import APIView
 
+from apps.platform.audit import record_audit
 from common.permissions import IsStudentUserRole, IsTeacherUserRole
 from common.rbac import AdminAction
-from apps.platform.audit import record_audit
 
 from .activity import prune_teacher_activity_logs
 from .models import Course, CourseReview, Lesson, Project, Section, Task, TeacherActivityLog
@@ -588,7 +588,7 @@ class CourseReviewListCreateView(APIView):
     def post(self, request, course_id):
         from apps.platform.models import PlatformSettings
 
-        if not getattr(request.user, "role", None) == "student":
+        if getattr(request.user, "role", None) != "student":
             return response.Response({"detail": "Only students can review."}, status=status.HTTP_403_FORBIDDEN)
         if not PlatformSettings.get_solo().feature_reviews_enabled:
             return response.Response({"detail": "Reviews are turned off."}, status=status.HTTP_403_FORBIDDEN)
@@ -696,12 +696,12 @@ class StudentLessonView(APIView):
         if enrollment:
             from apps.progress.models import LessonProgress
 
-            completed_ids = set(
+            completed_ids = {
                 str(x)
                 for x in LessonProgress.objects.filter(
                     enrollment=enrollment, status="completed"
                 ).values_list("lesson_id", flat=True)
-            )
+            }
         for section in sections:
             unlocked = section_unlocked(section)
             curriculum.append(
