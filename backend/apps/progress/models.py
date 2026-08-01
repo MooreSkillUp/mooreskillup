@@ -57,6 +57,12 @@ class DailyActivity(UUIDPrimaryKeyModel, TimeStampedModel):
         "accounts.StudentProfile", on_delete=models.CASCADE, related_name="daily_activity"
     )
     date = models.DateField()
+    # Seconds is the stored truth and minutes is derived from it. Accumulating
+    # seconds as they are credited keeps a day final once it has passed —
+    # recomputing from LessonProgress would not, because `last_accessed_at`
+    # moves every time a student reopens an old lesson, which would quietly
+    # rewrite history.
+    seconds = models.PositiveIntegerField(default=0)
     minutes = models.PositiveIntegerField(default=0)
     lessons_completed = models.PositiveIntegerField(default=0)
 

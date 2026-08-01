@@ -8,8 +8,6 @@ import { Button } from "@/components/ui-kit/Button";
 import { ProgressBar } from "@/components/ui-kit/ProgressBar";
 import type { DashboardCourse, StudentDashboard } from "@/lib/student";
 
-const LEVEL_LABEL = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" } as const;
-
 /**
  * The dashboard's headline: the single next thing to do.
  *
@@ -60,19 +58,17 @@ export function ContinueLearningCard({
     : `/course/${continueLearning.courseId}`;
 
   return (
-    <div className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
-      <div className="flex flex-col gap-6 p-6 lg:flex-row lg:items-center">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:p-6">
         {course && (
-          <div className="w-full shrink-0 lg:w-72">
+          <div className="w-full shrink-0 sm:w-56 lg:w-60">
+            {/* Artwork, not a second summary: the title, level and lesson count
+                all appear beside it, so the banner runs in dense mode. */}
             <CourseBanner
               title={course.title}
-              subtitle={course.subtitle}
               category={course.program}
-              track={course.track}
-              level={LEVEL_LABEL[course.level]}
-              durationLabel={`${course.totalLessons || 0} lessons`}
               certificateEnabled={course.certificateEnabled}
-              compact
+              dense
               bannerImage={course.bannerImage ?? undefined}
               bannerTheme={course.bannerTheme ?? "default"}
               categoryAccentColor={course.categoryAccentColor}
@@ -85,7 +81,7 @@ export function ContinueLearningCard({
             {progress > 0 ? "Pick up where you left off" : "Ready when you are"}
           </div>
 
-          <h2 className="mt-2 line-clamp-2 font-display text-2xl font-bold text-foreground">
+          <h2 className="mt-1.5 line-clamp-2 font-display text-xl font-bold text-foreground sm:text-2xl">
             {continueLearning.courseTitle}
           </h2>
 

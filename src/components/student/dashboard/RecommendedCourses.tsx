@@ -26,13 +26,13 @@ export function RecommendedCourses({ courses, isLoading }: RecommendedCoursesPro
       </div>
 
       {isLoading ? (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-56 animate-pulse rounded-[1.5rem] bg-muted/40" />
           ))}
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
           {courses.slice(0, 3).map((course) => (
             <StudentCourseCard key={course.id} course={course} />
           ))}
