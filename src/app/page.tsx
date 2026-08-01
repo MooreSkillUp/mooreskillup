@@ -123,5 +123,5 @@ function Gateway() {
 
 /** Decorative here — this *is* the home page, so the mark doesn't navigate. */
 function BrandMark() {
-  return <BrandLogo href={null} size="lg" priority />;
+  return <BrandLogo href={null} size="lg" align="center" priority />;
 }
