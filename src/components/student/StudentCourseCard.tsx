@@ -1,15 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Clock3, Heart, PlayCircle, Sparkles, Star, Users } from "lucide-react";
+import { Clock3, Heart, PlayCircle, Star, Users } from "lucide-react";
 import { formatNaira } from "@/lib/commerce";
 import type { EnrolledCourse, StudentCourse } from "@/lib/student";
 import { ProgressBar } from "@/components/ui-kit/ProgressBar";
 import { CourseBanner } from "@/components/course/CourseBanner";
+import { cn } from "@/lib/utils";
 
-const LEVEL_LABEL = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" } as const;
-
+/**
+ * One course, in the two states a student meets it in.
+ *
+ * **Browsing** answers "should I take this?" — rating, length, level, price.
+ * **Enrolled** answers "where was I?" — progress and a way back in. Price and
+ * rating are noise once you already own the course, so they go.
+ *
+ * The banner is artwork here, not a second summary: it used to repeat the
+ * subtitle, level, lesson count and price that the card body prints directly
+ * underneath it.
+ */
 export function StudentCourseCard({
   course,
   enrollment,
@@ -19,119 +28,128 @@ export function StudentCourseCard({
   enrollment?: EnrolledCourse;
   onToggleWishlist?: (course: StudentCourse) => void;
 }) {
-  const href = enrollment ? `/lesson/${enrollment.lastLessonId ?? ""}` : `/course/${course.id}`;
   const isFree = course.price === 0;
   const showDiscount = course.discountPrice !== null && course.discountPrice < course.price;
+  const courseHref = course.id ? `/course/${course.id}` : "#";
+  const resumeHref = enrollment?.lastLessonId
+    ? `/lesson/${enrollment.lastLessonId}`
+    : courseHref;
+  const progress = Math.round(enrollment?.progressPercent ?? 0);
+  const isComplete = enrollment?.status === "completed";
 
   return (
-    <motion.div
-      whileHover={{ y: -4 }}
-      transition={{ type: "spring", stiffness: 300, damping: 24 }}
-      className="group flex flex-col overflow-hidden rounded-[1.5rem] border border-border bg-card shadow-sm"
-    >
-      <Link href={course.id ? `/course/${course.id}` : "#"} className="block p-2">
+    <div className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-shadow hover:shadow-md">
+      <Link href={courseHref} className="block">
         <CourseBanner
           title={course.title || "Untitled course"}
-          subtitle={course.subtitle}
           category={course.program}
-          track={course.track}
-          level={LEVEL_LABEL[course.level]}
-          durationLabel={`${course.totalLessons || 0} lessons`}
-          priceLabel={isFree ? "Free" : showDiscount ? formatNaira(course.discountPrice as number) : formatNaira(course.price)}
           certificateEnabled={course.certificateEnabled}
-          compact
+          dense
           bannerImage={course.bannerImage ?? undefined}
           bannerTheme={course.bannerTheme ?? "default"}
           categoryAccentColor={course.categoryAccentColor}
+          className="rounded-none border-0"
         />
       </Link>
 
       <div className="flex flex-1 flex-col p-4">
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">{course.program}</p>
-            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{course.subtitle}</p>
-          </div>
+          <Link href={courseHref} className="min-w-0">
+            <h3 className="line-clamp-2 font-display text-base font-semibold leading-snug transition-colors group-hover:text-primary">
+              {course.title}
+            </h3>
+            {course.subtitle && (
+              <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{course.subtitle}</p>
+            )}
+          </Link>
+
           {onToggleWishlist && (
             <button
               type="button"
-              onClick={(e) => {
-                e.preventDefault();
+              onClick={(event) => {
+                event.preventDefault();
                 onToggleWishlist(course);
               }}
-              className="rounded-full border border-border bg-background p-2 text-muted-foreground transition hover:border-primary/35 hover:text-primary"
-              aria-label={course.isInWatchlist ? "Remove from wishlist" : "Add to wishlist"}
+              className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+              aria-label={course.isInWatchlist ? "Remove from saved" : "Save course"}
             >
-              <Heart className={`h-4 w-4 ${course.isInWatchlist ? "fill-primary text-primary" : ""}`} />
+              <Heart
+                className={cn("h-4 w-4", course.isInWatchlist && "fill-primary text-primary")}
+              />
             </button>
           )}
         </div>
 
-        {course.techStack.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {course.techStack.slice(0, 3).map((tech) => (
-              <span key={tech} className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                {tech}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-          {course.reviewCount > 0 && (
-            <span className="flex items-center gap-1">
-              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-              {course.averageRating} ({course.reviewCount})
-            </span>
-          )}
-          <span className="flex items-center gap-1">
-            <Users className="h-3.5 w-3.5" />
-            {course.enrollments}
-          </span>
-          <span className="flex items-center gap-1">
-            <Clock3 className="h-3.5 w-3.5" />
-            {course.totalLessons} lessons
-          </span>
-        </div>
-
+        {/* Enrolled students already chose this course; the sales details are
+            replaced by where they got to. */}
         {enrollment ? (
-          <div className="mt-4">
-            <ProgressBar value={enrollment.progressPercent} />
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                {Math.round(enrollment.progressPercent)}% complete
+          <div className="mt-auto pt-4">
+            <div className="mb-1.5 flex items-center justify-between text-xs">
+              <span className="font-medium text-muted-foreground">
+                {isComplete ? "Completed" : `${progress}% complete`}
               </span>
-              <Link
-                href={enrollment.lastLessonId ? `/lesson/${enrollment.lastLessonId}` : `/course/${course.id}`}
-                className="flex items-center gap-1 text-sm font-semibold text-primary"
-              >
-                <PlayCircle className="h-4 w-4" />
-                {enrollment.progressPercent > 0 ? "Continue" : "Start"}
-              </Link>
+              <span className="text-muted-foreground">
+                {course.totalLessons} {course.totalLessons === 1 ? "lesson" : "lessons"}
+              </span>
             </div>
-          </div>
-        ) : (
-          <div className="mt-4 flex items-center justify-between">
-            <div className="font-display text-lg font-bold">
-              {isFree ? (
-                <span className="text-success">Free</span>
-              ) : showDiscount ? (
-                <span className="flex items-center gap-2">
-                  {formatNaira(course.discountPrice as number)}
-                  <span className="text-sm font-normal text-muted-foreground line-through">
-                    {formatNaira(course.price)}
-                  </span>
-                </span>
-              ) : (
-                formatNaira(course.price)
-              )}
-            </div>
-            <Link href={`/course/${course.id}`} className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
-              <Sparkles className="h-4 w-4" /> View course
+            <ProgressBar value={enrollment.progressPercent} />
+
+            <Link
+              href={resumeHref}
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90"
+            >
+              <PlayCircle className="h-4 w-4" />
+              {isComplete ? "Review course" : progress > 0 ? "Continue" : "Start learning"}
             </Link>
           </div>
+        ) : (
+          <>
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {course.reviewCount > 0 && (
+                <span className="flex items-center gap-1">
+                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                  <span className="font-medium text-foreground">{course.averageRating}</span>(
+                  {course.reviewCount})
+                </span>
+              )}
+              <span className="flex items-center gap-1">
+                <Clock3 className="h-3.5 w-3.5" />
+                {course.totalLessons} lessons
+              </span>
+              {course.enrollments > 0 && (
+                <span className="flex items-center gap-1">
+                  <Users className="h-3.5 w-3.5" />
+                  {course.enrollments}
+                </span>
+              )}
+            </div>
+
+            <div className="mt-auto flex items-end justify-between gap-3 pt-4">
+              <div className="font-display text-lg font-bold">
+                {isFree ? (
+                  <span className="text-success">Free</span>
+                ) : showDiscount ? (
+                  <span className="flex flex-wrap items-baseline gap-1.5">
+                    {formatNaira(course.discountPrice as number)}
+                    <span className="text-sm font-normal text-muted-foreground line-through">
+                      {formatNaira(course.price)}
+                    </span>
+                  </span>
+                ) : (
+                  formatNaira(course.price)
+                )}
+              </div>
+
+              <Link
+                href={courseHref}
+                className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary"
+              >
+                View course
+              </Link>
+            </div>
+          </>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
