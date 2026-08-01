@@ -44,9 +44,10 @@ def record_learning_time(progress: LessonProgress, *, now=None) -> int:
 def record_daily_activity(student, *, seconds=0, lesson_completed=False, now=None) -> DailyActivity:
     """Roll a student's activity up into today's row.
 
-    Minutes are derived from the running second total rather than incremented,
-    so repeated small pings don't each round up to a whole minute and inflate
-    the day.
+    Seconds accumulate and minutes are derived from the running total, so a
+    string of short pings doesn't each round up to a whole minute and inflate
+    the day. Accumulating rather than recomputing also means a finished day
+    stays finished — see the note on the model.
     """
     now = now or timezone.now()
     today = timezone.localtime(now).date()
@@ -54,31 +55,13 @@ def record_daily_activity(student, *, seconds=0, lesson_completed=False, now=Non
     activity, _ = DailyActivity.objects.get_or_create(student=student, date=today)
 
     if seconds:
-        # Re-derive from the day's true total so rounding stays honest.
-        day_seconds = _seconds_studied_on(student, today)
-        activity.minutes = day_seconds // 60
+        activity.seconds = (activity.seconds or 0) + seconds
+        activity.minutes = activity.seconds // 60
     if lesson_completed:
         activity.lessons_completed += 1
 
-    activity.save(update_fields=["minutes", "lessons_completed", "updated_at"])
+    activity.save(update_fields=["seconds", "minutes", "lessons_completed", "updated_at"])
     return activity
-
-
-def _seconds_studied_on(student, day) -> int:
-    """Total seconds banked against lessons touched by this student on `day`."""
-    start = timezone.make_aware(
-        timezone.datetime.combine(day, timezone.datetime.min.time()),
-        timezone.get_current_timezone(),
-    )
-    end = start + timedelta(days=1)
-    return (
-        LessonProgress.objects.filter(
-            enrollment__student=student,
-            last_accessed_at__gte=start,
-            last_accessed_at__lt=end,
-        ).aggregate(total=Sum("time_spent_seconds"))["total"]
-        or 0
-    )
 
 
 def current_streak(student, *, today=None) -> int:
@@ -133,11 +116,13 @@ def week_activity(student, *, today=None):
 
 
 def total_learning_minutes(student) -> int:
+    """Lifetime minutes, read from the same table as today's and the week's.
+
+    This used to sum LessonProgress instead, so the dashboard could show a
+    lifetime total of 0m beside 22 minutes today. One source, no contradiction.
+    """
     seconds = (
-        LessonProgress.objects.filter(enrollment__student=student).aggregate(
-            total=Sum("time_spent_seconds")
-        )["total"]
-        or 0
+        DailyActivity.objects.filter(student=student).aggregate(total=Sum("seconds"))["total"] or 0
     )
     return seconds // 60
 

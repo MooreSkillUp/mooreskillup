@@ -70,24 +70,24 @@ export function WelcomeBanner({
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,var(--color-accent)/12%,transparent_55%),radial-gradient(circle_at_100%_0%,var(--color-primary)/10%,transparent_50%)]"
       />
 
-      <div className="relative p-5 sm:p-6">
+      <div className="relative p-4 sm:p-6">
         <p className="text-sm text-muted-foreground">{greeting()},</p>
-        <h1 className="mt-0.5 font-display text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className="mt-0.5 font-display text-xl font-bold tracking-tight sm:text-3xl">
           {firstName}
         </h1>
         {subtitle && <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>}
 
-        <dl className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <dl className="mt-4 grid grid-cols-2 gap-2 sm:mt-5 sm:gap-2.5 lg:grid-cols-4">
           {stats.map(({ label, value, icon: Icon }) => (
             <div
               key={label}
-              className="rounded-xl border border-border/70 bg-background/60 px-3 py-2.5 backdrop-blur-sm"
+              className="rounded-xl border border-border/70 bg-background/60 px-3 py-2 backdrop-blur-sm"
             >
               <dt className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                 <Icon className="h-3.5 w-3.5" />
                 {label}
               </dt>
-              <dd className="mt-0.5 font-display text-lg font-bold tabular-nums">
+              <dd className="mt-0.5 font-display text-base font-bold tabular-nums sm:text-lg">
                 {loading ? <span className="inline-block h-5 w-10 animate-pulse rounded bg-muted" /> : value}
               </dd>
             </div>

@@ -18,6 +18,7 @@ from apps.progress.activity import (
     MAX_SECONDS_PER_PING,
     current_streak,
     minutes_today,
+    record_daily_activity,
     record_learning_time,
     total_learning_minutes,
     week_activity,
@@ -140,10 +141,37 @@ class TestWeekAndTotals:
         assert week[-1]["isToday"] is True
         assert all(day["minutes"] == 0 for day in week)
 
-    def test_totals_come_from_recorded_time(self, db, student, lesson):
-        enrollment = enrol(student, lesson)
-        LessonProgress.objects.create(enrollment=enrollment, lesson=lesson, time_spent_seconds=605)
+    def test_totals_come_from_recorded_time(self, db, student):
+        DailyActivity.objects.create(
+            student=student, date=timezone.localtime().date(), seconds=605, minutes=10
+        )
         assert total_learning_minutes(student) == 10
+
+    def test_lifetime_total_never_contradicts_today(self, db, student):
+        """The dashboard showed "0m lifetime" next to "22 min today".
+
+        Lifetime read LessonProgress while today read DailyActivity, so the two
+        could disagree. They must come from the same place.
+        """
+        record_daily_activity(student, seconds=22 * 60)
+        assert minutes_today(student) == 22
+        assert total_learning_minutes(student) >= minutes_today(student)
+
+    def test_a_finished_day_stays_finished(self, db, student):
+        """Reopening an old lesson must not rewrite an earlier day's total.
+
+        Minutes were recomputed from LessonProgress.last_accessed_at, which
+        moves — so yesterday's total silently changed when a student revisited
+        an old lesson. Seconds accumulate instead.
+        """
+        yesterday = timezone.localtime().date() - timedelta(days=1)
+        DailyActivity.objects.create(student=student, date=yesterday, seconds=1800, minutes=30)
+
+        record_daily_activity(student, seconds=300)
+
+        stale = DailyActivity.objects.get(student=student, date=yesterday)
+        assert stale.minutes == 30
+        assert minutes_today(student) == 5
 
     def test_minutes_today_is_zero_before_any_activity(self, db, student):
         assert minutes_today(student) == 0
