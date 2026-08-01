@@ -2,10 +2,10 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { Button } from "@/components/ui-kit/Button";
 import { getHomeRouteForUser, useAuth } from "@/lib/auth";
@@ -121,26 +121,7 @@ function Gateway() {
   );
 }
 
-/** The wordmark, swapped for the light-on-dark variant in dark mode. */
+/** Decorative here — this *is* the home page, so the mark doesn't navigate. */
 function BrandMark() {
-  return (
-    <>
-      <Image
-        src="/msu-logo.svg"
-        alt="MooreSkillUp"
-        width={200}
-        height={58}
-        priority
-        className="block dark:hidden"
-      />
-      <Image
-        src="/msu-logo-white.svg"
-        alt="MooreSkillUp"
-        width={200}
-        height={58}
-        priority
-        className="hidden dark:block"
-      />
-    </>
-  );
+  return <BrandLogo href={null} size="lg" priority />;
 }

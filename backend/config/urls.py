@@ -15,6 +15,7 @@ urlpatterns = [
     path("api/", include("apps.progress.urls")),
     path("api/", include("apps.certificates.urls")),
     path("api/", include("apps.platform.urls")),
+    path("api/", include("apps.schedule.urls")),
 ]
 
 if settings.DEBUG:

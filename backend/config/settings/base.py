@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "apps.progress",
     "apps.certificates",
     "apps.platform",
+    "apps.schedule",
     "anymail",
 ]
 
