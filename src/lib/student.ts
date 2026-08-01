@@ -636,44 +636,6 @@ export function useStudentDashboard(enabled = true) {
   return { data, isLoading, error };
 }
 
-/** Categories with a real count of published courses, for the track cards. */
-export interface StudentTrack {
-  id: string;
-  name: string;
-  courseCount: number;
-}
-
-export function useStudentTracks() {
-  const [tracks, setTracks] = useState<StudentTrack[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    fetch(buildApiUrl("/api/categories/"))
-      .then(parseJsonSafely)
-      .then((payload) => {
-        if (!active) return;
-        const rows = Array.isArray(payload) ? payload : (payload?.results ?? []);
-        setTracks(
-          rows.map((c: Record<string, unknown>) => ({
-            id: String(c.id ?? ""),
-            name: String(c.name ?? ""),
-            courseCount: Number(c.courseCount ?? 0),
-          })),
-        );
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  return { tracks, isLoading };
-}
-
 /** Update the student's own daily learning target. */
 export async function saveDailyGoal(minutes: number) {
   return authenticatedRequest("/api/auth/me/", {

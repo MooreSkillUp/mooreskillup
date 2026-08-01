@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import Image from "next/image";
 import type { ReactNode } from "react";
 import { AlertCircle, Info } from "lucide-react";
 
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 
 /**
@@ -45,24 +44,7 @@ export function AuthScreen({
       }}
     >
       <header className="flex items-center justify-between px-5 py-4 sm:px-8">
-        <Link href="/" aria-label="MooreSkillUp home" className="flex items-center">
-          <Image
-            src="/msu-logo.svg"
-            alt="MooreSkillUp"
-            width={150}
-            height={44}
-            priority
-            className="block dark:hidden"
-          />
-          <Image
-            src="/msu-logo-white.svg"
-            alt="MooreSkillUp"
-            width={150}
-            height={44}
-            priority
-            className="hidden dark:block"
-          />
-        </Link>
+        <BrandLogo href="/" size="sm" priority />
         <ThemeToggle />
       </header>
 
