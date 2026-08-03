@@ -80,7 +80,7 @@ export function normalizeStudentCourse(raw: Record<string, unknown>): StudentCou
     categoryBannerTheme: raw.categoryBannerTheme ? String(raw.categoryBannerTheme) : undefined,
     isOwned: Boolean(raw.isOwned),
     isInWatchlist: Boolean(raw.isInWatchlist),
-    totalLessons: num(raw.total_lessons ?? raw.totalLessons),
+    totalLessons: num(raw.totalLessons ?? raw.total_lessons),
     enrollments: num((raw.analytics as Record<string, unknown> | undefined)?.enrollments),
   };
 }

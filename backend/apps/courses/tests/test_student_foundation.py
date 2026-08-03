@@ -138,3 +138,41 @@ class TestFeatureFlagsPublic:
         features = res.json()["features"]
         assert features["reviews"] is True
         assert features["achievements"] is False  # coming soon by default
+
+
+class TestLessonCount:
+    """Course.total_lessons is a stored counter that nothing maintains.
+
+    It sat at its default of 0 forever, so every catalogue card advertised
+    "0 lessons" — the last thing a student should read before deciding whether
+    to enrol.
+    """
+
+    def test_catalog_reports_real_published_lesson_count(self, taxonomy, db):
+        category, subcategory = taxonomy
+        course = make_course(category, subcategory, title="Counted course")
+        section = Section.objects.create(course=course, title="Week 1", order=5, is_published=True)
+        for index in range(3):
+            Lesson.objects.create(
+                section=section, title=f"L{index}", content_type="text", order=index, is_published=True
+            )
+        # Neither of these should be counted.
+        Lesson.objects.create(
+            section=section, title="Draft", content_type="text", order=9, is_published=False
+        )
+        hidden = Section.objects.create(course=course, title="Hidden", order=6, is_published=False)
+        Lesson.objects.create(
+            section=hidden, title="Hidden lesson", content_type="text", order=1, is_published=True
+        )
+
+        assert course.total_lessons == 0, "the stale counter is the thing we're routing around"
+
+        res = APIClient().get("/api/courses/")
+        rows = res.json().get("results", res.json())
+        row = next(item for item in rows if item["title"] == "Counted course")
+        # 3 added here, plus the one the make_course fixture seeds.
+        expected = Lesson.objects.filter(
+            section__course=course, is_published=True, section__is_published=True
+        ).count()
+        assert expected == 4
+        assert row["totalLessons"] == expected
