@@ -27,10 +27,6 @@ output "postgres_host" {
   value = module.postgres.host
 }
 
-output "redis_host" {
-  value = module.redis.host
-}
-
 output "key_vault_name" {
   value = module.key_vault.name
 }

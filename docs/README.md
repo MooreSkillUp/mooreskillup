@@ -13,6 +13,7 @@ you know what you are looking for.
 | Understand what's built and what's next | [../PROJECT_ROADMAP.md](../PROJECT_ROADMAP.md) |
 | Contribute a change | [../CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Look up an API endpoint | [architecture/API_SCHEMA.md](architecture/API_SCHEMA.md) |
+| Deploy the backend to Azure | [deployment/AZURE_BACKEND_SETUP.md](deployment/AZURE_BACKEND_SETUP.md) |
 | Deploy to production | [deployment/deployment-guide.md](deployment/deployment-guide.md) |
 | Handle an incident | [operations/runbook.md](operations/runbook.md) |
 
@@ -33,8 +34,8 @@ role, and the target production architecture.
 **[setup/](setup/)** — getting environments running. Local development, env
 variables, Docker commands, Vercel, Formspree.
 
-**[deployment/](deployment/)** — shipping it. Deployment guide, Azure roadmap,
-Docker, Railway, and the pre-deploy checklist.
+**[deployment/](deployment/)** — shipping it. The Azure backend setup guide,
+deployment guide, Azure roadmap, Docker, Railway, and the pre-deploy checklist.
 
 **[ci-cd/](ci-cd/)** — pipeline structure and release flow.
 

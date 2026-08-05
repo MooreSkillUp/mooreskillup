@@ -71,10 +71,6 @@ resource "azurerm_container_app" "api" {
         name  = "DATABASE_PASSWORD"
         value = var.postgres_admin_password
       }
-      env {
-        name  = "REDIS_URL"
-        value = "rediss://${var.redis_host}:${var.redis_port}"
-      }
     }
   }
 }
