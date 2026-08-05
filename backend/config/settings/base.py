@@ -97,6 +97,29 @@ REST_FRAMEWORK = {
     },
 }
 
+# Where throttle counters live.
+#
+# DRF keeps its rate-limit counters in Django's cache. With no CACHES set,
+# Django falls back to an in-memory cache that is private to each process — so
+# on Azure Container Apps, "5 login attempts per minute" would really mean 5 per
+# *replica*, and every counter would vanish on a cold start or a deploy. That is
+# the difference between working brute-force protection and the appearance of it.
+#
+# The database is the shared, durable store this project already runs, and
+# throttle counters are tiny and infrequent, so it is a good fit and costs
+# nothing extra. Set REDIS_URL to move the cache to Redis if load ever justifies
+# the expense.
+_redis_url = os.getenv("REDIS_URL", "")
+if _redis_url:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": _redis_url}}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "django_cache_table",
+        }
+    }
+
 CORS_ALLOW_CREDENTIALS = True
 
 SIMPLE_JWT = {
