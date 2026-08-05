@@ -51,30 +51,72 @@ Studio one for dev and staging.
 
 ## Before you start
 
-- An Azure account with an active subscription
-- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed
-- Docker running locally
-- Terraform (or run it through Docker — shown below)
+You need an Azure account with an active subscription. Nothing else — the rest
+runs inside the portal.
 
-## 1. Sign in and pick a subscription
+## 1. Open Cloud Shell
+
+Cloud Shell is a terminal that runs **inside portal.azure.com**. It is already
+signed in as you, and `az`, `terraform`, `git` and `docker` are already
+installed, so there is nothing to set up on your own machine.
+
+1. Go to [portal.azure.com](https://portal.azure.com)
+2. Click the **`>_`** icon in the top bar
+3. Choose **Bash** (not PowerShell) when asked
+4. First run only, Azure asks to create a storage account for Cloud Shell —
+   accept it. It costs a few cents a month and is what keeps your files between
+   sessions.
+
+Two things worth knowing:
+
+- **Cloud Shell disconnects after about 20 minutes idle.** `terraform apply`
+  takes 10-15 minutes, so keep the tab in front of you while it runs. If it does
+  drop, reconnect and re-run the same command — Terraform picks up where it left
+  off from its state file.
+- **Files live in your Cloud Shell storage**, so the repo you clone is still
+  there next time.
+
+Confirm the subscription you are pointed at:
 
 ```bash
-az login
+az account show --output table
+```
+
+If it is the wrong one:
+
+```bash
 az account list --output table
-az account set --subscription "<your subscription id>"
-az account show --query "{name:name, id:id, tenant:tenantId}" --output table
+az account set --subscription "<subscription id>"
 ```
 
-Keep the **tenant id** — Terraform needs it.
-
-## 2. Fill in your variables
+Now grab the tenant id — Terraform needs it:
 
 ```bash
-cd infrastructure/terraform/environments/prod
-cp terraform.tfvars.example terraform.tfvars
+az account show --query tenantId --output tsv
 ```
 
-Edit `terraform.tfvars`:
+## 2. Get the code into Cloud Shell
+
+```bash
+git clone https://github.com/MooreSkillUp/mooreskillup.git
+cd mooreskillup/infrastructure/terraform
+```
+
+Coming back in a later session, update it instead of cloning again:
+
+```bash
+cd ~/mooreskillup && git pull && cd infrastructure/terraform
+```
+
+## 3. Fill in your variables
+
+```bash
+cp environments/prod/terraform.tfvars.example environments/prod/terraform.tfvars
+code environments/prod/terraform.tfvars
+```
+
+`code` opens Cloud Shell's built-in editor. Save with **Ctrl+S**, close with
+**Ctrl+Q**.
 
 ```hcl
 environment          = "prod"
@@ -103,28 +145,37 @@ On region: `southafricanorth` is the closest Azure region to Nigeria and will
 feel meaningfully faster for your students than a US region. Confirm the
 services you need are available there before committing.
 
-## 3. Create the infrastructure
+## 4. Create the infrastructure
 
 ```bash
-cd infrastructure/terraform
 terraform init
 terraform plan -var-file=environments/prod/terraform.tfvars
+```
+
+**Read the plan before approving it.** The last line tells you what it will do —
+it should be all *add*, no *destroy*. You should see a resource group, container
+registry, PostgreSQL server, storage account, Key Vault, Log Analytics and two
+container apps.
+
+**Nothing is billable until the next command.** If the plan looks wrong, stop
+here and nothing has been created.
+
+```bash
 terraform apply -var-file=environments/prod/terraform.tfvars
 ```
 
-**Read the plan before approving it.** It should create a resource group,
-registry, PostgreSQL server, storage account, Key Vault, Log Analytics, and two
-container apps. It should not destroy anything.
+Type `yes` when prompted. This takes 10-15 minutes; the database is the slow
+part. Keep the tab visible so Cloud Shell does not idle out.
 
-No Terraform installed? Run it through Docker:
+When it finishes:
 
 ```bash
-docker run --rm -v "$PWD:/tf" -w /tf hashicorp/terraform:latest init
+terraform output
 ```
 
-Terraform prints the registry name and API URL when it finishes. Keep them.
+Keep `acr_login_server`, `api_url`, `postgres_host` and `resource_group_name`.
 
-## 4. Build and push the API image
+## 5. Build and push the API image
 
 ```bash
 ACR=<registry name from terraform output>
@@ -142,7 +193,7 @@ terraform apply \
   -var="api_image=$ACR.azurecr.io/api:latest"
 ```
 
-## 5. Run migrations
+## 6. Run migrations
 
 Migrations run automatically on container start (`backend/docker/django/entrypoint.sh`),
 so the first boot creates the schema. To run anything by hand:
@@ -154,7 +205,7 @@ az containerapp exec \
   --command "python manage.py createsuperuser"
 ```
 
-## 6. Point Vercel at it
+## 7. Point Vercel at it
 
 In your Vercel project settings, set:
 
@@ -165,7 +216,7 @@ NEXT_PUBLIC_API_URL = https://<your api url from terraform output>
 Redeploy the frontend. Then confirm the API allows it — `cors_allowed_origins`
 in `terraform.tfvars` must list your exact Vercel domain, including `https://`.
 
-## 7. Check it works
+## 8. Check it works
 
 ```bash
 curl https://<api-url>/api/platform/status/
