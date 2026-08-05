@@ -108,6 +108,13 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
             Course.objects.filter(status="published", visibility="visible")
             .select_related("teacher__user", "category", "subcategory")
             .prefetch_related("sections__lessons", "sections__tasks", "sections__projects", "tags")
+            .annotate(
+                published_lesson_count=Count(
+                    "sections__lessons",
+                    filter=Q(sections__lessons__is_published=True, sections__is_published=True),
+                    distinct=True,
+                )
+            )
         )
         params = self.request.query_params
         category = params.get("category", "").strip()
@@ -780,12 +787,21 @@ class RecommendedCoursesView(APIView):
     permission_classes = [IsStudentUserRole]
 
     def get(self, request):
+        from django.db.models import Count, Q
+
         student = request.user.student_profile
         tracks = student.selected_tracks or ([student.selected_track] if student.selected_track else [])
         published = (
             Course.objects.filter(status="published", visibility="visible")
             .select_related("teacher__user", "category", "subcategory")
             .prefetch_related("sections__lessons", "sections__tasks", "sections__projects", "tags")
+            .annotate(
+                published_lesson_count=Count(
+                    "sections__lessons",
+                    filter=Q(sections__lessons__is_published=True, sections__is_published=True),
+                    distinct=True,
+                )
+            )
         )
         # Track-based recommendations first, then flagged ones, de-duplicated.
         track_courses = published.filter(subcategory__name__in=tracks) if tracks else published.none()

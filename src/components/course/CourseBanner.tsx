@@ -102,7 +102,7 @@ export function CourseBanner({
 
   // Dark overlay for readability on top of a banner image only
   const imageOverlayStyle: React.CSSProperties | undefined = bannerImage
-    ? { background: "linear-gradient(to top, rgba(15, 23, 42, 0.88) 0%, rgba(15, 23, 42, 0.35) 55%, transparent 100%)" }
+    ? { background: "linear-gradient(to top, rgba(15, 23, 42, 0.92) 0%, rgba(15, 23, 42, 0.72) 35%, rgba(15, 23, 42, 0.25) 70%, rgba(15, 23, 42, 0.12) 100%)" }
     : undefined;
 
   const dynamicGlowStyle = categoryAccentColor && !bannerImage
@@ -120,10 +120,16 @@ export function CourseBanner({
   // Use Tailwind theme gradient only when no image and no dynamic accent color
   const useSolidThemeGradient = !bannerImage && !categoryAccentColor;
 
+  // When a teacher uploads a photo, the photo is the design. Stacking subtitle,
+  // track and chips over it makes both the text and the image worse, so an
+  // uploaded banner shows the category and the title and nothing else. A
+  // generated gradient has no such problem and keeps the full treatment.
+  const artworkOnly = dense || Boolean(bannerImage);
+
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-[1.5rem] border border-white/10 text-white shadow-sm",
+        "relative flex flex-col overflow-hidden rounded-[1.5rem] border border-white/10 text-white shadow-sm",
         useSolidThemeGradient && "bg-gradient-to-br",
         useSolidThemeGradient && themeClasses.shell,
         dense ? "min-h-[130px] p-4" : compact ? "min-h-[180px] p-4" : "min-h-[220px] p-5",
@@ -142,7 +148,7 @@ export function CourseBanner({
         style={dynamicGlowStyle}
       />
       <div className="absolute bottom-[-28px] left-[-10px] h-24 w-24 rounded-full bg-white/10 blur-3xl" />
-      <div className="relative flex h-full flex-col">
+      <div className="relative flex flex-1 flex-col">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <span
             className={cn("inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]", !categoryAccentColor && classes.badge)}
@@ -151,7 +157,7 @@ export function CourseBanner({
             <BookOpen className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{category || "MooreSkillUp"}</span>
           </span>
-          {certificateEnabled && !dense ? (
+          {certificateEnabled && !artworkOnly ? (
             <span className="hidden shrink-0 items-center gap-1 rounded-full bg-white/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/90 sm:inline-flex">
               <Award className="h-3.5 w-3.5" /> Certificate
             </span>
@@ -159,10 +165,10 @@ export function CourseBanner({
         </div>
 
         <div className="mt-auto space-y-2">
-          {track && !dense ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/75">{track}</p> : null}
-          <h3 className={cn("font-display font-semibold leading-tight line-clamp-2", dense || compact ? "text-lg" : "text-2xl")}>{title}</h3>
-          {subtitle && !dense ? <p className="max-w-xl text-sm text-white/80 line-clamp-2">{subtitle}</p> : null}
-          {!dense && (
+          {track && !artworkOnly ? <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/75">{track}</p> : null}
+          <h3 className={cn("font-display font-semibold leading-tight line-clamp-2", artworkOnly || compact ? "text-lg" : "text-2xl")}>{title}</h3>
+          {subtitle && !artworkOnly ? <p className="max-w-xl text-sm text-white/80 line-clamp-2">{subtitle}</p> : null}
+          {!artworkOnly && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/80">
             {level ? <span className="rounded-full bg-white/15 px-2.5 py-1">{level}</span> : null}
             {durationLabel ? (

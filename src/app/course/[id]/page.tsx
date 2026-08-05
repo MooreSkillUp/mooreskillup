@@ -64,6 +64,10 @@ export default function CoursePage() {
   const showDiscount = course.discountPrice !== null && course.discountPrice < course.price;
   const firstLesson = course.sections.flatMap((s) => s.lessons)[0];
   const totalLessons = course.sections.reduce((sum, s) => sum + s.lessons.length, 0);
+  const previewCount = course.sections.reduce(
+    (sum, section) => sum + section.lessons.filter((lesson) => lesson.isPreviewable).length,
+    0,
+  );
 
   const onEnroll = async () => {
     if (course.isOwned) {
@@ -96,13 +100,9 @@ export default function CoursePage() {
           <div className="p-4 lg:p-6">
             <CourseBanner
               title={course.title}
-              subtitle={course.subtitle}
               category={course.program}
-              track={course.track}
-              level={LEVEL_LABEL[course.level]}
-              durationLabel={`${totalLessons} lessons`}
-              priceLabel={isFree ? "Free" : showDiscount ? formatNaira(course.discountPrice as number) : formatNaira(course.price)}
               certificateEnabled={course.certificateEnabled}
+              dense
               bannerImage={course.bannerImage}
               bannerTheme={course.bannerTheme ?? "default"}
               categoryAccentColor={course.categoryAccentColor}
@@ -134,11 +134,11 @@ export default function CoursePage() {
                 <span className="flex items-center gap-1">
                   <Users className="h-4 w-4" /> {course.enrollments} enrolled
                 </span>
-                <span>{totalLessons} lessons</span>
+                <span>{totalLessons} {totalLessons === 1 ? "lesson" : "lessons"}</span>
               </div>
 
               <div className="mt-4 text-sm text-muted-foreground">
-                Produced by <strong className="text-foreground">MooreSkillUp</strong>
+                Taught by <strong className="text-foreground">{course.teacherName}</strong>
               </div>
 
               {course.techStack.length > 0 && (
@@ -191,8 +191,18 @@ export default function CoursePage() {
               <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
                 <li>✓ Full lifetime access</li>
                 <li>✓ Learn at your own pace</li>
+                <li>
+                  ✓ {totalLessons} {totalLessons === 1 ? "lesson" : "lessons"} across{" "}
+                  {course.sections.length}{" "}
+                  {course.sections.length === 1 ? "section" : "sections"}
+                </li>
                 {course.certificateEnabled && <li>✓ Certificate of completion</li>}
-                <li>✓ Free preview lessons below</li>
+                {/* Only promise a preview when one actually exists. */}
+                {previewCount > 0 && (
+                  <li>
+                    ✓ {previewCount} free preview {previewCount === 1 ? "lesson" : "lessons"}
+                  </li>
+                )}
               </ul>
             </div>
           </div>
@@ -200,10 +210,25 @@ export default function CoursePage() {
 
         <div className="grid gap-6 lg:grid-cols-[1.5fr_0.8fr]">
           <div className="space-y-8">
+            {/* Facts about this course, not the same three marketing lines on
+                every page. */}
             <div className="grid gap-3 sm:grid-cols-3">
-              <CourseBannerHighlight title="Structured learning" caption="Sections, lessons, and milestones" />
-              <CourseBannerHighlight title="Career-ready" caption="Skills that map to modern roles" />
-              <CourseBannerHighlight title="Premium experience" caption="Professional learning flow" />
+              <CourseBannerHighlight
+                title={`${totalLessons} ${totalLessons === 1 ? "lesson" : "lessons"}`}
+                caption={`Across ${course.sections.length} ${course.sections.length === 1 ? "section" : "sections"}`}
+              />
+              <CourseBannerHighlight
+                title={LEVEL_LABEL[course.level]}
+                caption={course.track ? `${course.program} · ${course.track}` : course.program}
+              />
+              <CourseBannerHighlight
+                title={course.certificateEnabled ? "Certificate" : "Self-paced"}
+                caption={
+                  course.certificateEnabled
+                    ? "Awarded when you finish"
+                    : "Learn at your own speed"
+                }
+              />
             </div>
 
             <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-sm">
@@ -228,7 +253,7 @@ export default function CoursePage() {
                 <h2 className="font-display text-2xl font-bold">Course content</h2>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                {course.sections.length} sections · {totalLessons} lessons
+                {course.sections.length} {course.sections.length === 1 ? "section" : "sections"} · {totalLessons} {totalLessons === 1 ? "lesson" : "lessons"}
               </p>
               <div className="mt-4">
                 <SectionAccordion
@@ -336,7 +361,11 @@ export default function CoursePage() {
             <div className="rounded-[1.75rem] border border-border bg-card p-5 shadow-sm">
               <h3 className="font-display text-lg font-bold">This course includes</h3>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <li>{totalLessons} lessons across {course.sections.length} sections</li>
+                <li>
+                  {totalLessons} {totalLessons === 1 ? "lesson" : "lessons"} across{" "}
+                  {course.sections.length}{" "}
+                  {course.sections.length === 1 ? "section" : "sections"}
+                </li>
                 <li>Video, reading, and resource lessons</li>
                 <li>Assignments &amp; projects</li>
                 {course.certificateEnabled && <li>Certificate of completion</li>}

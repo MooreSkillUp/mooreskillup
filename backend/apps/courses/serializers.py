@@ -246,6 +246,7 @@ class CourseSerializer(serializers.ModelSerializer):
     cta = serializers.SerializerMethodField()
     categoryName = serializers.CharField(source="category.name", read_only=True)
     subcategoryName = serializers.CharField(source="subcategory.name", read_only=True)
+    totalLessons = serializers.SerializerMethodField()
     categoryId = serializers.UUIDField(source="category_id", read_only=True)
     subcategoryId = serializers.UUIDField(source="subcategory_id", read_only=True)
     program = serializers.CharField(source="category.name", read_only=True)
@@ -310,6 +311,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "visibility",
             "featured",
             "total_lessons",
+            "totalLessons",
             "meta_title",
             "metaTitle",
             "meta_description",
@@ -400,6 +402,21 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def get_reviewCount(self, obj):
         return obj.reviews.filter(status="published").count()
+
+    def get_totalLessons(self, obj):
+        """Published lessons in this course.
+
+        Course.total_lessons is a stored counter that nothing maintains, so it
+        stays at 0 and every card read "0 lessons" — which is the last thing a
+        student should see before deciding whether to enrol. List views annotate
+        `published_lesson_count` so this stays one query; anything that doesn't
+        falls back to counting, then to the stale field as a last resort.
+        """
+        annotated = getattr(obj, "published_lesson_count", None)
+        if annotated is not None:
+            return annotated
+        counted = Lesson.objects.filter(section__course=obj, is_published=True).count()
+        return counted or obj.total_lessons
 
     def get_analytics(self, obj):
         enrollments_count = obj.enrollments.count()
