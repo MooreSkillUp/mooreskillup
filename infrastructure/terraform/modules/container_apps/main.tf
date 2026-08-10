@@ -75,7 +75,11 @@ resource "azurerm_container_app" "api" {
   }
 }
 
+# Only created when a web image is supplied. Deployments that keep the
+# frontend on Vercel simply leave web_image empty.
 resource "azurerm_container_app" "web" {
+  count                       = var.web_image != "" ? 1 : 0
+
   name                        = "${var.name_prefix}-web"
   resource_group_name         = var.resource_group_name
   container_app_environment_id = var.environment_id

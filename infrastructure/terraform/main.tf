@@ -60,7 +60,10 @@ module "container_app_environment" {
 }
 
 module "container_apps" {
-  count = var.api_image != "" && var.web_image != "" ? 1 : 0
+  # The API is what Azure runs. Requiring a web image too meant the container
+  # apps could never be created for a backend-only deployment, which is the
+  # actual architecture: API on Azure, frontend on Vercel.
+  count = var.api_image != "" ? 1 : 0
 
   source                      = "./modules/container_apps"
   name_prefix                 = local.name_prefix
@@ -70,7 +73,7 @@ module "container_apps" {
   registry_username           = module.acr.admin_username
   registry_password           = module.acr.admin_password
   api_image                   = local.api_image
-  web_image                   = local.web_image
+  web_image                   = var.web_image
   django_secret_key           = var.django_secret_key
   django_allowed_hosts        = var.django_allowed_hosts
   cors_allowed_origins        = var.cors_allowed_origins

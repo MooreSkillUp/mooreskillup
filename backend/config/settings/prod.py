@@ -31,3 +31,46 @@ STATIC_URL = "/static/"
 # Allow static files to be served
 WHITENOISE_AUTOREFRESH = False
 WHITENOISE_USE_FINDERS = False
+
+
+# Send application logs to stdout so the platform can collect them.
+#
+# Django's default logging only writes to the console when DEBUG is True; with
+# DEBUG off it routes errors to mail_admins instead. On a container platform
+# that means a 500 leaves no trace anywhere — the request fails, the logs show
+# nothing, and there is no way to find out why. Anything running in a container
+# needs its logs on stdout.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {name} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": os.getenv("LOG_LEVEL", "INFO"),
+    },
+    "loggers": {
+        # Unhandled exceptions land here. Without it, 500s are silent.
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "django.db.backends": {
+            "handlers": ["console"],
+            # Query logging is deafening; opt in with LOG_SQL=DEBUG when needed.
+            "level": os.getenv("LOG_SQL", "WARNING"),
+            "propagate": False,
+        },
+    },
+}

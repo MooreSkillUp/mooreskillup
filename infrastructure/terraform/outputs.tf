@@ -15,8 +15,14 @@ output "acr_admin_password" {
   sensitive = true
 }
 
+# Null when the frontend is hosted elsewhere (Vercel) and no web container app
+# exists. The fqdn must be checked as well as the module, or interpolating a
+# null into the string fails the plan.
 output "web_url" {
-  value = length(module.container_apps) > 0 ? "https://${module.container_apps[0].web_fqdn}" : null
+  value = try(
+    module.container_apps[0].web_fqdn != null ? "https://${module.container_apps[0].web_fqdn}" : null,
+    null,
+  )
 }
 
 output "api_url" {

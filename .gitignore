@@ -67,3 +67,6 @@ infrastructure/terraform/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfplan
+# Saved plans embed variable values, including secrets.
+tfplan*
+*.tfplan.out
