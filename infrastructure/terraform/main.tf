@@ -83,6 +83,8 @@ module "container_apps" {
   postgres_db_name            = module.postgres.database_name
   postgres_admin_username     = var.db_admin_username
   postgres_admin_password     = var.db_admin_password
+  storage_account_name        = module.storage.name
+  storage_account_key         = module.storage.primary_access_key
   min_replicas                = var.container_apps_min_replicas
   max_replicas                = var.container_apps_max_replicas
   tags                        = local.common_tags

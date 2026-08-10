@@ -71,6 +71,20 @@ resource "azurerm_container_app" "api" {
         name  = "DATABASE_PASSWORD"
         value = var.postgres_admin_password
       }
+      # Uploads go to blob storage; a container filesystem does not survive a
+      # deploy, so without these every uploaded image is lost on the next one.
+      env {
+        name  = "AZURE_STORAGE_ACCOUNT"
+        value = var.storage_account_name
+      }
+      env {
+        name  = "AZURE_STORAGE_KEY"
+        value = var.storage_account_key
+      }
+      env {
+        name  = "AZURE_STORAGE_CONTAINER"
+        value = var.storage_media_container
+      }
     }
   }
 }

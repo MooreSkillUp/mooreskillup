@@ -24,7 +24,49 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",
 ] + MIDDLEWARE
 
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# Uploads go to Blob Storage, not the container's own disk.
+#
+# A container filesystem is thrown away on every deploy and every scale event,
+# so a course banner uploaded on Monday was gone the moment the next revision
+# started. With min_replicas=0 it would not even survive the app going idle.
+# Blob Storage is the durable place uploads belong.
+#
+# Static files stay with WhiteNoise: they are baked into the image at build
+# time, so they are already durable and serving them locally is faster than a
+# round trip to blob storage.
+AZURE_ACCOUNT_NAME = os.getenv("AZURE_STORAGE_ACCOUNT", "")
+AZURE_ACCOUNT_KEY = os.getenv("AZURE_STORAGE_KEY", "")
+AZURE_CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "media")
+
+if AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY:
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.azure_storage.AzureStorage",
+            "OPTIONS": {
+                "account_name": AZURE_ACCOUNT_NAME,
+                "account_key": AZURE_ACCOUNT_KEY,
+                "azure_container": AZURE_CONTAINER,
+                # Uploads keep their own name rather than being overwritten by
+                # the next file of the same name.
+                "overwrite_files": False,
+            },
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+    MEDIA_URL = f"https://{AZURE_ACCOUNT_NAME}.blob.core.windows.net/{AZURE_CONTAINER}/"
+else:
+    # No blob credentials: fall back to local disk so the app still runs, but
+    # say so loudly, because uploads will not survive a deploy.
+    import warnings
+
+    warnings.warn(
+        "AZURE_STORAGE_ACCOUNT/KEY not set - uploads are being written to the "
+        "container filesystem and will be lost on the next deploy.",
+        stacklevel=2,
+    )
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATIC_URL = "/static/"
 
