@@ -15,6 +15,7 @@ you know what you are looking for.
 | Look up an API endpoint | [architecture/API_SCHEMA.md](architecture/API_SCHEMA.md) |
 | Deploy the backend to Azure | [deployment/AZURE_BACKEND_SETUP.md](deployment/AZURE_BACKEND_SETUP.md) |
 | Deploy to production | [deployment/deployment-guide.md](deployment/deployment-guide.md) |
+| Understand or operate the Azure setup | [operations/AZURE_RESOURCES.md](operations/AZURE_RESOURCES.md) |
 | Handle an incident | [operations/runbook.md](operations/runbook.md) |
 
 ## Folders
