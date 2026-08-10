@@ -15,6 +15,11 @@ echo "Database is up!"
 echo "Running migrations..."
 python manage.py migrate --noinput
 
+# DRF keeps throttle counters in the cache, which is the database in production
+# so the limits hold across replicas. Creating the table is idempotent.
+echo "Ensuring cache table..."
+python manage.py createcachetable
+
 # Collect static files if not in debug mode
 if [ "$DJANGO_DEBUG" != "True" ]; then
   echo "Collecting static files..."

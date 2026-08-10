@@ -77,7 +77,16 @@ docs/
 *.md
 
 # Miscellaneous
+# Bare ".env" only matches the repository root, so backend/.env was being copied
+# into the production image. It carries local development values - including a
+# Django secret key, a database password, a Paystack secret and a REDIS_URL -
+# and python-dotenv loads it at startup, overriding what the platform provides.
+# That is how production ended up trying to reach a Redis that does not exist,
+# with local secrets baked into a registry image.
 .env
+**/.env
+**/.env.*
+!**/.env.example
 *.log
 *.pot
 .cache/

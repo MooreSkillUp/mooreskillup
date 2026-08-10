@@ -60,3 +60,13 @@ override.tf.json
 backend/scratch/
 scratch/
 
+
+# Terraform local state and provider plugins
+infrastructure/terraform/.terraform/
+infrastructure/terraform/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+# Saved plans embed variable values, including secrets.
+tfplan*
+*.tfplan.out

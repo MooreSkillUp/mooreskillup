@@ -69,14 +69,6 @@ variable "postgres_admin_password" {
   sensitive = true
 }
 
-variable "redis_host" {
-  type = string
-}
-
-variable "redis_port" {
-  type = number
-}
-
 variable "min_replicas" {
   type    = number
   default = 1

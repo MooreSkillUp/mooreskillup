@@ -20,8 +20,10 @@ RUN pip install --no-cache-dir -r /tmp/requirements/prod.txt
 # Copy project
 COPY backend /app
 
-# Entrypoint
-RUN chmod +x /app/docker/django/entrypoint.sh
+# Entrypoint. Strip any CR so a CRLF checkout cannot break the shebang: Linux
+# would then look for the interpreter "/bin/sh" and report "no such file or
+# directory" about a script that plainly exists.
+RUN sed -i 's/$//' /app/docker/django/entrypoint.sh && chmod +x /app/docker/django/entrypoint.sh
 ENTRYPOINT ["/app/docker/django/entrypoint.sh"]
 
 # Run server (gunicorn for production, dev server for local)

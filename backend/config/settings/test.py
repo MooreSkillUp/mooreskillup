@@ -20,3 +20,7 @@ REST_FRAMEWORK = {
 }
 
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# In-process cache for tests: fast, isolated per run, and no table to create.
+# Production uses the database so throttle counters are shared across replicas.
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}

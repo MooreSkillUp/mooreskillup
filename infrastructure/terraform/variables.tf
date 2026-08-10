@@ -70,18 +70,6 @@ variable "db_sku_name" {
   default     = "B_Standard_B1ms"
 }
 
-variable "redis_family" {
-  type        = string
-  description = "Redis family."
-  default     = "C"
-}
-
-variable "redis_capacity" {
-  type        = number
-  description = "Redis capacity."
-  default     = 0
-}
-
 variable "api_image" {
   type        = string
   description = "Container image for the API."
@@ -96,8 +84,15 @@ variable "web_image" {
 
 variable "container_apps_min_replicas" {
   type        = number
-  description = "Minimum replicas for container apps."
-  default     = 1
+  description = <<-EOT
+    Minimum replicas for container apps.
+
+    0 means the app scales to zero when idle: you pay only for requests actually
+    served, and the first request after a quiet spell waits 10-30s for a cold
+    start. Correct while building. Set to 1 before real students depend on it,
+    so nobody ever meets that wait.
+  EOT
+  default     = 0
 }
 
 variable "container_apps_max_replicas" {

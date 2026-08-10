@@ -50,16 +50,6 @@ module "postgres" {
   tags                = local.common_tags
 }
 
-module "redis" {
-  source              = "./modules/redis"
-  name                = local.redis_name
-  resource_group_name = module.resource_group.name
-  location            = var.location
-  family              = var.redis_family
-  capacity            = var.redis_capacity
-  tags                = local.common_tags
-}
-
 module "container_app_environment" {
   source                     = "./modules/container_app_environment"
   name                       = local.container_env_name
@@ -70,7 +60,10 @@ module "container_app_environment" {
 }
 
 module "container_apps" {
-  count = var.api_image != "" && var.web_image != "" ? 1 : 0
+  # The API is what Azure runs. Requiring a web image too meant the container
+  # apps could never be created for a backend-only deployment, which is the
+  # actual architecture: API on Azure, frontend on Vercel.
+  count = var.api_image != "" ? 1 : 0
 
   source                      = "./modules/container_apps"
   name_prefix                 = local.name_prefix
@@ -80,7 +73,7 @@ module "container_apps" {
   registry_username           = module.acr.admin_username
   registry_password           = module.acr.admin_password
   api_image                   = local.api_image
-  web_image                   = local.web_image
+  web_image                   = var.web_image
   django_secret_key           = var.django_secret_key
   django_allowed_hosts        = var.django_allowed_hosts
   cors_allowed_origins        = var.cors_allowed_origins
@@ -90,8 +83,6 @@ module "container_apps" {
   postgres_db_name            = module.postgres.database_name
   postgres_admin_username     = var.db_admin_username
   postgres_admin_password     = var.db_admin_password
-  redis_host                  = module.redis.host
-  redis_port                  = module.redis.port
   min_replicas                = var.container_apps_min_replicas
   max_replicas                = var.container_apps_max_replicas
   tags                        = local.common_tags

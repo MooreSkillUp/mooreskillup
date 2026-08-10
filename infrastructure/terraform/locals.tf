@@ -1,5 +1,5 @@
 locals {
-  name_prefix = regexreplace(lower("${var.project_name}-${var.environment}"), "[^a-z0-9-]", "")
+  name_prefix = replace(lower("${var.project_name}-${var.environment}"), "/[^a-z0-9-]/", "")
 
   common_tags = merge(
     {
@@ -11,11 +11,10 @@ locals {
   )
 
   resource_group_name   = "rg-${local.name_prefix}"
-  acr_name              = regexreplace("acr${local.name_prefix}", "[^a-z0-9]", "")
-  storage_account_name   = substr(regexreplace("st${local.name_prefix}", "[^a-z0-9]", ""), 0, 24)
-  key_vault_name         = substr(regexreplace("kv${local.name_prefix}", "[^a-z0-9]", ""), 0, 24)
-  postgres_server_name   = substr(regexreplace("psql${local.name_prefix}", "[^a-z0-9]", ""), 0, 63)
-  redis_name             = substr(regexreplace("redis${local.name_prefix}", "[^a-z0-9]", ""), 0, 63)
+  acr_name              = replace("acr${local.name_prefix}", "/[^a-z0-9]/", "")
+  storage_account_name   = substr(replace("st${local.name_prefix}", "/[^a-z0-9]/", ""), 0, 24)
+  key_vault_name         = substr(replace("kv${local.name_prefix}", "/[^a-z0-9]/", ""), 0, 24)
+  postgres_server_name   = substr(replace("psql${local.name_prefix}", "/[^a-z0-9]/", ""), 0, 63)
   log_analytics_name     = "law-${local.name_prefix}"
   app_insights_name      = "appi-${local.name_prefix}"
   container_env_name     = "acae-${local.name_prefix}"
