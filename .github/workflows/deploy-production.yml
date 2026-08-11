@@ -1,22 +1,30 @@
-name: Deploy Production
+name: Deploy
 
 # Deploys the Django API to Azure Container Apps.
 #
 # The frontend is NOT deployed here — it lives on Vercel, which builds from this
-# repository on its own. Earlier versions of this workflow also built and pushed
-# a `web` image to Azure, which meant paying for a second container app that
-# nobody visited.
+# repository on its own. An earlier version of this workflow also pushed a `web`
+# image to Azure, which meant paying for a second container app nobody visited.
 #
-# Manual on purpose. Merging to main should never surprise real students; a
-# person decides when production changes.
+# One environment: main is production. There is no staging, deliberately — a
+# second environment means a second database, and that cost is not worth paying
+# until there is something to protect. Add one when real students depend on the
+# platform, not before.
+#
+# Runs automatically when main changes, and can be triggered by hand to redeploy
+# or to roll back by running it from an older commit.
 
 on:
+  push:
+    branches:
+      - main
+    # Docs and frontend-only changes do not need an API deploy. Vercel handles
+    # the frontend itself.
+    paths:
+      - "backend/**"
+      - "infrastructure/terraform/**"
+      - ".github/workflows/deploy-production.yml"
   workflow_dispatch:
-    inputs:
-      confirm:
-        description: 'Type "deploy" to confirm you mean production'
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -29,21 +37,13 @@ concurrency:
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
-  RESOURCE_GROUP: rg-mooreskillup-prod
   ACR_NAME: acrmooreskillupprod
-  CONTAINER_APP: mooreskillup-prod-api
 
 jobs:
   verify:
-    name: Verify before deploying
+    name: Verify
     runs-on: ubuntu-latest
     steps:
-      - name: Check the confirmation
-        if: inputs.confirm != 'deploy'
-        run: |
-          echo "::error::Type 'deploy' to confirm. Got '${{ inputs.confirm }}'."
-          exit 1
-
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -51,10 +51,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements/dev.txt
 
-      - run: pip install -r backend/requirements/dev.txt
+      - run: pip install -r requirements/dev.txt
         working-directory: backend
 
-      # The same gates CI runs. Production deploys should never be the first
+      # The same gates CI runs on the PR. Production should never be the first
       # place a broken migration or a failing test is discovered.
       - name: Lint
         run: python -m ruff check .
@@ -75,9 +75,7 @@ jobs:
     name: Build and deploy
     needs: verify
     runs-on: ubuntu-latest
-    environment: production # add required reviewers here to gate deploys
-    outputs:
-      api_url: ${{ steps.urls.outputs.api_url }}
+    environment: production # add required reviewers here to gate deploys later
     steps:
       - uses: actions/checkout@v4
 
@@ -111,7 +109,7 @@ jobs:
             -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
             -backend-config="key=production.terraform.tfstate"
 
-      # Pinned to the commit's own image, so a deploy is reproducible and a
+      # Pinned to this commit's own image, so a deploy is reproducible and a
       # rollback is just re-running this workflow from an older commit.
       - name: Terraform apply
         working-directory: infrastructure/terraform
@@ -128,8 +126,8 @@ jobs:
         working-directory: infrastructure/terraform
         run: echo "api_url=$(terraform output -raw api_url)" >> "$GITHUB_OUTPUT"
 
-      # The app scales to zero, so the first request wakes it. Retry rather than
-      # calling a cold start a failure.
+      # The app scales to zero, so the first request has to wake it. Retry
+      # rather than calling a cold start a failed deploy.
       - name: Smoke test
         run: |
           API="${{ steps.urls.outputs.api_url }}"
@@ -145,9 +143,11 @@ jobs:
       - name: Summary
         run: |
           {
-            echo "### Deployed to production"
+            echo "### Deployed"
             echo ""
             echo "- **Commit:** \`${{ github.sha }}\`"
             echo "- **API:** ${{ steps.urls.outputs.api_url }}"
             echo "- **Image:** \`api:${{ github.sha }}\`"
+            echo ""
+            echo "To roll back, re-run this workflow from an earlier commit."
           } >> "$GITHUB_STEP_SUMMARY"
