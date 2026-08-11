@@ -75,7 +75,16 @@ jobs:
     name: Build and deploy
     needs: verify
     runs-on: ubuntu-latest
-    environment: production # add required reviewers here to gate deploys later
+    # Deliberately no `environment:`. The OIDC token's subject changes when a
+    # job runs in a named environment, and this repository already has
+    # Vercel-created environments called "Production" and "Preview" — so a
+    # lowercase `production` here could resolve to a differently-cased
+    # environment and produce a subject the federated credential does not match.
+    # Without it the subject is `repo:...:ref:refs/heads/main`, which is exactly
+    # when this workflow runs.
+    #
+    # Add an environment later if deploys should need a reviewer's approval, and
+    # register a federated credential for that exact name at the same time.
     steps:
       - uses: actions/checkout@v4
 
