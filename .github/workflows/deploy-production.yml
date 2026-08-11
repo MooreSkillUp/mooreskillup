@@ -75,7 +75,16 @@ jobs:
     name: Build and deploy
     needs: verify
     runs-on: ubuntu-latest
-    environment: production # add required reviewers here to gate deploys later
+    # Deliberately no `environment:`. The OIDC token's subject changes when a
+    # job runs in a named environment, and this repository already has
+    # Vercel-created environments called "Production" and "Preview" — so a
+    # lowercase `production` here could resolve to a differently-cased
+    # environment and produce a subject the federated credential does not match.
+    # Without it the subject is `repo:...:ref:refs/heads/main`, which is exactly
+    # when this workflow runs.
+    #
+    # Add an environment later if deploys should need a reviewer's approval, and
+    # register a federated credential for that exact name at the same time.
     steps:
       - uses: actions/checkout@v4
 
@@ -109,16 +118,32 @@ jobs:
             -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
             -backend-config="key=production.terraform.tfstate"
 
-      # Pinned to this commit's own image, so a deploy is reproducible and a
-      # rollback is just re-running this workflow from an older commit.
+      # Every value is passed explicitly rather than read from a tfvars file.
+      # environments/prod/terraform.tfvars holds live credentials and is
+      # gitignored, so it does not exist in a CI checkout — an earlier version
+      # of this step pointed at it and failed on the first real deploy.
+      #
+      # Secrets come from GitHub secrets, everything else from repository
+      # variables, so changing a domain is a settings edit rather than a code
+      # change.
+      #
+      # The image is pinned to this commit's SHA, which makes a deploy
+      # reproducible and a rollback just re-running this workflow from an
+      # earlier commit.
       - name: Terraform apply
         working-directory: infrastructure/terraform
         run: |
           terraform apply -auto-approve \
-            -var-file=environments/prod/terraform.tfvars \
+            -var="environment=${{ vars.TF_ENVIRONMENT }}" \
+            -var="location=${{ vars.TF_LOCATION }}" \
             -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
-            -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}" \
+            -var="django_allowed_hosts=${{ vars.DJANGO_ALLOWED_HOSTS }}" \
+            -var="cors_allowed_origins=${{ vars.CORS_ALLOWED_ORIGINS }}" \
+            -var="frontend_url=${{ vars.FRONTEND_URL }}" \
+            -var="next_public_api_url=${{ vars.NEXT_PUBLIC_API_URL }}" \
+            -var="db_admin_username=${{ vars.DB_ADMIN_USERNAME }}" \
             -var="db_admin_password=${{ secrets.DB_ADMIN_PASSWORD }}" \
+            -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}" \
             -var="api_image=${{ env.ACR_NAME }}.azurecr.io/api:${{ github.sha }}"
 
       - name: Read the API URL
