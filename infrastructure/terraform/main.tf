@@ -40,14 +40,14 @@ module "key_vault" {
 }
 
 module "postgres" {
-  source              = "./modules/postgres"
-  name                = local.postgres_server_name
-  resource_group_name = module.resource_group.name
-  location            = var.location
-  administrator_login = var.db_admin_username
+  source                 = "./modules/postgres"
+  name                   = local.postgres_server_name
+  resource_group_name    = module.resource_group.name
+  location               = var.location
+  administrator_login    = var.db_admin_username
   administrator_password = var.db_admin_password
-  sku_name            = var.db_sku_name
-  tags                = local.common_tags
+  sku_name               = var.db_sku_name
+  tags                   = local.common_tags
 }
 
 module "container_app_environment" {
@@ -65,27 +65,27 @@ module "container_apps" {
   # actual architecture: API on Azure, frontend on Vercel.
   count = var.api_image != "" ? 1 : 0
 
-  source                      = "./modules/container_apps"
-  name_prefix                 = local.name_prefix
-  resource_group_name         = module.resource_group.name
-  environment_id              = module.container_app_environment.id
-  registry_server             = module.acr.login_server
-  registry_username           = module.acr.admin_username
-  registry_password           = module.acr.admin_password
-  api_image                   = local.api_image
-  web_image                   = var.web_image
-  django_secret_key           = var.django_secret_key
-  django_allowed_hosts        = var.django_allowed_hosts
-  cors_allowed_origins        = var.cors_allowed_origins
-  frontend_url                = var.frontend_url
-  next_public_api_url         = var.next_public_api_url
-  postgres_host               = module.postgres.host
-  postgres_db_name            = module.postgres.database_name
-  postgres_admin_username     = var.db_admin_username
-  postgres_admin_password     = var.db_admin_password
-  storage_account_name        = module.storage.name
-  storage_account_key         = module.storage.primary_access_key
-  min_replicas                = var.container_apps_min_replicas
-  max_replicas                = var.container_apps_max_replicas
-  tags                        = local.common_tags
+  source                  = "./modules/container_apps"
+  name_prefix             = local.name_prefix
+  resource_group_name     = module.resource_group.name
+  environment_id          = module.container_app_environment.id
+  registry_server         = module.acr.login_server
+  registry_username       = module.acr.admin_username
+  registry_password       = module.acr.admin_password
+  api_image               = local.api_image
+  web_image               = var.web_image
+  django_secret_key       = var.django_secret_key
+  django_allowed_hosts    = var.django_allowed_hosts
+  cors_allowed_origins    = var.cors_allowed_origins
+  frontend_url            = var.frontend_url
+  next_public_api_url     = var.next_public_api_url
+  postgres_host           = module.postgres.host
+  postgres_db_name        = module.postgres.database_name
+  postgres_admin_username = var.db_admin_username
+  postgres_admin_password = var.db_admin_password
+  storage_account_name    = module.storage.name
+  storage_account_key     = module.storage.primary_access_key
+  min_replicas            = var.container_apps_min_replicas
+  max_replicas            = var.container_apps_max_replicas
+  tags                    = local.common_tags
 }

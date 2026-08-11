@@ -10,16 +10,16 @@ locals {
     var.tags,
   )
 
-  resource_group_name   = "rg-${local.name_prefix}"
-  acr_name              = replace("acr${local.name_prefix}", "/[^a-z0-9]/", "")
-  storage_account_name   = substr(replace("st${local.name_prefix}", "/[^a-z0-9]/", ""), 0, 24)
-  key_vault_name         = substr(replace("kv${local.name_prefix}", "/[^a-z0-9]/", ""), 0, 24)
-  postgres_server_name   = substr(replace("psql${local.name_prefix}", "/[^a-z0-9]/", ""), 0, 63)
-  log_analytics_name     = "law-${local.name_prefix}"
-  app_insights_name      = "appi-${local.name_prefix}"
-  container_env_name     = "acae-${local.name_prefix}"
-  api_container_name     = "api"
-  web_container_name     = "web"
-  api_image              = var.api_image != "" ? var.api_image : "${module.acr.login_server}/api:latest"
-  web_image              = var.web_image != "" ? var.web_image : "${module.acr.login_server}/web:latest"
+  resource_group_name  = "rg-${local.name_prefix}"
+  acr_name             = replace("acr${local.name_prefix}", "/[^a-z0-9]/", "")
+  storage_account_name = substr(replace("st${local.name_prefix}", "/[^a-z0-9]/", ""), 0, 24)
+  key_vault_name       = substr(replace("kv${local.name_prefix}", "/[^a-z0-9]/", ""), 0, 24)
+  postgres_server_name = substr(replace("psql${local.name_prefix}", "/[^a-z0-9]/", ""), 0, 63)
+  log_analytics_name   = "law-${local.name_prefix}"
+  app_insights_name    = "appi-${local.name_prefix}"
+  container_env_name   = "acae-${local.name_prefix}"
+  api_container_name   = "api"
+  web_container_name   = "web"
+  api_image            = var.api_image != "" ? var.api_image : "${module.acr.login_server}/api:latest"
+  web_image            = var.web_image != "" ? var.web_image : "${module.acr.login_server}/web:latest"
 }
