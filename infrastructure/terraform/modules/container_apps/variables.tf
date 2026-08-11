@@ -83,3 +83,20 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "storage_account_name" {
+  type        = string
+  description = "Blob storage account holding uploaded media."
+}
+
+variable "storage_account_key" {
+  type        = string
+  sensitive   = true
+  description = "Access key for the media storage account."
+}
+
+variable "storage_media_container" {
+  type        = string
+  default     = "media"
+  description = "Blob container that uploads are written to."
+}

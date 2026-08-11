@@ -1,102 +1,153 @@
-name: Deploy Production
+name: Deploy
+
+# Deploys the Django API to Azure Container Apps.
+#
+# The frontend is NOT deployed here — it lives on Vercel, which builds from this
+# repository on its own. An earlier version of this workflow also pushed a `web`
+# image to Azure, which meant paying for a second container app nobody visited.
+#
+# One environment: main is production. There is no staging, deliberately — a
+# second environment means a second database, and that cost is not worth paying
+# until there is something to protect. Add one when real students depend on the
+# platform, not before.
+#
+# Runs automatically when main changes, and can be triggered by hand to redeploy
+# or to roll back by running it from an older commit.
 
 on:
+  push:
+    branches:
+      - main
+    # Docs and frontend-only changes do not need an API deploy. Vercel handles
+    # the frontend itself.
+    paths:
+      - "backend/**"
+      - "infrastructure/terraform/**"
+      - ".github/workflows/deploy-production.yml"
   workflow_dispatch:
-    inputs:
-      api_image:
-        description: "API image tag to deploy"
-        required: true
-        type: string
-      web_image:
-        description: "Frontend image tag to deploy"
-        required: true
-        type: string
 
 permissions:
   contents: read
-  id-token: write
+  id-token: write # required for OIDC login to Azure
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # never interrupt a half-finished deploy
 
 env:
-  TF_IN_AUTOMATION: true
-  TF_INPUT: false
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  ACR_NAME: acrmooreskillupprod
 
 jobs:
-  deploy:
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@v4
-      - uses: azure/login@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements/dev.txt
+
+      - run: pip install -r requirements/dev.txt
+        working-directory: backend
+
+      # The same gates CI runs on the PR. Production should never be the first
+      # place a broken migration or a failing test is discovered.
+      - name: Lint
+        run: python -m ruff check .
+        working-directory: backend
+
+      - name: Tests
+        run: python -m pytest -q
+        working-directory: backend
+
+      - name: Check for model changes with no migration
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+          DJANGO_SECRET_KEY: ci-secret-key
+        run: python manage.py makemigrations --check --dry-run
+        working-directory: backend
+
+  deploy:
+    name: Build and deploy
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production # add required reviewers here to gate deploys later
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sign in to Azure
+        uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Built by the registry rather than a local docker build: no registry
+      # credentials to store, and the source never leaves Azure.
+      - name: Build the API image
+        run: |
+          az acr build \
+            --registry "$ACR_NAME" \
+            --image "api:${{ github.sha }}" \
+            --image "api:latest" \
+            --file backend/docker/django/Dockerfile .
+
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
       - name: Terraform init
         working-directory: infrastructure/terraform
-        run: >
-          terraform init
-          -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}"
-          -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}"
-          -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}"
-          -backend-config="key=production.terraform.tfstate"
-      - name: Terraform apply foundation
-        working-directory: infrastructure/terraform
-        run: >
-          terraform apply -auto-approve
-          -var-file=environments/prod/terraform.tfvars.example
-          -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}"
-          -var="db_admin_password=${{ secrets.DB_ADMIN_PASSWORD }}"
-          -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}"
-      - name: Read ACR details
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
+            -backend-config="key=production.terraform.tfstate"
+
+      # Pinned to this commit's own image, so a deploy is reproducible and a
+      # rollback is just re-running this workflow from an older commit.
+      - name: Terraform apply
         working-directory: infrastructure/terraform
         run: |
-          ACR_LOGIN_SERVER=$(terraform output -raw acr_login_server)
-          ACR_USERNAME=$(terraform output -raw acr_admin_username)
-          ACR_PASSWORD=$(terraform output -raw acr_admin_password)
-          echo "::add-mask::$ACR_PASSWORD"
-          echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
-          echo "ACR_USERNAME=$ACR_USERNAME" >> $GITHUB_ENV
-          echo "ACR_PASSWORD=$ACR_PASSWORD" >> $GITHUB_ENV
-      - name: Log in to ACR
-        run: echo "$ACR_PASSWORD" | docker login "$ACR_LOGIN_SERVER" -u "$ACR_USERNAME" --password-stdin
-      - uses: docker/setup-buildx-action@v3
-      - name: Build and push API image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: |
-            ${{ env.ACR_LOGIN_SERVER }}/api:${{ inputs.api_image }}
-            ${{ env.ACR_LOGIN_SERVER }}/api:latest
-      - name: Build and push Web image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.frontend
-          push: true
-          tags: |
-            ${{ env.ACR_LOGIN_SERVER }}/web:${{ inputs.web_image }}
-            ${{ env.ACR_LOGIN_SERVER }}/web:latest
-      - name: Terraform apply apps
+          terraform apply -auto-approve \
+            -var-file=environments/prod/terraform.tfvars \
+            -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+            -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}" \
+            -var="db_admin_password=${{ secrets.DB_ADMIN_PASSWORD }}" \
+            -var="api_image=${{ env.ACR_NAME }}.azurecr.io/api:${{ github.sha }}"
+
+      - name: Read the API URL
+        id: urls
         working-directory: infrastructure/terraform
-        run: >
-          terraform apply -auto-approve
-          -var-file=environments/prod/terraform.tfvars.example
-          -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}"
-          -var="db_admin_password=${{ secrets.DB_ADMIN_PASSWORD }}"
-          -var="api_image=${{ env.ACR_LOGIN_SERVER }}/api:${{ inputs.api_image }}"
-          -var="web_image=${{ env.ACR_LOGIN_SERVER }}/web:${{ inputs.web_image }}"
-          -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}"
-          -var="next_public_api_url=${{ secrets.PROD_API_URL }}"
-          -var="frontend_url=${{ secrets.PROD_WEB_URL }}"
-      - name: Read production URLs
-        working-directory: infrastructure/terraform
+        run: echo "api_url=$(terraform output -raw api_url)" >> "$GITHUB_OUTPUT"
+
+      # The app scales to zero, so the first request has to wake it. Retry
+      # rather than calling a cold start a failed deploy.
+      - name: Smoke test
         run: |
-          echo "PROD_API_URL=$(terraform output -raw api_url)" >> $GITHUB_ENV
-          echo "PROD_WEB_URL=$(terraform output -raw web_url)" >> $GITHUB_ENV
-      - name: Smoke test production
+          API="${{ steps.urls.outputs.api_url }}"
+          for attempt in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$API/api/platform/status/" || true)
+            echo "attempt $attempt: HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 10
+          done
+          echo "::error::API did not return 200 after deploy"
+          exit 1
+
+      - name: Summary
         run: |
-          curl -fsS "$PROD_WEB_URL" >/dev/null
-          curl -fsS "$PROD_API_URL/api/auth/health/" >/dev/null
+          {
+            echo "### Deployed"
+            echo ""
+            echo "- **Commit:** \`${{ github.sha }}\`"
+            echo "- **API:** ${{ steps.urls.outputs.api_url }}"
+            echo "- **Image:** \`api:${{ github.sha }}\`"
+            echo ""
+            echo "To roll back, re-run this workflow from an earlier commit."
+          } >> "$GITHUB_STEP_SUMMARY"

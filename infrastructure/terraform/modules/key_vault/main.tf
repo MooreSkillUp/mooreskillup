@@ -5,6 +5,6 @@ resource "azurerm_key_vault" "this" {
   tenant_id                  = var.tenant_id
   sku_name                   = "standard"
   soft_delete_retention_days = 30
-  purge_protection_enabled    = true
+  purge_protection_enabled   = true
   tags                       = var.tags
 }

@@ -1,7 +1,7 @@
 resource "azurerm_container_app" "api" {
   name                         = "${var.name_prefix}-api"
   resource_group_name          = var.resource_group_name
-  container_app_environment_id  = var.environment_id
+  container_app_environment_id = var.environment_id
   revision_mode                = "Single"
   tags                         = var.tags
 
@@ -71,6 +71,20 @@ resource "azurerm_container_app" "api" {
         name  = "DATABASE_PASSWORD"
         value = var.postgres_admin_password
       }
+      # Uploads go to blob storage; a container filesystem does not survive a
+      # deploy, so without these every uploaded image is lost on the next one.
+      env {
+        name  = "AZURE_STORAGE_ACCOUNT"
+        value = var.storage_account_name
+      }
+      env {
+        name  = "AZURE_STORAGE_KEY"
+        value = var.storage_account_key
+      }
+      env {
+        name  = "AZURE_STORAGE_CONTAINER"
+        value = var.storage_media_container
+      }
     }
   }
 }
@@ -78,13 +92,13 @@ resource "azurerm_container_app" "api" {
 # Only created when a web image is supplied. Deployments that keep the
 # frontend on Vercel simply leave web_image empty.
 resource "azurerm_container_app" "web" {
-  count                       = var.web_image != "" ? 1 : 0
+  count = var.web_image != "" ? 1 : 0
 
-  name                        = "${var.name_prefix}-web"
-  resource_group_name         = var.resource_group_name
+  name                         = "${var.name_prefix}-web"
+  resource_group_name          = var.resource_group_name
   container_app_environment_id = var.environment_id
-  revision_mode               = "Single"
-  tags                        = var.tags
+  revision_mode                = "Single"
+  tags                         = var.tags
 
   secret {
     name  = "acr-password"
