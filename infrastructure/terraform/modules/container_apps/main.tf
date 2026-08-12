@@ -73,6 +73,19 @@ resource "azurerm_container_app" "api" {
       }
       # Uploads go to blob storage; a container filesystem does not survive a
       # deploy, so without these every uploaded image is lost on the next one.
+      # Temporary: return the refresh token in the auth response body so the
+      # app can keep a fallback copy. Needed only because the frontend
+      # (Vercel) and the API (Azure) are on different registrable domains, which
+      # makes the httpOnly session cookie third-party — Safari drops it outright
+      # and an installed PWA partitions storage harder still, so students are
+      # signed out on every launch.
+      #
+      # Set this to "false" the moment both sit under one domain. The cookie
+      # path already works and is strictly safer.
+      env {
+        name  = "AUTH_RETURN_REFRESH_IN_BODY"
+        value = var.auth_return_refresh_in_body
+      }
       env {
         name  = "AZURE_STORAGE_ACCOUNT"
         value = var.storage_account_name

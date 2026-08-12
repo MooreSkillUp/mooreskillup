@@ -1,12 +1,12 @@
-name: Deploy
+﻿name: Deploy
 
 # Deploys the Django API to Azure Container Apps.
 #
-# The frontend is NOT deployed here — it lives on Vercel, which builds from this
+# The frontend is NOT deployed here â€” it lives on Vercel, which builds from this
 # repository on its own. An earlier version of this workflow also pushed a `web`
 # image to Azure, which meant paying for a second container app nobody visited.
 #
-# One environment: main is production. There is no staging, deliberately — a
+# One environment: main is production. There is no staging, deliberately â€” a
 # second environment means a second database, and that cost is not worth paying
 # until there is something to protect. Add one when real students depend on the
 # platform, not before.
@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     # Deliberately no `environment:`. The OIDC token's subject changes when a
     # job runs in a named environment, and this repository already has
-    # Vercel-created environments called "Production" and "Preview" — so a
+    # Vercel-created environments called "Production" and "Preview" â€” so a
     # lowercase `production` here could resolve to a differently-cased
     # environment and produce a subject the federated credential does not match.
     # Without it the subject is `repo:...:ref:refs/heads/main`, which is exactly
@@ -120,7 +120,7 @@ jobs:
 
       # Every value is passed explicitly rather than read from a tfvars file.
       # environments/prod/terraform.tfvars holds live credentials and is
-      # gitignored, so it does not exist in a CI checkout — an earlier version
+      # gitignored, so it does not exist in a CI checkout â€” an earlier version
       # of this step pointed at it and failed on the first real deploy.
       #
       # Secrets come from GitHub secrets, everything else from repository
@@ -144,6 +144,7 @@ jobs:
             -var="db_admin_username=${{ vars.DB_ADMIN_USERNAME }}" \
             -var="db_admin_password=${{ secrets.DB_ADMIN_PASSWORD }}" \
             -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}" \
+            -var="auth_return_refresh_in_body=${{ vars.AUTH_RETURN_REFRESH_IN_BODY }}" \
             -var="api_image=${{ env.ACR_NAME }}.azurecr.io/api:${{ github.sha }}"
 
       - name: Read the API URL

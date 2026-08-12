@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 
 import { BrandLogo } from "@/components/shared/BrandLogo";
+import { BrandSpinner } from "@/components/shared/BrandSpinner";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { Button } from "@/components/ui-kit/Button";
 import { getHomeRouteForUser, useAuth } from "@/lib/auth";
@@ -45,15 +46,9 @@ export default function HomePage() {
 /** Branded hold screen — bridges the OS splash and the first real screen. */
 function LaunchScreen() {
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-6 bg-background px-6">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-8 bg-background px-6">
       <BrandMark />
-      <div
-        className="h-1 w-28 overflow-hidden rounded-full bg-muted"
-        role="status"
-        aria-label="Loading MooreSkillUp"
-      >
-        <div className="h-full w-1/3 animate-[msuIndeterminate_1.1s_ease-in-out_infinite] rounded-full bg-accent" />
-      </div>
+      <BrandSpinner size="md" label="Loading MooreSkillUp" />
     </div>
   );
 }

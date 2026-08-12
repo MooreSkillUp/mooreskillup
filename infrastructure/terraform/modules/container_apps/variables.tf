@@ -100,3 +100,9 @@ variable "storage_media_container" {
   default     = "media"
   description = "Blob container that uploads are written to."
 }
+
+variable "auth_return_refresh_in_body" {
+  type        = string
+  default     = "false"
+  description = "Return the refresh token in the auth response body. Only needed while the app and API are on different domains."
+}

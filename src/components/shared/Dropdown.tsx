@@ -14,6 +14,7 @@ export function Dropdown({
   open,
   onClose,
   align = "right",
+  mobileSheet = false,
   className,
   labelledBy,
   children,
@@ -21,6 +22,16 @@ export function Dropdown({
   open: boolean;
   onClose: () => void;
   align?: "left" | "right";
+  /**
+   * On phones, pin the panel across the viewport instead of anchoring it to the
+   * trigger.
+   *
+   * A wide panel anchored to a button that isn't the rightmost one extends
+   * leftwards past the edge of a narrow screen — which is exactly what the
+   * notification panel did, since the bell sits inboard of the avatar. Anything
+   * wider than a couple of menu items wants this.
+   */
+  mobileSheet?: boolean;
   className?: string;
   labelledBy?: string;
   children: ReactNode;
@@ -64,6 +75,10 @@ export function Dropdown({
         "absolute top-[calc(100%+0.5rem)] z-50 rounded-2xl border border-border bg-card shadow-xl shadow-black/5",
         "animate-in fade-in slide-in-from-top-1 duration-150",
         align === "right" ? "right-0" : "left-0",
+        // Below sm, span the viewport with a small inset and sit clear of the
+        // sticky header and the notch, rather than hanging off the trigger.
+        mobileSheet &&
+          "max-sm:fixed max-sm:left-3 max-sm:right-3 max-sm:w-auto max-sm:top-[calc(env(safe-area-inset-top)+4.25rem)]",
         className,
       )}
     >
