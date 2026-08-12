@@ -100,3 +100,17 @@ variable "container_apps_max_replicas" {
   description = "Maximum replicas for container apps."
   default     = 3
 }
+
+variable "auth_return_refresh_in_body" {
+  type        = string
+  default     = "false"
+  description = <<-EOT
+    Return the refresh token in the auth response body so the browser can keep a
+    fallback copy in localStorage.
+
+    Only set this while the frontend and the API are on different registrable
+    domains, which makes the session cookie third-party and unusable in Safari
+    and in an installed PWA. Turn it off once both share a domain: the httpOnly
+    cookie cannot be read by scripts, and this can.
+  EOT
+}

@@ -1,4 +1,5 @@
 import contextlib
+import os
 import secrets
 from datetime import timedelta
 
@@ -173,9 +174,30 @@ def clear_auth_cookies(response: Response):
     return response
 
 
+def include_refresh_in_body():
+    """Whether to return the refresh token in the response body.
+
+    Off by default, and it should stay off wherever the API and the frontend
+    share a site: the httpOnly cookie is unreadable to scripts, and a token in
+    the body ends up in localStorage where any script on the page can take it.
+
+    It exists because MooreSkillUp currently runs the frontend on
+    mooreskillup.vercel.app and the API on azurecontainerapps.io - different
+    registrable domains, so the cookie is third-party. Safari blocks those
+    outright and an installed PWA partitions storage harder still, so the cookie
+    never comes back and every launch lands on the sign-in screen.
+
+    Turn this off again the moment both live under one domain. It is one
+    environment variable, and the cookie path already works.
+    """
+    return str(os.getenv("AUTH_RETURN_REFRESH_IN_BODY", "")).strip().lower() in {"1", "true", "yes"}
+
+
 def build_session_auth_response(user, request=None):
     session, access, refresh = create_user_session(user, request=request)
     payload = {"access": access, "user": UserSerializer(user).data}
+    if include_refresh_in_body():
+        payload["refresh"] = refresh
     response = Response(payload)
     return set_auth_cookies(response, refresh, session, request=request)
 

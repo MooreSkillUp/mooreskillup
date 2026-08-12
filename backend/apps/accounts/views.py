@@ -38,6 +38,7 @@ from .session_auth import (
     build_session_auth_response,
     clear_auth_cookies,
     clear_failed_logins,
+    include_refresh_in_body,
     refresh_session_from_token,
     register_failed_login,
     revoke_all_sessions,
@@ -530,7 +531,12 @@ class RefreshView(APIView):
             )
             return clear_auth_cookies(cleared)
 
-        auth_response = response.Response({"access": access, "user": UserSerializer(session.user).data})
+        payload = {"access": access, "user": UserSerializer(session.user).data}
+        # Refresh tokens rotate, so a client relying on the body must receive the
+        # new one or its next refresh fails and the session dies anyway.
+        if include_refresh_in_body():
+            payload["refresh"] = refreshed
+        auth_response = response.Response(payload)
         return set_auth_cookies(auth_response, refreshed, session, request=request)
 
 

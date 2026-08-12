@@ -176,7 +176,8 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
             <Dropdown
               open={notificationsOpen}
               onClose={() => setNotificationsOpen(false)}
-              className="w-[min(22rem,calc(100vw-2rem))]"
+              mobileSheet
+              className="w-[22rem]"
             >
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <span className="text-sm font-semibold">Notifications</span>
