@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BadgeCheck, Loader2, XCircle } from "lucide-react";
+import { BadgeCheck, XCircle } from "lucide-react";
+import { BrandSpinner } from "@/components/shared/BrandSpinner";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { verifyPayment } from "@/lib/student";
@@ -50,7 +51,7 @@ function CallbackInner() {
       <div className="mx-auto max-w-md py-20 text-center">
         {phase === "verifying" && (
           <>
-            <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
+            <BrandSpinner size="lg" className="mx-auto" label="Confirming your payment" />
             <h1 className="mt-4 font-display text-2xl font-bold">Confirming your payment…</h1>
             <p className="mt-2 text-muted-foreground">Please wait while we verify with Paystack.</p>
           </>
