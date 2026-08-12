@@ -1,5 +1,5 @@
-import { LoaderCircle } from "lucide-react";
 import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { BrandSpinner } from "@/components/shared/BrandSpinner";
 import { cn } from "@/lib/utils";
 
 type Variant = "primary" | "accent" | "outline" | "ghost" | "subtle";
@@ -54,7 +54,9 @@ export const Button = forwardRef<HTMLButtonElement, Props>(
       aria-busy={loading}
       {...props}
     >
-      {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+      {/* The same mark as every other wait in the app, rather than a second
+          spinner shape borrowed from the icon set. */}
+      {loading ? <BrandSpinner size="xs" label="" /> : null}
       {loading ? loadingText ?? children : children}
     </button>
   ),

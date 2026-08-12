@@ -3,21 +3,27 @@
 import { cn } from "@/lib/utils";
 
 const SIZES = {
-  sm: { box: 40, stroke: 3, mark: "text-[11px]" },
-  md: { box: 64, stroke: 4, mark: "text-base" },
-  lg: { box: 88, stroke: 5, mark: "text-xl" },
+  xs: { box: 16, stroke: 10 },
+  sm: { box: 24, stroke: 9 },
+  md: { box: 36, stroke: 8 },
+  lg: { box: 56, stroke: 7 },
 } as const;
 
 /**
- * A circular MSU loading mark.
+ * The app's loading mark.
  *
- * Used wherever the app is waiting on something slow enough that a blank screen
- * would read as broken — the PWA launch screen most of all, where a cold start
- * on a scaled-to-zero API can take tens of seconds.
+ * One shape everywhere: a faint track with a single accent arc turning over it.
+ * No wordmark, no bouncing — a loader is furniture, and the quickest way to make
+ * an interface feel cheap is to make its furniture perform.
  *
- * The ring is a dashed SVG circle rather than a spinning border so it stays
- * perfectly round at any size and inherits the brand accent, and the initials
- * sit still in the middle so the mark stays legible while it turns.
+ * Stroke width is expressed against a fixed 100-unit viewBox and gets *thinner*
+ * as the mark grows, so a 16px inline spinner stays visible while a 56px one
+ * stays delicate. A single fixed width would look heavy at large sizes and
+ * disappear at small ones.
+ *
+ * Prefer a skeleton when you know the shape of what is coming — it tells the
+ * reader more. Use this for waits whose length you cannot predict: a cold start,
+ * a sign-in, a payment redirect.
  */
 export function BrandSpinner({
   size = "md",
@@ -28,28 +34,34 @@ export function BrandSpinner({
   label?: string;
   className?: string;
 }) {
-  const { box, stroke, mark } = SIZES[size];
-  const radius = 50 - stroke * 1.5;
+  const { box, stroke } = SIZES[size];
+  const radius = 50 - stroke / 2 - 2;
   const circumference = 2 * Math.PI * radius;
 
   return (
-    <div
+    <span
       role="status"
       aria-label={label}
-      className={cn("relative inline-flex items-center justify-center", className)}
+      className={cn("inline-flex shrink-0", className)}
       style={{ width: box, height: box }}
     >
-      <svg viewBox="0 0 100 100" className="h-full w-full animate-spin" style={{ animationDuration: "1.15s" }}>
-        {/* The full ring, faint — gives the arc something to travel along. */}
+      <svg
+        viewBox="0 0 100 100"
+        className="h-full w-full animate-spin motion-reduce:animate-none"
+        style={{ animationDuration: "0.85s", animationTimingFunction: "linear" }}
+      >
+        {/* Track. Low opacity rather than a muted colour so the mark sits
+            correctly on cards, on the page, and on a coloured banner alike. */}
         <circle
           cx="50"
           cy="50"
           r={radius}
           fill="none"
           strokeWidth={stroke}
-          className="stroke-muted"
+          className="stroke-current opacity-15"
         />
-        {/* A quarter-turn arc. strokeLinecap keeps the ends soft. */}
+        {/* A little over a quarter turn: enough to read as motion, short enough
+            to stay calm. Round caps keep the ends soft. */}
         <circle
           cx="50"
           cy="50"
@@ -57,20 +69,10 @@ export function BrandSpinner({
           fill="none"
           strokeWidth={stroke}
           strokeLinecap="round"
-          strokeDasharray={`${circumference * 0.25} ${circumference}`}
+          strokeDasharray={`${circumference * 0.28} ${circumference}`}
           className="stroke-accent"
         />
       </svg>
-
-      <span
-        aria-hidden
-        className={cn(
-          "absolute font-display font-bold tracking-tight text-foreground",
-          mark,
-        )}
-      >
-        MSU
-      </span>
-    </div>
+    </span>
   );
 }

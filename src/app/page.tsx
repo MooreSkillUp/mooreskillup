@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 
 import { BrandLogo } from "@/components/shared/BrandLogo";
-import { BrandSpinner } from "@/components/shared/BrandSpinner";
+import { AppLoader } from "@/components/shared/AppLoader";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { Button } from "@/components/ui-kit/Button";
 import { getHomeRouteForUser, useAuth } from "@/lib/auth";
@@ -43,14 +43,14 @@ export default function HomePage() {
   return <Gateway />;
 }
 
-/** Branded hold screen — bridges the OS splash and the first real screen. */
+/**
+ * Branded hold screen — bridges the OS splash and the first real screen.
+ *
+ * Uses the same AppLoader every logged-in page shows, so launching the app and
+ * moving between its pages look like one product rather than two.
+ */
 function LaunchScreen() {
-  return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-8 bg-background px-6">
-      <BrandMark />
-      <BrandSpinner size="md" label="Loading MooreSkillUp" />
-    </div>
-  );
+  return <AppLoader fullScreen label="Loading MooreSkillUp" />;
 }
 
 function Gateway() {
