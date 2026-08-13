@@ -30,6 +30,13 @@ export interface AuthUser {
   id: string;
   username: string;
   displayName: string;
+  /** Real name, collected at registration — what a certificate prints. */
+  firstName: string;
+  lastName: string;
+  /** Server-composed "First Last", falling back to displayName. */
+  fullName: string;
+  /** False for accounts created before real names were collected. */
+  hasRealName: boolean;
   email: string;
   avatar: string;
   avatarUrl?: string;
@@ -62,6 +69,9 @@ interface RegisterPayload {
   email: string;
   password: string;
   displayName?: string;
+  /** Required by the API — a certificate prints this, never the username. */
+  firstName: string;
+  lastName: string;
   interests: Interest[];
   selectedInterest: Interest;
   selectedTrack: TrackName;
@@ -212,6 +222,10 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
     id: raw.id,
     username: raw.username ?? raw.email.split("@")[0] ?? "learner",
     displayName,
+    firstName: raw.firstName ?? "",
+    lastName: raw.lastName ?? "",
+    fullName: raw.fullName || displayName,
+    hasRealName: Boolean(raw.hasRealName),
     email: raw.email,
     avatar: getAvatar(displayName, raw.avatar),
     avatarUrl: raw.avatarUrl,
@@ -635,6 +649,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const syncableKeys = [
         "username",
         "displayName",
+        // Without these, saving a name updates the local copy and never
+        // reaches the server — so it survives until the next reload and then
+        // silently reverts.
+        "firstName",
+        "lastName",
         "avatarUrl",
         "selectedInterest",
         "selectedTrack",

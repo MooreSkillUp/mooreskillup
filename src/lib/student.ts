@@ -792,7 +792,13 @@ export async function createSupportTicket(payload: { category: string; title: st
 
 export interface StudentCertificate {
   id: string;
+  courseId: string;
   courseTitle: string;
+  /** Category and track, for the credential line on the certificate. */
+  categoryName: string;
+  trackName: string;
+  /** The student's real full name — what the certificate prints. */
+  recipientName: string;
   certificateCode: string;
   issuedAt: string;
   verificationUrl: string;
@@ -831,7 +837,11 @@ export function useMyCertificates(enabled = true) {
             const r = c as Record<string, unknown>;
             return {
               id: String(r.id ?? ""),
+              courseId: String(r.course ?? ""),
               courseTitle: String(r.courseTitle ?? r.course_title ?? ""),
+              categoryName: String(r.categoryName ?? ""),
+              trackName: String(r.trackName ?? ""),
+              recipientName: String(r.recipientName ?? ""),
               certificateCode: String(r.certificateCode ?? r.certificate_code ?? ""),
               issuedAt: String(r.issuedAt ?? r.issued_at ?? ""),
               verificationUrl: String(r.verificationUrl ?? r.verification_url ?? ""),
