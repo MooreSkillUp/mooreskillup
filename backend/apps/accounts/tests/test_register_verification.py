@@ -25,6 +25,8 @@ def test_registration_initiates_pending_registration_and_sends_email(db, api_cli
     payload = {
         "email": "student@test.dev",
         "username": "teststudent",
+        "firstName": "Test",
+        "lastName": "Student",
         "password": "password123",
         "confirm": "password123",
         "selectedInterest": "Backend Development",
@@ -196,3 +198,60 @@ def test_complete_onboarding_updates_profile(db, api_client):
     
     profile.refresh_from_db()
     assert profile.onboarded is True
+
+
+def test_real_name_survives_email_verification(db, api_client, setup_platform_settings):
+    """The name typed at signup must reach the created account.
+
+    Registration writes a PendingRegistration row and the real User is only
+    built after the emailed code is confirmed. When first/last name were added
+    to signup, PendingRegistration had no columns for them — so the name was
+    accepted, stored nowhere, and silently dropped at verification. Every
+    existing test still passed, because none of them looked past the pending
+    row. This one does.
+    """
+    register = api_client.post(
+        "/api/auth/register/",
+        {
+            "email": "ada@test.dev",
+            "username": "adalovelace",
+            "firstName": "Ada",
+            "lastName": "Lovelace",
+            "password": "password123",
+            "selectedInterest": "Backend Development",
+            "selectedTrack": "Backend with Python",
+        },
+        format="json",
+    )
+    assert register.status_code == status.HTTP_200_OK
+
+    pending = PendingRegistration.objects.get(email="ada@test.dev")
+    assert pending.first_name == "Ada"
+    assert pending.last_name == "Lovelace"
+
+    verify = api_client.post(
+        "/api/auth/register/verify/",
+        {"pendingId": str(pending.id), "code": pending.code},
+        format="json",
+    )
+    assert verify.status_code == status.HTTP_201_CREATED
+
+    user = User.objects.get(email="ada@test.dev")
+    assert user.first_name == "Ada"
+    assert user.last_name == "Lovelace"
+    # This is what a certificate prints — never the username.
+    assert user.full_name == "Ada Lovelace"
+    assert user.has_real_name is True
+
+
+def test_full_name_falls_back_for_accounts_without_one(db):
+    """Accounts created before real names existed must still render something."""
+    user = User.objects.create_user(
+        email="legacy@test.dev",
+        username="legacyuser",
+        display_name="Legacy Learner",
+        password="password123",
+    )
+    assert user.full_name == "Legacy Learner"
+    # But we know it is not good enough to print, so the UI can ask for a real one.
+    assert user.has_real_name is False

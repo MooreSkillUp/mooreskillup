@@ -39,6 +39,15 @@ class User(UUIDPrimaryKeyModel, AbstractBaseUser, PermissionsMixin, TimeStampedM
     email = models.EmailField(unique=True)
     username = models.CharField(max_length=150, unique=True)
     display_name = models.CharField(max_length=255)
+    # The name that goes on a certificate.
+    #
+    # display_name is whatever someone typed at signup — often a handle. A
+    # certificate printed with "ericmoore207" on it is worthless to the person
+    # holding it, so these are collected separately and are what gets printed.
+    # Blank is allowed because accounts created before this existed have none;
+    # the certificates page asks for them once before the first download.
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="student")
     # Admin tier; only meaningful when role == "admin" (see common/rbac.py).
     admin_role = models.CharField(max_length=20, choices=ADMIN_ROLE_CHOICES, null=True, blank=True)
@@ -71,6 +80,24 @@ class User(UUIDPrimaryKeyModel, AbstractBaseUser, PermissionsMixin, TimeStampedM
 
     def __str__(self):
         return self.email
+
+    @property
+    def full_name(self) -> str:
+        """The name to print on anything official — a certificate above all.
+
+        Falls back to display_name so nothing renders blank for accounts created
+        before first/last name existed. The certificates page asks those students
+        to fill it in before their first download, so the fallback should be rare
+        and never appears on an issued certificate in practice.
+        """
+        parts = [self.first_name.strip(), self.last_name.strip()]
+        full = " ".join(part for part in parts if part)
+        return full or self.display_name
+
+    @property
+    def has_real_name(self) -> bool:
+        """Whether we hold a name good enough to print on a certificate."""
+        return bool(self.first_name.strip() and self.last_name.strip())
 
     @property
     def is_locked(self):
@@ -134,6 +161,11 @@ class PendingRegistration(UUIDPrimaryKeyModel, TimeStampedModel):
     email = models.EmailField(unique=True)
     username = models.CharField(max_length=150)
     display_name = models.CharField(max_length=255)
+    # Carried through the email-verification step. Without these the name typed
+    # at signup is discarded when the real User is created, and the student ends
+    # up with a certificate-less account for no visible reason.
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
     password = models.CharField(max_length=255)  # Hashed password
     role = models.CharField(max_length=20, default="student")
     selected_interest = models.CharField(max_length=100, blank=True)

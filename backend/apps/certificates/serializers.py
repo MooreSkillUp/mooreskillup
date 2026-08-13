@@ -7,6 +7,15 @@ class CertificateSerializer(serializers.ModelSerializer):
     course_title = serializers.CharField(source="course.title", read_only=True)
     courseTitle = serializers.CharField(source="course.title", read_only=True)
     studentName = serializers.CharField(source="student.user.display_name", read_only=True)
+    # What actually gets printed. display_name is whatever someone typed at
+    # signup and is often a handle, which makes a certificate worthless to the
+    # person holding it. full_name falls back to display_name only for accounts
+    # created before real names were collected.
+    recipientName = serializers.CharField(source="student.user.full_name", read_only=True)
+    # The track gives the credential its specificity: "Web Development ·
+    # Frontend Development" says more to an employer than a course title alone.
+    categoryName = serializers.CharField(source="course.category.name", read_only=True, default="")
+    trackName = serializers.CharField(source="course.subcategory.name", read_only=True, default="")
     certificateCode = serializers.CharField(source="certificate_code", read_only=True)
     issuedAt = serializers.DateTimeField(source="issued_at", read_only=True)
     verificationUrl = serializers.URLField(source="verification_url", read_only=True)
@@ -20,6 +29,9 @@ class CertificateSerializer(serializers.ModelSerializer):
             "course_title",
             "courseTitle",
             "studentName",
+            "recipientName",
+            "categoryName",
+            "trackName",
             "certificate_code",
             "certificateCode",
             "issued_at",
