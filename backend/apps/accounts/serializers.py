@@ -107,6 +107,11 @@ class AdminStudentSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     displayName = serializers.CharField(source="display_name", read_only=True)
+    firstName = serializers.CharField(source="first_name", required=False, allow_blank=True)
+    lastName = serializers.CharField(source="last_name", required=False, allow_blank=True)
+    # What goes on a certificate, and whether it is good enough to print.
+    fullName = serializers.CharField(source="full_name", read_only=True)
+    hasRealName = serializers.BooleanField(source="has_real_name", read_only=True)
     avatarUrl = serializers.CharField(source="avatar_url", read_only=True)
     selectedInterest = serializers.SerializerMethodField()
     selectedTrack = serializers.SerializerMethodField()
@@ -129,6 +134,10 @@ class UserSerializer(serializers.ModelSerializer):
             "email",
             "username",
             "displayName",
+            "firstName",
+            "lastName",
+            "fullName",
+            "hasRealName",
             "role",
             "adminRole",
             "permissions",
@@ -252,6 +261,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     displayName = serializers.CharField(source="display_name", required=False)
+    # Editable so students who registered before these existed can supply the
+    # name to print, and so anyone can correct a spelling before downloading.
+    firstName = serializers.CharField(source="first_name", required=False, allow_blank=True, max_length=150)
+    lastName = serializers.CharField(source="last_name", required=False, allow_blank=True, max_length=150)
     # Holds a predefined avatar key (e.g. "av-blue"), not a URL.
     avatarUrl = serializers.CharField(source="avatar_url", required=False, allow_blank=True)
     selectedInterest = serializers.CharField(required=False, allow_blank=True)
@@ -268,6 +281,8 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         fields = (
             "username",
             "displayName",
+            "firstName",
+            "lastName",
             "avatarUrl",
             "selectedInterest",
             "selectedTrack",
@@ -349,6 +364,9 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 class RegisterSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     displayName = serializers.CharField(source="display_name", write_only=True, required=False, allow_blank=True)
+    # Required at signup so a certificate is never printed with a handle on it.
+    firstName = serializers.CharField(source="first_name", write_only=True, max_length=150)
+    lastName = serializers.CharField(source="last_name", write_only=True, max_length=150)
     password = serializers.CharField(write_only=True, min_length=8)
     interests = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
     selectedInterest = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -364,6 +382,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             "username",
             "display_name",
             "displayName",
+            "firstName",
+            "lastName",
             "password",
             "role",
             "interests",

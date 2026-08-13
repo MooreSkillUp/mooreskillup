@@ -18,6 +18,8 @@ export default function AdminRegisterPage() {
   const { notifyError, notifySuccess } = useFeedback();
   const router = useRouter();
   const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
     username: "",
     email: "",
     password: "",
@@ -43,7 +45,9 @@ export default function AdminRegisterPage() {
         username: form.username,
         email: form.email,
         password: form.password,
-        displayName: form.username,
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        displayName: `${form.firstName.trim()} ${form.lastName.trim()}`.trim() || form.username,
         interests: ["Backend Development"],
         selectedInterest: "Backend Development",
         selectedTrack: "Backend with Python",
@@ -109,6 +113,10 @@ export default function AdminRegisterPage() {
           </p>
 
           <form onSubmit={onSubmit} className="mt-8 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input label="First name" value={form.firstName} onChange={setField("firstName")} autoComplete="given-name" required />
+              <Input label="Last name" value={form.lastName} onChange={setField("lastName")} autoComplete="family-name" required />
+            </div>
             <Input label="Username" value={form.username} onChange={setField("username")} required />
             <Input label="Email" type="email" value={form.email} onChange={setField("email")} required />
             <PasswordInput label="Password" autoComplete="new-password" value={form.password} onChange={setField("password")} required />

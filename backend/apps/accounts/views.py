@@ -106,6 +106,8 @@ class RegisterView(generics.CreateAPIView):
         username = data.get("username")
         password = data.get("password")
         display_name = data.get("display_name")
+        first_name = data.get("first_name", "")
+        last_name = data.get("last_name", "")
         role = data.get("role", "student")
         selected_interest = data.get("selectedInterest", "")
         selected_track = data.get("selectedTrack", "")
@@ -121,6 +123,8 @@ class RegisterView(generics.CreateAPIView):
             email=email,
             username=username,
             display_name=display_name,
+            first_name=first_name,
+            last_name=last_name,
             password=make_password(password),
             role=role,
             selected_interest=selected_interest,
@@ -205,6 +209,8 @@ class VerifyRegisterView(APIView):
             email=pending.email,
             username=pending.username,
             display_name=pending.display_name,
+            first_name=pending.first_name,
+            last_name=pending.last_name,
             role=pending.role,
             is_active=True,
         )

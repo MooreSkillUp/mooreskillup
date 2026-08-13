@@ -61,7 +61,14 @@ export default function AuthRegisterPage() {
     error: taxonomyError,
   } = usePlatformTaxonomy();
 
-  const [form, setForm] = useState({ username: "", email: "", password: "", confirm: "" });
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    username: "",
+    email: "",
+    password: "",
+    confirm: "",
+  });
   const [selectedInterest, setSelectedInterest] = useState<Interest>("");
   const [primaryTrack, setPrimaryTrack] = useState<TrackName>("");
   const [secondaryTracks, setSecondaryTracks] = useState<TrackName[]>([]);
@@ -166,7 +173,10 @@ export default function AuthRegisterPage() {
         username: form.username.trim(),
         email: form.email.trim(),
         password: form.password,
-        displayName: form.username.trim(),
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        // Shown around the app; the certificate uses firstName + lastName.
+        displayName: `${form.firstName.trim()} ${form.lastName.trim()}`.trim() || form.username.trim(),
         interests: [selectedInterest],
         selectedInterest,
         selectedTrack: primaryTrack,
@@ -312,12 +322,29 @@ export default function AuthRegisterPage() {
     >
       <form onSubmit={onSubmit} className="space-y-6" noValidate>
         <div className="grid gap-4 sm:grid-cols-2">
+          {/* Collected here rather than later because this is what a
+              certificate prints, and a credential carrying a username is
+              worthless to the person holding it. */}
+          <Input
+            label="First name"
+            value={form.firstName}
+            onChange={setField("firstName")}
+            autoComplete="given-name"
+            autoFocus
+            required
+          />
+          <Input
+            label="Last name"
+            value={form.lastName}
+            onChange={setField("lastName")}
+            autoComplete="family-name"
+            required
+          />
           <Input
             label="Username"
             value={form.username}
             onChange={setField("username")}
             autoComplete="username"
-            autoFocus
             required
           />
           <Input
@@ -474,6 +501,8 @@ export default function AuthRegisterPage() {
             isLoadingTaxonomy ||
             !interests.length ||
             !trackOptions.length ||
+            !form.firstName.trim() ||
+            !form.lastName.trim() ||
             !form.username.trim() ||
             !form.email.trim() ||
             !form.password ||

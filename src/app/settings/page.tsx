@@ -33,6 +33,8 @@ export default function SettingsPage() {
   const { categories } = usePlatformTaxonomy();
   const academicPath = user?.selectedInterest ?? "Backend Development";
   const [username, setUsername] = useState(user?.username ?? "");
+  const [firstName, setFirstName] = useState(user?.firstName ?? "");
+  const [lastName, setLastName] = useState(user?.lastName ?? "");
   const [saved, setSaved] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -133,7 +135,12 @@ export default function SettingsPage() {
     try {
       await updateUser({
         username,
-        displayName: toDisplayName(username),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        // Prefer the real name for display once we have one; fall back to the
+        // username so nothing renders blank.
+        displayName:
+          `${firstName.trim()} ${lastName.trim()}`.trim() || toDisplayName(username),
         email: user?.email,
         interests: [academicPath],
         selectedInterest: academicPath,
@@ -245,6 +252,26 @@ export default function SettingsPage() {
                 })}
               </div>
             </div>
+
+            {/* This is what a certificate prints, so it is worth getting right
+                and worth being able to correct. */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input
+                label="First name"
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+                autoComplete="given-name"
+              />
+              <Input
+                label="Last name"
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+                autoComplete="family-name"
+              />
+            </div>
+            <p className="-mt-1 text-xs text-muted-foreground">
+              Your certificates use this name, not your username.
+            </p>
 
             <div className="grid gap-4 md:grid-cols-2">
               <Input

@@ -111,8 +111,24 @@ REST_FRAMEWORK = {
 # the expense.
 _redis_url = os.getenv("REDIS_URL", "")
 if _redis_url:
-    CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": _redis_url}}
-else:
+    # Only take this path if the driver is actually installed. REDIS_URL is set
+    # in some environments (the local docker image exports it) where `redis` is
+    # not a dependency, and Django resolves the cache backend lazily — so the
+    # first request that touches the cache, which is every throttled auth
+    # endpoint, died with ModuleNotFoundError instead of anything readable.
+    try:
+        import redis  # noqa: F401
+
+        CACHES = {
+            "default": {
+                "BACKEND": "django.core.cache.backends.redis.RedisCache",
+                "LOCATION": _redis_url,
+            }
+        }
+    except ImportError:
+        _redis_url = ""
+
+if not _redis_url:
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.db.DatabaseCache",
