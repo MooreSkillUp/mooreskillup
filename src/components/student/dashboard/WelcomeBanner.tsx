@@ -1,6 +1,6 @@
 "use client";
 
-import { Award, BookOpen, CheckCircle2, Clock } from "lucide-react";
+import { Award, BookOpen, CheckCircle2, Clock, Flame } from "lucide-react";
 
 /** 95 -> "1h 35m", 40 -> "40m", 0 -> "0m". */
 function formatMinutes(total: number) {
@@ -18,12 +18,15 @@ function greeting(): string {
 }
 
 /**
- * The first thing a student sees: who they are, and where they stand.
+ * The top of the student's dashboard.
  *
- * Replaces a separate four-card stat grid. The numbers matter, but they aren't
- * the point of the screen — folding them into the greeting keeps the top of the
- * page to one object instead of five, so Continue Learning stays the loudest
- * thing on the page.
+ * A brand banner rather than another white card: it is the one place on the
+ * page that should feel like MooreSkillUp rather than like a dashboard, and it
+ * gives the eye somewhere to land before the working screen below.
+ *
+ * The stats sit inside it rather than in a separate grid — five objects at the
+ * top of a page compete; one does not. Every figure is recorded, never derived
+ * for effect.
  */
 export function WelcomeBanner({
   name,
@@ -62,33 +65,48 @@ export function WelcomeBanner({
   ];
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-border bg-card">
-      {/* A wash rather than a solid fill, so the card reads as part of the page
-          instead of an advertisement sitting on top of it. */}
+    <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-accent via-accent to-[#e0560a] text-white">
+      {/* Two soft highlights so the fill reads as depth rather than a flat
+          block of orange. Purely decorative. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,var(--color-accent)/12%,transparent_55%),radial-gradient(circle_at_100%_0%,var(--color-primary)/10%,transparent_50%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_88%_-10%,rgba(255,255,255,0.28),transparent_45%),radial-gradient(circle_at_0%_110%,rgba(0,0,0,0.18),transparent_50%)]"
       />
 
-      <div className="relative p-4 sm:p-6">
-        <p className="text-sm text-muted-foreground">{greeting()},</p>
-        <h1 className="mt-0.5 font-display text-xl font-bold tracking-tight sm:text-3xl">
-          {firstName}
-        </h1>
-        {subtitle && <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>}
+      <div className="relative p-5 sm:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-white/75">{greeting()},</p>
+            <h1 className="mt-0.5 font-display text-2xl font-bold tracking-tight sm:text-3xl">
+              {firstName}
+            </h1>
+            {subtitle && <p className="mt-1.5 text-sm text-white/80">{subtitle}</p>}
+          </div>
 
-        <dl className="mt-4 grid grid-cols-2 gap-2 sm:mt-5 sm:gap-2.5 lg:grid-cols-4">
+          {!loading && streakDays > 0 && (
+            <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-sm font-bold backdrop-blur-sm">
+              <Flame className="h-4 w-4" />
+              {streakDays} {streakDays === 1 ? "day" : "days"}
+            </span>
+          )}
+        </div>
+
+        <dl className="mt-5 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
           {stats.map(({ label, value, icon: Icon }) => (
             <div
               key={label}
-              className="rounded-xl border border-border/70 bg-background/60 px-3 py-2 backdrop-blur-sm"
+              className="rounded-xl bg-white/12 px-3 py-2.5 backdrop-blur-sm ring-1 ring-inset ring-white/15"
             >
-              <dt className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+              <dt className="flex items-center gap-1.5 text-[11px] font-medium text-white/70">
                 <Icon className="h-3.5 w-3.5" />
                 {label}
               </dt>
-              <dd className="mt-0.5 font-display text-base font-bold tabular-nums sm:text-lg">
-                {loading ? <span className="inline-block h-5 w-10 animate-pulse rounded bg-muted" /> : value}
+              <dd className="mt-0.5 font-display text-lg font-bold tabular-nums">
+                {loading ? (
+                  <span className="inline-block h-5 w-10 animate-pulse rounded bg-white/25" />
+                ) : (
+                  value
+                )}
               </dd>
             </div>
           ))}
