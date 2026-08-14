@@ -293,11 +293,20 @@ class Command(BaseCommand):
         have something true to show. Certificates are issued by the real
         completion path rather than created directly.
         """
-        pace_map = {"advanced": (4, 0.85), "midway": (3, 0.45), "starting": (2, 0.1), "empty": (0, 0)}
+        # (courses enrolled, how far through them, how many finished outright)
+        # The advanced student finishes one course outright so there is always a
+        # real certificate to look at — a percentage that merely approaches 100
+        # never issues one, and the certificate screens are then untestable.
+        pace_map = {
+            "advanced": (4, 0.85, 1),
+            "midway": (3, 0.45, 0),
+            "starting": (2, 0.1, 0),
+            "empty": (0, 0, 0),
+        }
 
         for profile, pace, _ in students:
-            course_count, completion = pace_map[pace]
-            for course in courses[:course_count]:
+            course_count, completion, finish_outright = pace_map[pace]
+            for course_index, course in enumerate(courses[:course_count]):
                 enrollment, _ = Enrollment.objects.get_or_create(
                     student=profile,
                     course=course,
@@ -309,9 +318,16 @@ class Command(BaseCommand):
                 if not lessons:
                     continue
 
-                finish_count = int(len(lessons) * completion)
+                # The first `finish_outright` courses are completed in full.
+                fraction = 1.0 if course_index < finish_outright else completion
+                finish_count = int(len(lessons) * fraction)
+                # update_or_create, not get_or_create: a row may already exist
+                # from an earlier seed or from opening the lesson, and defaults
+                # are ignored when one is found — which left the opening lesson
+                # of a nearly-finished course marked incomplete, so the dashboard
+                # correctly but confusingly pointed at lesson one.
                 for lesson in lessons[:finish_count]:
-                    LessonProgress.objects.get_or_create(
+                    LessonProgress.objects.update_or_create(
                         enrollment=enrollment,
                         lesson=lesson,
                         defaults={
