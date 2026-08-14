@@ -138,7 +138,11 @@ export default function CoursePage() {
               </div>
 
               <div className="mt-4 text-sm text-muted-foreground">
-                Taught by <strong className="text-foreground">{course.teacherName}</strong>
+                {/* Courses are credited to MooreSkillUp rather than to the
+                    individual who built them: the platform stands behind the
+                    material, and a student's relationship is with the school,
+                    not with whoever happens to be teaching this term. */}
+                Produced by <strong className="text-foreground">MooreSkillUp</strong>
               </div>
 
               {course.techStack.length > 0 && (

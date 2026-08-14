@@ -202,6 +202,48 @@ def build_upcoming_work(student, limit=5):
     ]
 
 
+def _next_lesson_for(enrollment):
+    """The lesson a student should actually open next.
+
+    This used to return `enrollment.last_lesson` — the lesson most recently
+    *opened* — while the dashboard labelled it "Next lesson". For anyone who had
+    finished what they last opened, that meant being sent back to material they
+    had already completed: a student 87% through a course was pointed at lesson
+    one.
+
+    So: resume the last lesson if it is unfinished, otherwise move on to the
+    first lesson they have not completed. Falls back to the opening lesson for
+    someone who has not started, and to None when a course has no lessons.
+    """
+    last = enrollment.last_lesson
+    if last:
+        unfinished = (
+            LessonProgress.objects.filter(enrollment=enrollment, lesson=last)
+            .exclude(status="completed")
+            .exists()
+        )
+        if unfinished:
+            return last
+
+    completed_ids = set(
+        LessonProgress.objects.filter(enrollment=enrollment, status="completed").values_list(
+            "lesson_id", flat=True
+        )
+    )
+    lessons = (
+        Lesson.objects.filter(
+            section__course=enrollment.course, section__is_published=True, is_published=True
+        )
+        .order_by("section__order", "order")
+    )
+    for lesson in lessons:
+        if lesson.id not in completed_ids:
+            return lesson
+
+    # Everything is done; offer the last lesson so the card still links somewhere.
+    return lessons.last()
+
+
 class StudentDashboardView(views.APIView):
     permission_classes = [IsStudentUserRole]
 
@@ -242,6 +284,7 @@ class StudentDashboardView(views.APIView):
             if continue_enrollment and getattr(continue_enrollment, "course_progress", None)
             else 0.0
         )
+        continue_lesson = _next_lesson_for(continue_enrollment) if continue_enrollment else None
 
         return response.Response(
             {
@@ -261,12 +304,8 @@ class StudentDashboardView(views.APIView):
                 "continueLearning": {
                     "courseId": str(continue_enrollment.course.id),
                     "courseTitle": continue_enrollment.course.title,
-                    "lessonId": str(continue_enrollment.last_lesson.id)
-                    if continue_enrollment and continue_enrollment.last_lesson
-                    else None,
-                    "lessonTitle": continue_enrollment.last_lesson.title
-                    if continue_enrollment and continue_enrollment.last_lesson
-                    else None,
+                    "lessonId": str(continue_lesson.id) if continue_lesson else None,
+                    "lessonTitle": continue_lesson.title if continue_lesson else None,
                     "progressPercent": continue_progress,
                 }
                 if continue_enrollment
