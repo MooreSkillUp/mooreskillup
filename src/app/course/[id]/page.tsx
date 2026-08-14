@@ -142,7 +142,7 @@ export default function CoursePage() {
                     individual who built them: the platform stands behind the
                     material, and a student's relationship is with the school,
                     not with whoever happens to be teaching this term. */}
-                A project by <strong className="text-foreground">MooreSkillUp</strong>
+                Produced by <strong className="text-foreground">MooreSkillUp</strong>
               </div>
 
               {course.techStack.length > 0 && (
