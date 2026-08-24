@@ -52,6 +52,13 @@ export interface EnrolledCourse {
   lastAccessedAt: string | null;
 }
 
+/** Coerce an API value to a number, treating null/undefined as the fallback. */
+function toNumber(value: unknown, fallback = 0): number {
+  if (value === null || value === undefined) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 export function normalizeStudentCourse(raw: Record<string, unknown>): StudentCourse {
   const num = (v: unknown, d = 0) => (v === null || v === undefined ? d : Number(v));
   const arr = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x)) : []);
@@ -272,7 +279,11 @@ export interface CourseLesson {
   type: "video" | "text" | "resource";
   status: string;
   duration: string | null;
+  /** Teacher estimate in minutes; null when not set. */
+  durationMinutes: number | null;
   isPreviewable: boolean;
+  /** True once this student has finished it. False when signed out. */
+  completed: boolean;
 }
 
 export interface CourseTaskItem {
@@ -282,6 +293,12 @@ export interface CourseTaskItem {
 }
 
 export interface CourseSection {
+  /** Published lessons in this section. */
+  lessonCount: number;
+  /** Summed from per-lesson estimates; 0 when none are set. */
+  durationMinutes: number;
+  /** How many of them this student has finished. */
+  completedCount: number;
   id: string;
   title: string;
   description: string;
@@ -293,6 +310,10 @@ export interface CourseSection {
 }
 
 export interface CourseDetail extends StudentCourse {
+  totalDurationMinutes: number;
+  learningOutcomes: string[];
+  /** Review counts keyed "5".."1", always all five keys. */
+  ratingBreakdown: Record<string, number>;
   schemeOfWork: string;
   roadmapLink: string;
   sections: CourseSection[];
@@ -305,6 +326,17 @@ function normalizeCourseDetail(raw: Record<string, unknown>): CourseDetail {
     ...base,
     schemeOfWork: String(raw.scheme_of_work ?? raw.schemeOfWork ?? ""),
     roadmapLink: String(raw.roadmap_link ?? raw.roadmapLink ?? ""),
+    totalDurationMinutes: toNumber(raw.totalDurationMinutes),
+    learningOutcomes: Array.isArray(raw.learningOutcomes)
+      ? (raw.learningOutcomes as unknown[]).map(String).filter(Boolean)
+      : [],
+    ratingBreakdown: (raw.ratingBreakdown as Record<string, number>) ?? {
+      "5": 0,
+      "4": 0,
+      "3": 0,
+      "2": 0,
+      "1": 0,
+    },
     sections: sections.map((s) => {
       const sec = s as Record<string, unknown>;
       return {
@@ -313,6 +345,9 @@ function normalizeCourseDetail(raw: Record<string, unknown>): CourseDetail {
         description: String(sec.description ?? ""),
         isFree: Boolean(sec.isFree),
         isLocked: Boolean(sec.isLocked),
+        lessonCount: toNumber(sec.lessonCount),
+        durationMinutes: toNumber(sec.durationMinutes),
+        completedCount: toNumber(sec.completedCount),
         lessons: (Array.isArray(sec.lessons) ? sec.lessons : []).map((l) => {
           const lesson = l as Record<string, unknown>;
           return {
@@ -321,7 +356,12 @@ function normalizeCourseDetail(raw: Record<string, unknown>): CourseDetail {
             type: (String(lesson.type ?? lesson.content_type ?? "text") as CourseLesson["type"]),
             status: String(lesson.status ?? "unlocked"),
             duration: lesson.duration ? String(lesson.duration) : null,
-            isPreviewable: Boolean(lesson.is_previewable),
+            durationMinutes:
+              lesson.durationMinutes === null || lesson.durationMinutes === undefined
+                ? null
+                : toNumber(lesson.durationMinutes),
+            isPreviewable: Boolean(lesson.is_previewable ?? lesson.isPreviewable),
+            completed: Boolean(lesson.completed),
           };
         }),
         assignments: (Array.isArray(sec.tasks) ? sec.tasks : []).map((t) => ({
@@ -454,6 +494,8 @@ export interface CurriculumLesson {
   id: string;
   title: string;
   type: string;
+  /** Teacher estimate; null when they left it blank. */
+  durationMinutes: number | null;
   isPreviewable: boolean;
   locked: boolean;
   completed: boolean;
@@ -466,7 +508,13 @@ export interface PlayerData {
   lesson: PlayerLesson;
   progress: { status: string; lastPositionSeconds: number };
   sectionItems: { assignments: PlayerAssignment[]; projects: PlayerProject[] };
-  curriculum: { id: string; title: string; isLocked: boolean; lessons: CurriculumLesson[] }[];
+  curriculum: {
+    id: string;
+    title: string;
+    isLocked: boolean;
+    taskCount: number;
+    lessons: CurriculumLesson[];
+  }[];
   prevLessonId: string | null;
   nextLessonId: string | null;
 }
@@ -508,17 +556,6 @@ export async function saveLessonProgress(
   return authenticatedRequest(`/api/progress/lessons/${lessonId}/`, {
     method: "POST",
     body: JSON.stringify(body),
-  });
-}
-
-export async function getLessonNote(lessonId: string) {
-  return authenticatedRequest<{ content: string }>(`/api/lessons/${lessonId}/note/`);
-}
-
-export async function saveLessonNote(lessonId: string, content: string) {
-  return authenticatedRequest(`/api/lessons/${lessonId}/note/`, {
-    method: "PUT",
-    body: JSON.stringify({ content }),
   });
 }
 

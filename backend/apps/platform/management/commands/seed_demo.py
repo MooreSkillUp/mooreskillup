@@ -148,10 +148,22 @@ class Command(BaseCommand):
     def _wipe(self):
         users = User.objects.filter(email__endswith=f"@{DEMO_DOMAIN}")
         count = users.count()
-        # Courses are removed by teacher cascade; events by course cascade.
+
+        # Courses must go first and explicitly. Course.teacher is SET_NULL, not
+        # CASCADE, so deleting the teacher leaves every demo course behind with
+        # no owner — and the next seed then finds them by title, skips its
+        # defaults, and quietly produces stale data.
+        course_count, _ = Course.objects.filter(title__in=[spec[2] for spec in COURSES]).delete()
+
         users.delete()
-        Category.objects.filter(name__in=[c["name"] for c in CATEGORIES], courses__isnull=True).delete()
-        self.stdout.write(self.style.SUCCESS(f"Removed {count} demo accounts and their data."))
+        Category.objects.filter(
+            name__in=[c["name"] for c in CATEGORIES], courses__isnull=True
+        ).delete()
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Removed {count} demo accounts and {course_count} related course records."
+            )
+        )
 
     # -- seeding --------------------------------------------------------------
 
@@ -217,6 +229,12 @@ class Command(BaseCommand):
                     "certificate_enabled": certificate,
                     "published_at": timezone.now(),
                     "tech_stack": ["HTML", "CSS", "JavaScript"] if "Web" in cat_name else ["Python"],
+                    "learning_outcomes": [
+                        f"Understand the fundamentals of {track.lower()}",
+                        "Build a real project from scratch, start to finish",
+                        "Debug confidently when something breaks",
+                        "Follow the practices working teams actually use",
+                    ],
                 },
             )
             if created:

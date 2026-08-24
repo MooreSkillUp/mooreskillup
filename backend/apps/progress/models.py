@@ -28,17 +28,6 @@ class CourseProgress(UUIDPrimaryKeyModel, TimeStampedModel):
     is_completed = models.BooleanField(default=False)
 
 
-class LessonNote(UUIDPrimaryKeyModel, TimeStampedModel):
-    """One free-text note per student per lesson."""
-
-    enrollment = models.ForeignKey("enrollments.Enrollment", on_delete=models.CASCADE, related_name="lesson_notes")
-    lesson = models.ForeignKey("courses.Lesson", on_delete=models.CASCADE, related_name="notes")
-    content = models.TextField(blank=True)
-
-    class Meta:
-        unique_together = ("enrollment", "lesson")
-
-
 class DailyActivity(UUIDPrimaryKeyModel, TimeStampedModel):
     """One row per student per day of learning.
 

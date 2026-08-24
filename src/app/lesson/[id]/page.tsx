@@ -12,19 +12,13 @@ import {
   FolderGit2,
   Lock,
   PlayCircle,
-  ScrollText,
-  StickyNote,
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { useFeedback } from "@/lib/feedback";
 import { getVideoRenderMode } from "@/lib/video";
-import {
-  getLessonNote,
-  saveLessonNote,
-  saveLessonProgress,
-  usePlayer,
-} from "@/lib/student";
+import { CurriculumSidebar } from "@/components/course/CurriculumSidebar";
+import { saveLessonProgress, usePlayer } from "@/lib/student";
 
 /**
  * How often an open lesson tells the server it is still being studied.
@@ -42,24 +36,8 @@ export default function LessonPage() {
   const { notifySuccess, notifyError } = useFeedback();
   const { data, isLoading, error, refresh } = usePlayer(lessonId);
 
-  const [note, setNote] = useState("");
-  const [noteSaving, setNoteSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  // Load this lesson's note when the student can access it.
-  useEffect(() => {
-    if (!data?.canAccess || !data.isEnrolled) return;
-    let active = true;
-    getLessonNote(lessonId)
-      .then((res) => {
-        if (active) setNote(res?.content ?? "");
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [lessonId, data?.canAccess, data?.isEnrolled]);
 
   // Record a "started" ping + resume video position.
   const progressStatus = data?.progress.status;
@@ -130,17 +108,17 @@ export default function LessonPage() {
   const lessonTypeLabel =
     lesson.type === "video" ? "Video lesson" : lesson.type === "resource" ? "Resource lesson" : "Reading lesson";
 
-  const saveNote = async () => {
-    try {
-      setNoteSaving(true);
-      await saveLessonNote(lessonId, note);
-      notifySuccess("Note saved");
-    } catch (e) {
-      notifyError("Couldn't save note", e instanceof Error ? e.message : "Request failed.");
-    } finally {
-      setNoteSaving(false);
-    }
-  };
+  // Progress within the section being watched, rather than across the course.
+  const currentSection = curriculum.find((section) =>
+    section.lessons.some((item) => item.id === lessonId),
+  );
+  const sectionTotal = currentSection?.lessons.length ?? 0;
+  const sectionDone = currentSection?.lessons.filter((item) => item.completed).length ?? 0;
+  const sectionPercent = sectionTotal ? Math.round((sectionDone / sectionTotal) * 100) : 0;
+
+  // "Lesson 4 of 23" — position in the whole course, which the header shows.
+  const flatLessons = curriculum.flatMap((section) => section.lessons);
+  const lessonNumber = flatLessons.findIndex((item) => item.id === lessonId) + 1;
 
   const markComplete = async () => {
     try {
@@ -184,24 +162,48 @@ export default function LessonPage() {
   return (
     <AppShell allowedRoles={["student"]}>
       <div className="space-y-6">
-        <section className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
-          <div className="bg-gradient-to-r from-primary/10 via-background to-accent-soft px-6 py-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Lesson player</div>
-                <h1 className="mt-2 font-display text-3xl font-bold">{lesson.title || "Untitled lesson"}</h1>
-                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-                  {lesson.sectionTitle} · {course.title}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground">
-                  {lessonTypeLabel}
-                </span>
-                <span className="rounded-full border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground">
-                  {curriculum.length} sections in course
-                </span>
-              </div>
+        {/* Header. The lesson title leads and the course sits above it as a
+            breadcrumb — inside the player the lesson is the subject, and the
+            course is context you already chose. */}
+        <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <Link
+                href={`/course/${course.id}`}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                {course.title}
+              </Link>
+
+              <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.18em] text-accent">
+                {lessonNumber > 0 ? `Lesson ${lessonNumber} of ${flatLessons.length}` : lessonTypeLabel}
+              </p>
+              <h1 className="mt-1 font-display text-xl font-bold leading-tight sm:text-2xl">
+                {lesson.title || "Untitled lesson"}
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">{lesson.sectionTitle}</p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!prevLessonId}
+                onClick={() => prevLessonId && router.push(`/lesson/${prevLessonId}`)}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Previous</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!nextLessonId}
+                onClick={() => nextLessonId && router.push(`/lesson/${nextLessonId}`)}
+              >
+                <span className="hidden sm:inline">Next</span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </section>
@@ -333,76 +335,52 @@ export default function LessonPage() {
               </div>
             ))}
 
-            <div className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
-              <div className="flex items-center gap-2 font-semibold">
-                <StickyNote className="h-4 w-4 text-primary" /> My notes
-              </div>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Write notes for this lesson — only you can see them."
-                className="mt-3 min-h-28 w-full rounded-xl border border-input bg-background p-3 text-sm outline-none"
-                style={{ direction: "ltr" }}
-              />
-              <Button variant="outline" size="sm" className="mt-2" onClick={() => void saveNote()} loading={noteSaving} loadingText="Saving...">
-                Save note
-              </Button>
-            </div>
           </div>
 
-          <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-            <div className="rounded-[2rem] border border-border bg-card p-5 shadow-sm">
-              <div className="font-display text-xl font-bold">Course snapshot</div>
-              <div className="mt-3 flex items-center gap-2 rounded-2xl border border-border bg-background p-3 text-sm text-muted-foreground">
-                <div className="rounded-xl bg-primary/10 p-2 text-primary">
-                  <PlayCircle className="h-4 w-4" />
+          <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+            <CurriculumSidebar
+              sections={curriculum.map((section) => ({
+                id: section.id,
+                title: section.title,
+                isLocked: section.isLocked,
+                taskCount: section.taskCount,
+                lessons: section.lessons.map((item) => ({
+                  id: item.id,
+                  title: item.title,
+                  type: item.type,
+                  locked: item.locked,
+                  completed: item.completed,
+                  durationMinutes: item.durationMinutes,
+                })),
+              }))}
+              currentLessonId={lessonId}
+              courseId={course.id}
+            />
+
+            {/* Where this section stands, separate from the course as a whole —
+                the nearer milestone is the one that pulls a student forward. */}
+            <section className="rounded-2xl border border-border bg-card p-5">
+              <h2 className="font-display text-base font-semibold">This section</h2>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-accent transition-[width] duration-500"
+                  style={{ width: `${sectionPercent}%` }}
+                />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <div className="font-display text-lg font-bold tabular-nums">
+                    {sectionDone}/{sectionTotal}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Lessons done</div>
                 </div>
                 <div>
-                  <div className="font-medium text-foreground">{course.title}</div>
-                  <div>{curriculum.length} sections · {sectionItems.assignments.length} assignments</div>
+                  <div className="font-display text-lg font-bold tabular-nums">{sectionPercent}%</div>
+                  <div className="text-xs text-muted-foreground">Section progress</div>
                 </div>
               </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-border bg-card p-4 shadow-sm">
-              <h3 className="font-display text-lg font-bold">Course content</h3>
-              <div className="mt-3 space-y-3">
-                {curriculum.map((section, index) => (
-                  <div key={section.id}>
-                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      {index + 1}. {section.title}
-                    </div>
-                    <div className="mt-1 space-y-0.5">
-                      {section.lessons.map((l) => {
-                        const active = l.id === lessonId;
-                        return (
-                          <Link
-                            key={l.id}
-                            href={l.locked ? "#" : `/lesson/${l.id}`}
-                            onClick={(e) => l.locked && e.preventDefault()}
-                            className={`flex items-center gap-2 rounded-xl px-2 py-2 text-sm ${
-                              active ? "bg-primary/10 font-medium text-primary" : l.locked ? "text-muted-foreground/60" : "hover:bg-muted"
-                            }`}
-                          >
-                            {l.completed ? (
-                              <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
-                            ) : l.locked ? (
-                              <Lock className="h-3.5 w-3.5 shrink-0" />
-                            ) : l.type === "video" ? (
-                              <PlayCircle className="h-3.5 w-3.5 shrink-0" />
-                            ) : (
-                              <ScrollText className="h-3.5 w-3.5 shrink-0" />
-                            )}
-                            <span className="line-clamp-1">{l.title || "Untitled"}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </aside>
+            </section>
+          </div>
         </div>
       </div>
     </AppShell>
