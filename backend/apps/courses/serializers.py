@@ -1,4 +1,4 @@
-from django.db.models import Avg
+from django.db.models import Avg, Count, Sum
 from rest_framework import serializers
 
 from apps.enrollments.models import Enrollment, Watchlist
@@ -40,6 +40,9 @@ class LessonSerializer(serializers.ModelSerializer):
     duration = serializers.SerializerMethodField()
     embedUrl = serializers.SerializerMethodField()
     resourceLinks = serializers.JSONField(source="resource_links", read_only=True)
+    durationMinutes = serializers.IntegerField(source="duration_minutes", read_only=True)
+    isPreviewable = serializers.BooleanField(source="is_previewable", read_only=True)
+    completed = serializers.SerializerMethodField()
 
     class Meta:
         model = Lesson
@@ -54,16 +57,30 @@ class LessonSerializer(serializers.ModelSerializer):
             "resourceLinks",
             "tags",
             "duration_minutes",
+            "durationMinutes",
             "duration",
             "embedUrl",
             "order",
             "is_previewable",
+            "isPreviewable",
             "is_published",
             "status",
+            "completed",
         )
 
     def get_duration(self, obj):
         return f"{obj.duration_minutes} min" if obj.duration_minutes else None
+
+    def get_completed(self, obj):
+        """Whether the signed-in student has finished this lesson.
+
+        Read from a set the parent serializer puts in context, so a course with
+        forty lessons costs one query rather than forty.
+        """
+        completed_ids = self.context.get("completed_lesson_ids")
+        if completed_ids is None:
+            return False
+        return obj.id in completed_ids
 
     def get_embedUrl(self, obj):
         return build_embed_url(obj.video_url)
@@ -191,6 +208,9 @@ class SectionSerializer(serializers.ModelSerializer):
     isFree = serializers.SerializerMethodField()
     isLocked = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
+    lessonCount = serializers.SerializerMethodField()
+    durationMinutes = serializers.SerializerMethodField()
+    completedCount = serializers.SerializerMethodField()
 
     class Meta:
         model = Section
@@ -204,10 +224,49 @@ class SectionSerializer(serializers.ModelSerializer):
             "isFree",
             "isLocked",
             "status",
+            "lessonCount",
+            "durationMinutes",
+            "completedCount",
             "lessons",
             "tasks",
             "projects",
         )
+
+    def _published_lessons(self, obj):
+        return [lesson for lesson in obj.lessons.all() if lesson.is_published]
+
+    def get_lessonCount(self, obj):
+        return len(self._published_lessons(obj))
+
+    def get_durationMinutes(self, obj):
+        """Total minutes in this section, from the per-lesson estimates.
+
+        Lessons without a duration count as zero rather than guessing — a made-up
+        figure on a curriculum is worse than an obviously incomplete one.
+        """
+        return sum(lesson.duration_minutes or 0 for lesson in self._published_lessons(obj))
+
+    def get_completedCount(self, obj):
+        """Lessons this student has finished in this section.
+
+        Cached on the serializer context so a six-section course does one query
+        rather than six.
+        """
+        completed = self.context.get("_completed_lesson_ids")
+        if completed is None:
+            enrollment = self._get_enrollment(obj)
+            if not enrollment:
+                self.context["_completed_lesson_ids"] = set()
+                return 0
+            from apps.progress.models import LessonProgress
+
+            completed = set(
+                LessonProgress.objects.filter(enrollment=enrollment, status="completed").values_list(
+                    "lesson_id", flat=True
+                )
+            )
+            self.context["_completed_lesson_ids"] = completed
+        return sum(1 for lesson in self._published_lessons(obj) if lesson.id in completed)
 
     def _get_enrollment(self, obj):
         request = self.context.get("request")
@@ -247,6 +306,9 @@ class CourseSerializer(serializers.ModelSerializer):
     categoryName = serializers.CharField(source="category.name", read_only=True)
     subcategoryName = serializers.CharField(source="subcategory.name", read_only=True)
     totalLessons = serializers.SerializerMethodField()
+    totalDurationMinutes = serializers.SerializerMethodField()
+    ratingBreakdown = serializers.SerializerMethodField()
+    learningOutcomes = serializers.JSONField(source="learning_outcomes", required=False)
     categoryId = serializers.UUIDField(source="category_id", read_only=True)
     subcategoryId = serializers.UUIDField(source="subcategory_id", read_only=True)
     program = serializers.CharField(source="category.name", read_only=True)
@@ -312,6 +374,10 @@ class CourseSerializer(serializers.ModelSerializer):
             "featured",
             "total_lessons",
             "totalLessons",
+            "totalDurationMinutes",
+            "ratingBreakdown",
+            "learning_outcomes",
+            "learningOutcomes",
             "meta_title",
             "metaTitle",
             "meta_description",
@@ -402,6 +468,33 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def get_reviewCount(self, obj):
         return obj.reviews.filter(status="published").count()
+
+    def get_totalDurationMinutes(self, obj):
+        """Course length, summed from the lessons a student can actually reach."""
+        return (
+            Lesson.objects.filter(
+                section__course=obj, section__is_published=True, is_published=True
+            ).aggregate(total=Sum("duration_minutes"))["total"]
+            or 0
+        )
+
+    def get_ratingBreakdown(self, obj):
+        """How many reviews gave each star, for the distribution bars.
+
+        Always returns all five keys so the UI can render empty bars rather than
+        deciding what a missing rating means.
+        """
+        counts = dict.fromkeys(range(1, 6), 0)
+        rows = (
+            obj.reviews.filter(status="published")
+            .values("rating")
+            .annotate(count=Count("id"))
+        )
+        for row in rows:
+            rating = int(row["rating"])
+            if rating in counts:
+                counts[rating] = row["count"]
+        return {str(star): counts[star] for star in range(5, 0, -1)}
 
     def get_totalLessons(self, obj):
         """Published lessons in this course.

@@ -25,8 +25,8 @@ from .activity import (
     total_learning_minutes,
     week_activity,
 )
-from .models import CourseProgress, LessonNote, LessonProgress
-from .serializers import CourseProgressSerializer, LessonNoteSerializer, LessonProgressSerializer
+from .models import CourseProgress, LessonProgress
+from .serializers import CourseProgressSerializer, LessonProgressSerializer
 
 
 def refresh_course_progress(enrollment: Enrollment):
@@ -135,34 +135,6 @@ class CourseProgressDetailView(views.APIView):
         progress = refresh_course_progress(enrollment)
         return response.Response(CourseProgressSerializer(progress).data)
 
-
-class LessonNoteView(views.APIView):
-    permission_classes = [IsStudentUserRole]
-
-    def get_enrollment(self, request, lesson):
-        return Enrollment.objects.filter(
-            student=request.user.student_profile, course=lesson.section.course
-        ).first()
-
-    def get(self, request, lesson_id):
-        lesson = Lesson.objects.select_related("section__course").get(id=lesson_id)
-        enrollment = self.get_enrollment(request, lesson)
-        if not enrollment:
-            return response.Response({"content": ""})
-        note = LessonNote.objects.filter(enrollment=enrollment, lesson=lesson).first()
-        return response.Response(LessonNoteSerializer(note).data if note else {"content": ""})
-
-    def put(self, request, lesson_id):
-        lesson = Lesson.objects.select_related("section__course").get(id=lesson_id)
-        enrollment = self.get_enrollment(request, lesson)
-        if not enrollment:
-            return response.Response(
-                {"detail": "Enroll in the course to take notes."}, status=status.HTTP_403_FORBIDDEN
-            )
-        note, _ = LessonNote.objects.get_or_create(enrollment=enrollment, lesson=lesson)
-        note.content = request.data.get("content", "")
-        note.save(update_fields=["content", "updated_at"])
-        return response.Response(LessonNoteSerializer(note).data)
 
 
 def build_upcoming_work(student, limit=5):

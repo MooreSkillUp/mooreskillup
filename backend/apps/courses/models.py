@@ -68,6 +68,10 @@ class Course(UUIDPrimaryKeyModel, TimeStampedModel):
     meta_description = models.TextField(blank=True)
     # Technologies/tools the course teaches (the "stacks"), shown as chips.
     tech_stack = models.JSONField(default=list, blank=True)
+    # Short "what you'll learn" bullets. A list of strings rather than free text
+    # so the course page can render a checklist and the studio can add, edit and
+    # reorder them one at a time.
+    learning_outcomes = models.JSONField(default=list, blank=True)
     # Teacher flags a course "ready for certification"; students who complete it
     # are then auto-issued an MSU certificate (see apps/certificates).
     certificate_enabled = models.BooleanField(default=False)

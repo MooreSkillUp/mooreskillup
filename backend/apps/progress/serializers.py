@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import CourseProgress, LessonNote, LessonProgress
+from .models import CourseProgress, LessonProgress
 
 
 class CourseProgressSerializer(serializers.ModelSerializer):
@@ -30,10 +30,3 @@ class LessonProgressSerializer(serializers.ModelSerializer):
         return None
 
 
-class LessonNoteSerializer(serializers.ModelSerializer):
-    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
-
-    class Meta:
-        model = LessonNote
-        fields = ("id", "lesson", "content", "updatedAt")
-        read_only_fields = ("lesson",)

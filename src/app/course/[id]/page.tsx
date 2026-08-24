@@ -17,7 +17,7 @@ import {
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { CourseBanner, CourseBannerHighlight } from "@/components/course/CourseBanner";
-import { SectionAccordion } from "@/components/course/SectionAccordion";
+import { CurriculumAccordion } from "@/components/course/CurriculumAccordion";
 import { formatNaira } from "@/lib/commerce";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/lib/feedback";
@@ -251,37 +251,30 @@ export default function CoursePage() {
               )}
             </section>
 
-            <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-sm">
-              <div className="flex items-center gap-2">
-                <PlayCircle className="h-5 w-5 text-primary" />
-                <h2 className="font-display text-2xl font-bold">Course content</h2>
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {course.sections.length} {course.sections.length === 1 ? "section" : "sections"} · {totalLessons} {totalLessons === 1 ? "lesson" : "lessons"}
-              </p>
-              <div className="mt-4">
-                <SectionAccordion
-                  sections={course.sections.map((section) => ({
-                    id: section.id,
-                    title: section.title,
-                    lessonCount: section.lessons.length,
-                    lessons: section.lessons.map((lesson) => ({
-                      id: lesson.id,
-                      title: lesson.title,
-                      type: lesson.type,
-                      isPreviewable: lesson.isPreviewable,
-                      isLocked: section.isLocked,
-                    })),
-                    assignments: section.assignments.map((a) => ({ id: a.id, title: a.title })),
-                    projects: section.projects.map((p) => ({ id: p.id, title: p.title })),
-                    isFree: section.isFree,
-                    isLocked: section.isLocked,
-                  }))}
-                  courseOwned={course.isOwned}
-                  previewHrefBuilder={(lessonId) => `/lesson/${lessonId}`}
-                />
-              </div>
-            </section>
+            <CurriculumAccordion
+              sections={course.sections.map((section) => ({
+                id: section.id,
+                title: section.title,
+                description: section.description,
+                isFree: section.isFree,
+                isLocked: section.isLocked,
+                lessonCount: section.lessonCount || section.lessons.length,
+                durationMinutes: section.durationMinutes,
+                completedCount: section.completedCount,
+                taskCount: section.assignments.length,
+                projectCount: section.projects.length,
+                lessons: section.lessons.map((lesson) => ({
+                  id: lesson.id,
+                  title: lesson.title,
+                  type: lesson.type,
+                  durationMinutes: lesson.durationMinutes,
+                  isPreviewable: lesson.isPreviewable,
+                  completed: lesson.completed,
+                })),
+              }))}
+              courseOwned={course.isOwned}
+              lessonHref={(lessonId) => `/lesson/${lessonId}`}
+            />
 
             <section className="rounded-[1.75rem] border border-border bg-card p-6 shadow-sm">
               <h2 className="font-display text-2xl font-bold">

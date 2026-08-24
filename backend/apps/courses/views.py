@@ -101,6 +101,34 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CourseSerializer
     permission_classes = [permissions.AllowAny]
 
+    def get_serializer_context(self):
+        """Add the signed-in student's completed lessons, as one set.
+
+        LessonSerializer needs to know whether each lesson is done. Looking that
+        up per lesson would mean a query per row; fetching the ids once here
+        makes a forty-lesson course a single extra query.
+
+        Only for the detail view — a catalogue listing renders no lesson rows,
+        so paying for this on every card would be waste.
+        """
+        context = super().get_serializer_context()
+        request = self.request
+        if (
+            self.action == "retrieve"
+            and request.user.is_authenticated
+            and getattr(request.user, "role", None) == "student"
+        ):
+            from apps.progress.models import LessonProgress
+
+            context["completed_lesson_ids"] = set(
+                LessonProgress.objects.filter(
+                    enrollment__student=request.user.student_profile,
+                    enrollment__course_id=self.kwargs.get("pk"),
+                    status="completed",
+                ).values_list("lesson_id", flat=True)
+            )
+        return context
+
     def get_queryset(self):
         from django.db.models import Avg, Count, Q
 
@@ -716,11 +744,15 @@ class StudentLessonView(APIView):
                     "id": str(section.id),
                     "title": section.title,
                     "isLocked": not unlocked,
+                    # Counted here so the sidebar can show "3 tasks" without a
+                    # second round trip per section.
+                    "taskCount": len(section.tasks.all()),
                     "lessons": [
                         {
                             "id": str(lsn.id),
                             "title": lsn.title,
                             "type": lsn.content_type,
+                            "durationMinutes": lsn.duration_minutes,
                             "isPreviewable": lsn.is_previewable,
                             "locked": not (unlocked or lsn.is_previewable),
                             "completed": str(lsn.id) in completed_ids,
