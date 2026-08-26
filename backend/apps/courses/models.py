@@ -75,6 +75,16 @@ class Course(UUIDPrimaryKeyModel, TimeStampedModel):
     # Teacher flags a course "ready for certification"; students who complete it
     # are then auto-issued an MSU certificate (see apps/certificates).
     certificate_enabled = models.BooleanField(default=False)
+    # How students move through the sections.
+    #
+    # "open" lets them go anywhere once enrolled — right for reference material.
+    # "sequential" requires finishing a section before the next opens — right
+    # for a structured programme. Chosen per course because the teacher knows
+    # which theirs is; defaults to open so nothing gates by accident.
+    PROGRESSION_CHOICES = (("open", "Open"), ("sequential", "Section by section"))
+    progression_mode = models.CharField(
+        max_length=20, choices=PROGRESSION_CHOICES, default="open"
+    )
     # Teachers can't delete courses directly — they request deletion, which an
     # admin approves (deletes) or aborts. Protects platform content.
     pending_deletion = models.BooleanField(default=False)

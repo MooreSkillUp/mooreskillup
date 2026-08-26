@@ -278,12 +278,26 @@ class SectionSerializer(serializers.ModelSerializer):
         return obj.course.price == 0 or obj.access_type == "free"
 
     def get_isLocked(self, obj):
+        """Locked by entitlement, or by not having got here yet.
+
+        Two separate reasons a section can be shut, and both have to be checked:
+        payment, and — in a sequential course — whether the sections before it
+        are finished. The reachable set is computed once by the parent
+        serializer and read from context, so this stays cheap per section.
+        """
         request = self.context.get("request")
         if not request or not request.user.is_authenticated or request.user.role != "student":
             return False
+
+        reachable = self.context.get("reachable_section_ids")
+        if reachable is not None and obj.id not in reachable:
+            return True
+
         if obj.course.price == 0 or obj.access_type == "free":
             return False
-        return not Enrollment.objects.filter(student=request.user.student_profile, course=obj.course).exists()
+        return not Enrollment.objects.filter(
+            student=request.user.student_profile, course=obj.course
+        ).exists()
 
     def get_status(self, obj):
         if self.get_isLocked(obj):

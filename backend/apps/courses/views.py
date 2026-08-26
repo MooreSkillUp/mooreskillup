@@ -127,6 +127,19 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
                     status="completed",
                 ).values_list("lesson_id", flat=True)
             )
+
+            # In a sequential course, which sections this student has reached.
+            # Computed once here rather than per section, and left absent for
+            # open courses so nothing gates that shouldn't.
+            from apps.enrollments.models import Enrollment
+
+            enrollment = Enrollment.objects.filter(
+                student=request.user.student_profile, course_id=self.kwargs.get("pk")
+            ).select_related("course").first()
+            if enrollment and enrollment.course.progression_mode == "sequential":
+                from apps.quizzes.progression import accessible_section_ids
+
+                context["reachable_section_ids"] = accessible_section_ids(enrollment)
         return context
 
     def get_queryset(self):
@@ -689,8 +702,24 @@ class StudentLessonView(APIView):
 
             enrollment = Enrollment.objects.filter(student=user.student_profile, course=course).first()
 
+        # Two separate gates, and both must open.
+        #
+        # Entitlement: has this student paid for, or been given, access at all.
+        # Progression: in a sequential course, have they finished what comes
+        # before. An open course only ever applies the first.
+        reachable_section_ids = None
+        if enrollment and course.progression_mode == "sequential":
+            from apps.quizzes.progression import accessible_section_ids
+
+            reachable_section_ids = accessible_section_ids(enrollment)
+
         def section_unlocked(section):
-            return course.price == 0 or section.access_type == "free" or bool(enrollment)
+            entitled = course.price == 0 or section.access_type == "free" or bool(enrollment)
+            if not entitled:
+                return False
+            if reachable_section_ids is None:
+                return True
+            return section.id in reachable_section_ids
 
         def lesson_accessible(lsn):
             return section_unlocked(lsn.section) or lsn.is_previewable
