@@ -1,0 +1,178 @@
+"""The rules that decide what a student can reach and when they have finished.
+
+These are the rules most likely to strand somebody, so each one is pinned:
+a course that gates when it shouldn't is a support ticket, and one that fails to
+gate makes the certificate meaningless.
+"""
+
+import pytest
+from django.utils import timezone
+
+from apps.accounts.models import StudentProfile, User
+from apps.categories.models import Category, Subcategory
+from apps.courses.models import Course, Lesson, Section
+from apps.enrollments.models import Enrollment
+from apps.progress.models import LessonProgress
+from apps.quizzes.models import Choice, Question, Quiz, QuizAttempt, cooldown_remaining_seconds
+from apps.quizzes.progression import (
+    accessible_section_ids,
+    certificate_is_earned,
+    course_sections_complete,
+    section_is_complete,
+)
+
+
+@pytest.fixture
+def course_with_sections(db):
+    """A sequential course, three sections, two lessons each."""
+    user = User.objects.create_user(
+        email="s@test.dev", username="s", display_name="S", password="password123"
+    )
+    student = StudentProfile.objects.create(user=user)
+    category = Category.objects.create(name="Cat")
+    subcategory = Subcategory.objects.create(category=category, name="Sub")
+    course = Course.objects.create(
+        category=category,
+        subcategory=subcategory,
+        title="Course",
+        status="published",
+        progression_mode="sequential",
+    )
+    sections = []
+    for index in range(3):
+        section = Section.objects.create(
+            course=course, title=f"S{index}", description="", order=index
+        )
+        for lesson_index in range(2):
+            Lesson.objects.create(
+                section=section, title=f"L{lesson_index}", content_type="text", order=lesson_index
+            )
+        sections.append(section)
+
+    enrollment = Enrollment.objects.create(student=student, course=course, access_source="free")
+    return {"student": student, "course": course, "sections": sections, "enrollment": enrollment}
+
+
+def complete_lessons(enrollment, section):
+    for lesson in Lesson.objects.filter(section=section):
+        LessonProgress.objects.update_or_create(
+            enrollment=enrollment, lesson=lesson, defaults={"status": "completed"}
+        )
+
+
+def build_quiz(course, section=None, *, kind="section", published=True, with_question=True):
+    quiz = Quiz.objects.create(
+        course=course, section=section, kind=kind, title="Quiz", is_published=published
+    )
+    if with_question:
+        question = Question.objects.create(quiz=quiz, text="2 + 2?")
+        Choice.objects.create(question=question, text="4", is_correct=True)
+        Choice.objects.create(question=question, text="5", is_correct=False)
+    return quiz
+
+
+def test_open_courses_never_gate(course_with_sections):
+    """The default mode must reach every section — nothing gates by accident."""
+    data = course_with_sections
+    data["course"].progression_mode = "open"
+    data["course"].save(update_fields=["progression_mode"])
+
+    assert len(accessible_section_ids(data["enrollment"])) == 3
+
+
+def test_sequential_opens_one_section_at_a_time(course_with_sections):
+    data = course_with_sections
+    sections, enrollment = data["sections"], data["enrollment"]
+
+    # Nothing done: only the first section is open.
+    assert accessible_section_ids(enrollment) == {sections[0].id}
+
+    complete_lessons(enrollment, sections[0])
+    assert accessible_section_ids(enrollment) == {sections[0].id, sections[1].id}
+
+    complete_lessons(enrollment, sections[1])
+    assert len(accessible_section_ids(enrollment)) == 3
+
+
+def test_a_section_without_a_quiz_completes_on_its_lessons(course_with_sections):
+    """No quiz means no gate. This is what stops students getting stuck."""
+    data = course_with_sections
+    complete_lessons(data["enrollment"], data["sections"][0])
+    assert section_is_complete(data["enrollment"], data["sections"][0]) is True
+
+
+def test_a_section_quiz_must_be_passed_to_move_on(course_with_sections):
+    data = course_with_sections
+    quiz = build_quiz(data["course"], data["sections"][0])
+    complete_lessons(data["enrollment"], data["sections"][0])
+
+    # Lessons done but quiz unpassed — the next section stays shut.
+    assert section_is_complete(data["enrollment"], data["sections"][0]) is False
+    assert accessible_section_ids(data["enrollment"]) == {data["sections"][0].id}
+
+    QuizAttempt.objects.create(
+        quiz=quiz, student=data["student"], passed=True, submitted_at=timezone.now()
+    )
+    assert section_is_complete(data["enrollment"], data["sections"][0]) is True
+    assert data["sections"][1].id in accessible_section_ids(data["enrollment"])
+
+
+def test_an_unready_quiz_does_not_lock_anyone_out(course_with_sections):
+    """A published quiz with no questions must not become a locked door.
+
+    Teachers publish drafts by accident. The cost of ignoring an empty quiz is a
+    section that opens early; the cost of honouring it is a student who cannot
+    continue and has nobody to ask.
+    """
+    data = course_with_sections
+    build_quiz(data["course"], data["sections"][0], with_question=False)
+    complete_lessons(data["enrollment"], data["sections"][0])
+
+    assert section_is_complete(data["enrollment"], data["sections"][0]) is True
+
+
+def test_switching_to_sequential_does_not_lock_out_existing_students(course_with_sections):
+    """Someone already deep in a course keeps what they had reached."""
+    data = course_with_sections
+    for section in data["sections"]:
+        complete_lessons(data["enrollment"], section)
+
+    assert len(accessible_section_ids(data["enrollment"])) == 3
+
+
+def test_certificate_needs_the_final_assessment_when_there_is_one(course_with_sections):
+    data = course_with_sections
+    for section in data["sections"]:
+        complete_lessons(data["enrollment"], section)
+
+    assert course_sections_complete(data["enrollment"]) is True
+    # No final assessment: finishing the sections is enough.
+    assert certificate_is_earned(data["enrollment"]) is True
+
+    final = build_quiz(data["course"], None, kind="final")
+    # Now it is not, until the final is passed.
+    assert certificate_is_earned(data["enrollment"]) is False
+
+    QuizAttempt.objects.create(
+        quiz=final, student=data["student"], passed=True, submitted_at=timezone.now()
+    )
+    assert certificate_is_earned(data["enrollment"]) is True
+
+
+def test_cooldown_applies_after_a_failure_but_not_after_a_pass(course_with_sections):
+    data = course_with_sections
+    quiz = build_quiz(data["course"], data["sections"][0])
+
+    # Never attempted — start whenever.
+    assert cooldown_remaining_seconds(data["student"], quiz) == 0
+
+    QuizAttempt.objects.create(
+        quiz=quiz, student=data["student"], passed=False, submitted_at=timezone.now()
+    )
+    assert cooldown_remaining_seconds(data["student"], quiz) > 0
+
+    # Passing clears it — nobody waits to retake something they got right.
+    QuizAttempt.objects.create(
+        quiz=quiz, student=data["student"], passed=True, submitted_at=timezone.now()
+    )
+    assert cooldown_remaining_seconds(data["student"], quiz) == 0

@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "apps.certificates",
     "apps.platform",
     "apps.schedule",
+    "apps.quizzes",
     "anymail",
 ]
 

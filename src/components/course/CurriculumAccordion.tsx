@@ -23,12 +23,23 @@ export interface AccordionLesson {
   completed?: boolean;
 }
 
+export interface AccordionQuiz {
+  id: string;
+  title: string;
+  questionCount: number;
+  passMarkPercent: number;
+  passed: boolean;
+}
+
 export interface AccordionSection {
   id: string;
   title: string;
   description?: string;
   isFree: boolean;
   isLocked: boolean;
+  /** Why it's shut, so the UI can say more than "locked". */
+  lockReason?: "enrolment" | "sequential" | null;
+  quiz?: AccordionQuiz | null;
   lessonCount: number;
   durationMinutes: number;
   completedCount: number;
@@ -161,8 +172,15 @@ export function CurriculumAccordion({
                   </span>
                 </span>
 
-                {section.isLocked && !courseOwned && (
-                  <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {section.isLocked && (
+                  <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                    <Lock className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">
+                      {section.lockReason === "sequential"
+                        ? "Finish the previous section"
+                        : "Enrol to unlock"}
+                    </span>
+                  </span>
                 )}
                 <ChevronDown
                   className={cn(
@@ -246,6 +264,56 @@ export function CurriculumAccordion({
                       );
                     })}
                   </ul>
+
+                  {/* The quiz sits at the end of the section, where a student
+                      meets it — and says what passing it does, since in a
+                      sequential course that is what opens the next section. */}
+                  {section.quiz && (
+                    <div className="mt-2">
+                      {courseOwned || !section.isLocked ? (
+                        <Link
+                          href={`/quiz/${section.quiz.id}`}
+                          className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/5 px-3 py-2.5 transition-colors hover:bg-accent/10"
+                        >
+                          <span
+                            className={cn(
+                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+                              section.quiz.passed
+                                ? "bg-success/15 text-success"
+                                : "bg-accent/15 text-accent",
+                            )}
+                          >
+                            {section.quiz.passed ? (
+                              <CheckCircle2 className="h-4 w-4" />
+                            ) : (
+                              <ClipboardList className="h-3.5 w-3.5" />
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">
+                              {section.quiz.title}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {section.quiz.questionCount} questions ·{" "}
+                              {section.quiz.passMarkPercent}% to pass
+                            </span>
+                          </span>
+                          {section.quiz.passed && (
+                            <span className="shrink-0 text-xs font-semibold text-success">
+                              Passed
+                            </span>
+                          )}
+                        </Link>
+                      ) : (
+                        <div className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5 opacity-60">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground">
+                            <Lock className="h-3.5 w-3.5" />
+                          </span>
+                          <span className="text-sm">{section.quiz.title}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Assignments and projects are listed but never gate anything —
                       they're submitted off-platform, so we can say what exists,

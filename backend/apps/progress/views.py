@@ -43,14 +43,61 @@ def refresh_course_progress(enrollment: Enrollment):
     progress.completed_lessons_count = completed
     progress.total_lessons_count = total
     progress.progress_percent = percentage
-    progress.is_completed = total > 0 and completed == total
+    # Finishing the lessons is no longer the same as finishing the course.
+    #
+    # A course can carry section quizzes and a final assessment, and those have
+    # to be passed too — otherwise the certificate rests on clicking "complete"
+    # enough times, which is not evidence of anything. Courses without quizzes
+    # behave exactly as before, because the rules return True when there is
+    # nothing to check.
+    from apps.quizzes.progression import certificate_is_earned
+
+    progress.is_completed = total > 0 and completed == total and certificate_is_earned(enrollment)
     progress.save()
     if progress.is_completed and enrollment.status != "completed":
         enrollment.status = "completed"
         enrollment.completed_at = timezone.now()
         enrollment.save(update_fields=["status", "completed_at", "updated_at"])
-        issue_certificate(enrollment)
+        certificate = issue_certificate(enrollment)
+        send_course_completed_email(enrollment, certificate)
     return progress
+
+
+def send_course_completed_email(enrollment, certificate=None):
+    """Tell a student they finished, and what they get for it.
+
+    Sent for every completed course, not only certificate-bearing ones — the
+    achievement is worth acknowledging either way, and an email that arrives
+    only sometimes teaches students to ignore it. Where there is no certificate
+    the message says so plainly rather than implying one is coming.
+    """
+    from common.email import frontend_url, send_transactional_email
+
+    student_user = enrollment.student.user
+    course = enrollment.course
+
+    if certificate:
+        intro = (
+            f"You've completed “{course.title}”. Your certificate is ready to "
+            "download, and carries a unique ID anyone can verify."
+        )
+        button_label, button_url = "View your certificate", frontend_url("/certificates")
+    else:
+        intro = (
+            f"You've completed “{course.title}”. This course doesn't award a "
+            "certificate, but the work still counts — it's on your record."
+        )
+        button_label, button_url = "Back to your courses", frontend_url("/dashboard/courses")
+
+    send_transactional_email(
+        to_email=student_user.email,
+        subject=f"You finished {course.title}",
+        heading="Course complete 🎓",
+        greeting=f"Hi {student_user.first_name or student_user.display_name},",
+        intro=intro,
+        button_label=button_label,
+        button_url=button_url,
+    )
 
 
 def issue_certificate(enrollment):

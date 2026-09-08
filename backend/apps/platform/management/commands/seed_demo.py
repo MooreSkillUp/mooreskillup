@@ -29,6 +29,7 @@ from apps.courses.models import Course, Lesson, Section
 from apps.enrollments.models import Enrollment
 from apps.progress.activity import record_daily_activity
 from apps.progress.models import CourseProgress, DailyActivity, LessonProgress
+from apps.quizzes.models import Choice, Question, Quiz
 from apps.schedule.models import Event
 
 # Every seeded account uses this domain, which is what --wipe keys off. Real
@@ -239,6 +240,7 @@ class Command(BaseCommand):
             )
             if created:
                 self._seed_sections(course, section_count)
+                self._seed_quizzes(course)
             courses.append(course)
 
         self.stdout.write(f"  courses: {len(courses)} published")
@@ -273,6 +275,63 @@ class Command(BaseCommand):
                     is_previewable=index == 0 and lesson_index == 0,
                     is_published=True,
                 )
+
+    def _seed_quizzes(self, course):
+        """A quiz on the opening section, plus a final where there's a certificate.
+
+        Enough to exercise both gates: the section quiz that opens the next
+        section in a sequential course, and the final that earns the
+        certificate. Six questions per quiz with four served, so the pool
+        behaviour is visible rather than theoretical.
+        """
+        bank = [
+            ("Which of these is a valid approach?", ["The documented one"], ["A guess", "Neither"]),
+            ("What should you do when something breaks?", ["Read the error"], ["Retry blindly", "Give up"]),
+            ("Why write tests?", ["To catch regressions"], ["To slow down", "For decoration"]),
+            ("What makes code readable?", ["Clear naming"], ["Cleverness", "Brevity above all"]),
+            ("When should you refactor?", ["When it earns its keep"], ["Never", "Constantly"]),
+            ("What belongs in a commit message?", ["Why the change was made"], ["The diff", "Nothing"]),
+        ]
+
+        def build(quiz, pairs):
+            for index, (text, correct, wrong) in enumerate(pairs):
+                question = Question.objects.create(
+                    quiz=quiz,
+                    text=text,
+                    explanation="Worth remembering as you go.",
+                    order=index,
+                )
+                options = [(c, True) for c in correct] + [(w, False) for w in wrong]
+                random.shuffle(options)
+                for choice_index, (label, is_correct) in enumerate(options):
+                    Choice.objects.create(
+                        question=question, text=label, is_correct=is_correct, order=choice_index
+                    )
+
+        first_section = course.sections.order_by("order").first()
+        if first_section:
+            section_quiz = Quiz.objects.create(
+                course=course,
+                section=first_section,
+                kind="section",
+                title=f"{first_section.title} check",
+                description="A short check before the next section opens.",
+                questions_per_attempt=4,
+                is_published=True,
+            )
+            build(section_quiz, bank)
+
+        if course.certificate_enabled:
+            final = Quiz.objects.create(
+                course=course,
+                kind="final",
+                title=f"{course.title}: final assessment",
+                description="Pass this to earn your certificate.",
+                pass_mark_percent=70,
+                questions_per_attempt=4,
+                is_published=True,
+            )
+            build(final, bank)
 
     def _seed_students(self):
         students = []

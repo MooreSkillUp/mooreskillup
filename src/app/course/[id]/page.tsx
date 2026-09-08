@@ -258,6 +258,8 @@ export default function CoursePage() {
                 description: section.description,
                 isFree: section.isFree,
                 isLocked: section.isLocked,
+                lockReason: section.lockReason,
+                quiz: section.quiz,
                 lessonCount: section.lessonCount || section.lessons.length,
                 durationMinutes: section.durationMinutes,
                 completedCount: section.completedCount,
