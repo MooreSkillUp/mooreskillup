@@ -292,7 +292,19 @@ export interface CourseTaskItem {
   kind: "assignment" | "project";
 }
 
+export interface SectionQuiz {
+  id: string;
+  title: string;
+  questionCount: number;
+  passMarkPercent: number;
+  passed: boolean;
+}
+
 export interface CourseSection {
+  /** The section's quiz, when it has a usable one. */
+  quiz: SectionQuiz | null;
+  /** Why it's shut: "enrolment" (not bought) or "sequential" (not reached). */
+  lockReason: "enrolment" | "sequential" | null;
   /** Published lessons in this section. */
   lessonCount: number;
   /** Summed from per-lesson estimates; 0 when none are set. */
@@ -345,6 +357,16 @@ function normalizeCourseDetail(raw: Record<string, unknown>): CourseDetail {
         description: String(sec.description ?? ""),
         isFree: Boolean(sec.isFree),
         isLocked: Boolean(sec.isLocked),
+        quiz: sec.quiz
+          ? {
+              id: String((sec.quiz as Record<string, unknown>).id ?? ""),
+              title: String((sec.quiz as Record<string, unknown>).title ?? ""),
+              questionCount: toNumber((sec.quiz as Record<string, unknown>).questionCount),
+              passMarkPercent: toNumber((sec.quiz as Record<string, unknown>).passMarkPercent, 70),
+              passed: Boolean((sec.quiz as Record<string, unknown>).passed),
+            }
+          : null,
+        lockReason: (sec.lockReason as CourseSection["lockReason"]) ?? null,
         lessonCount: toNumber(sec.lessonCount),
         durationMinutes: toNumber(sec.durationMinutes),
         completedCount: toNumber(sec.completedCount),

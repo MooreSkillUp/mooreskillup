@@ -208,6 +208,8 @@ class SectionSerializer(serializers.ModelSerializer):
     isFree = serializers.SerializerMethodField()
     isLocked = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
+    quiz = serializers.SerializerMethodField()
+    lockReason = serializers.SerializerMethodField()
     lessonCount = serializers.SerializerMethodField()
     durationMinutes = serializers.SerializerMethodField()
     completedCount = serializers.SerializerMethodField()
@@ -224,6 +226,8 @@ class SectionSerializer(serializers.ModelSerializer):
             "isFree",
             "isLocked",
             "status",
+            "quiz",
+            "lockReason",
             "lessonCount",
             "durationMinutes",
             "completedCount",
@@ -234,6 +238,49 @@ class SectionSerializer(serializers.ModelSerializer):
 
     def _published_lessons(self, obj):
         return [lesson for lesson in obj.lessons.all() if lesson.is_published]
+
+    def get_quiz(self, obj):
+        """The section's quiz, if it has one worth showing.
+
+        An unready quiz — published with no questions, or a question with no
+        correct answer — is reported as absent, matching how the progression
+        rules treat it. Showing a quiz a student cannot pass would be worse
+        than showing none.
+        """
+        from apps.quizzes.models import Quiz
+
+        quiz = Quiz.objects.filter(section=obj, kind="section").first()
+        if not quiz or not quiz.is_ready:
+            return None
+
+        passed = False
+        request = self.context.get("request")
+        if request and request.user.is_authenticated and request.user.role == "student":
+            from apps.quizzes.models import has_passed
+
+            passed = has_passed(request.user.student_profile, quiz)
+
+        return {
+            "id": str(quiz.id),
+            "title": quiz.title,
+            "questionCount": quiz.questions_per_attempt or quiz.question_count,
+            "passMarkPercent": quiz.pass_mark_percent,
+            "passed": passed,
+        }
+
+    def get_lockReason(self, obj):
+        """Why this section is shut, in a word the UI can turn into a sentence.
+
+        "Locked" alone makes a student guess whether to pay, to finish
+        something, or to wait. Naming the reason is the difference between a
+        closed door and a signpost.
+        """
+        if not self.get_isLocked(obj):
+            return None
+        reachable = self.context.get("reachable_section_ids")
+        if reachable is not None and obj.id not in reachable:
+            return "sequential"
+        return "enrolment"
 
     def get_lessonCount(self, obj):
         return len(self._published_lessons(obj))
