@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { QuizEditor } from "@/components/teacher/QuizEditor";
 import { StudioStepRail, type StudioStep } from "@/components/teacher/StudioStepRail";
 import { useAuth } from "@/lib/auth";
+import { useTeacherQuizzes } from "@/lib/teacher-quizzes";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -185,6 +187,10 @@ export function TeacherCourseEditor({
   const source = courseId ? getCourseById(courseId) : undefined;
   const [course, setCourse] = useState<TeacherCourse>(() => clone(source ?? buildEmptyCourse()));
   const [step, setStep] = useState<StudioStep>("basics");
+  // Quizzes live in their own app and have their own lifecycle, so they are
+  // loaded separately rather than folded into the course draft — a half-typed
+  // question must never ride along with a course autosave.
+  const quizzing = useTeacherQuizzes(courseId, Boolean(courseId));
   const [autosaveMessage, setAutosaveMessage] = useState("Waiting for changes");
   const [manualMessage, setManualMessage] = useState("");
   const [manualMessageTone, setManualMessageTone] = useState<"success" | "warning">("success");
@@ -1476,6 +1482,91 @@ export function TeacherCourseEditor({
             </div>
             </>
           )}
+
+          {step === "curriculum" && (
+            <div className="space-y-4">
+              <div className="border-t border-border pt-5">
+                <h3 className="font-display text-lg font-semibold">Quizzes</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  A section quiz opens the next section when this course runs section by section.
+                  The final assessment is what earns the certificate.
+                </p>
+              </div>
+
+              {!courseId ? (
+                <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                  Save this course once and you can start adding quizzes.
+                </p>
+              ) : (
+                <>
+                  {quizzing.error && (
+                    <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      {quizzing.error}
+                    </p>
+                  )}
+
+                  {quizzing.quizzes.map((quiz) => (
+                    <QuizEditor
+                      key={quiz.id}
+                      quiz={quiz}
+                      onUpdateQuiz={(patch) => quizzing.updateQuiz(quiz.id, patch)}
+                      onSaveQuestion={(question) => quizzing.saveQuestion(quiz.id, question)}
+                      onDeleteQuestion={quizzing.deleteQuestion}
+                      onDeleteQuiz={() => quizzing.deleteQuiz(quiz.id)}
+                    />
+                  ))}
+
+                  <div className="flex flex-wrap gap-2">
+                    {course.sections
+                      .filter(
+                        (section) =>
+                          section.id &&
+                          !quizzing.quizzes.some((quiz) => quiz.section === section.id),
+                      )
+                      .map((section) => (
+                        <Button
+                          key={section.id}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            void quizzing.createQuiz({
+                              course: courseId,
+                              section: section.id,
+                              kind: "section",
+                              title: `${section.title || "Section"} check`,
+                            })
+                          }
+                        >
+                          <Plus className="h-4 w-4" />
+                          Quiz for {section.title || "section"}
+                        </Button>
+                      ))}
+
+                    {!quizzing.quizzes.some((quiz) => quiz.kind === "final") && (
+                      <Button
+                        type="button"
+                        variant="accent"
+                        size="sm"
+                        onClick={() =>
+                          void quizzing.createQuiz({
+                            course: courseId,
+                            section: null,
+                            kind: "final",
+                            title: `${course.title || "Course"}: final assessment`,
+                          })
+                        }
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add final assessment
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
 
           {step === "pricing" && (
             <>
