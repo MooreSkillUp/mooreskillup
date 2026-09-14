@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { QuizEditor } from "@/components/teacher/QuizEditor";
+import { StudioPreview } from "@/components/teacher/StudioPreview";
 import { StudioStepRail, type StudioStep } from "@/components/teacher/StudioStepRail";
 import { useAuth } from "@/lib/auth";
 import { useTeacherQuizzes } from "@/lib/teacher-quizzes";
@@ -114,6 +115,7 @@ function buildLesson(): TeacherLesson {
     title: "",
     contentType: "video",
     videoUrl: "",
+    durationMinutes: null,
     textContent: "",
     resourceLinks: [],
     tags: [],
@@ -1116,12 +1118,35 @@ export function TeacherCourseEditor({
                                   </button>
                                 </div>
 
-                                <div className="grid gap-4 md:grid-cols-[1fr_180px]">
+                                <div className="grid gap-4 md:grid-cols-[1fr_140px_180px]">
                                   <Input
                                     label="Lesson Title"
                                     value={lesson.title}
                                     onChange={(event) =>
                                       updateLesson(section.id, lesson.id, { title: event.target.value }, setCourse)
+                                    }
+                                  />
+                                  {/* Students see this per lesson and summed per
+                                      section on the course page. It was never
+                                      editable and always saved as 0, so every
+                                      teacher-built course advertised no length. */}
+                                  <Input
+                                    label="Minutes"
+                                    type="number"
+                                    min={0}
+                                    value={lesson.durationMinutes === null ? "" : String(lesson.durationMinutes)}
+                                    placeholder="e.g. 12"
+                                    onChange={(event) =>
+                                      updateLesson(
+                                        section.id,
+                                        lesson.id,
+                                        {
+                                          durationMinutes: event.target.value
+                                            ? Math.max(0, Number(event.target.value))
+                                            : null,
+                                        },
+                                        setCourse,
+                                      )
                                     }
                                   />
                                   <div className="space-y-2">
@@ -1762,6 +1787,33 @@ export function TeacherCourseEditor({
         </section>
 
         <section className="space-y-6 2xl:sticky 2xl:top-6 self-start">
+          {/* Leads the column: a teacher writing a title should be able to see
+              what it looks like without publishing to find out. */}
+          <StudioPreview
+            title={course.title}
+            subtitle={course.subtitle}
+            program={course.program || profile.program}
+            track={course.track}
+            level={course.level}
+            price={course.price}
+            discountPrice={course.discountPrice}
+            lessonCount={course.sections.reduce((sum, section) => sum + section.lessons.length, 0)}
+            durationMinutes={course.sections.reduce(
+              (sum, section) =>
+                sum +
+                section.lessons.reduce(
+                  (inner, lesson) => inner + (Number(lesson.durationMinutes) || 0),
+                  0,
+                ),
+              0,
+            )}
+            certificateEnabled={course.certificateEnabled}
+            bannerImage={course.bannerImage}
+            bannerTheme={course.bannerTheme}
+            categoryAccentColor={allowedCategories.find(
+              (category) => category.name === (course.program || profile.program),
+            )?.accentColor}
+          />
           <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-primary/10 p-3 text-primary">

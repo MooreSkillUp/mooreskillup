@@ -64,6 +64,9 @@ export interface TeacherLesson {
   textContent: string;
   resourceLinks: TeacherResourceLink[];
   tags: string[];
+  /** Teacher's estimate. Students see it per lesson and summed per section, so
+   *  without it the course page advertises a length nobody set. */
+  durationMinutes: number | null;
   embedUrl?: string;
 }
 
@@ -271,6 +274,10 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
                 title: String(typedLesson.title ?? ""),
                 contentType: (String(typedLesson.content_type ?? typedLesson.type ?? "video") as TeacherLessonContentType),
                 videoUrl: String(typedLesson.video_url ?? typedLesson.videoUrl ?? ""),
+                durationMinutes:
+                  typedLesson.duration_minutes ?? typedLesson.durationMinutes
+                    ? Number(typedLesson.duration_minutes ?? typedLesson.durationMinutes)
+                    : null,
                 textContent: String(typedLesson.text_content ?? typedLesson.textContent ?? ""),
                 resourceLinks: Array.isArray(rawResources)
                   ? rawResources.map((link) => {
@@ -583,6 +590,7 @@ export function useTeacherPlatform(
               title: "",
               contentType: "video",
               videoUrl: "",
+              durationMinutes: null,
               textContent: "",
               resourceLinks: [],
               tags: [],
@@ -767,11 +775,11 @@ export function useTeacherPlatform(
         const lessonPayload = {
           title: lesson.title,
           content_type: lesson.contentType,
+          duration_minutes: lesson.durationMinutes,
           video_url: lesson.contentType === "video" ? lesson.videoUrl : "",
           text_content: lesson.contentType === "text" ? lesson.textContent : "",
           resourceLinks: lesson.contentType === "resource" ? lesson.resourceLinks : [],
           tags: lesson.tags,
-          duration_minutes: 0,
           order: lessonIndex + 1,
           is_previewable: lessonIndex === 0,
           is_published: true,
