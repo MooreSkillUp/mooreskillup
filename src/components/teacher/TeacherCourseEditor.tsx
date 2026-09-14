@@ -224,6 +224,27 @@ export function TeacherCourseEditor({
 
   const issues = useMemo(() => validateCourse(course), [course, validateCourse]);
 
+  const incompleteSectionIds = useMemo(
+    () =>
+      course.sections
+        .filter(
+          (section) =>
+            !section.title.trim() ||
+            !section.lessons.length ||
+            section.lessons.some((lesson) => {
+              if (!lesson.title.trim()) return true;
+              if (lesson.contentType === "video") return !lesson.videoUrl.trim();
+              if (lesson.contentType === "resource") {
+                return !lesson.resourceLinks.some((link) => link.url.trim());
+              }
+              return !stripHtml(lesson.textContent);
+            }),
+        )
+        .map((section) => section.id),
+    [course.sections],
+  );
+
+
   /**
    * How finished each step is.
    *
@@ -233,7 +254,6 @@ export function TeacherCourseEditor({
    */
   const stepProgress = useMemo(() => {
     const filled = (value: string | null | undefined) => Boolean(value && String(value).trim());
-    const lessonCount = course.sections.reduce((sum, s) => sum + s.lessons.length, 0);
 
     const basics = [
       filled(course.title),
@@ -255,48 +275,23 @@ export function TeacherCourseEditor({
         id: "curriculum" as StudioStep,
         label: "Curriculum",
         hint: course.sections.length === 1 ? "section" : "sections",
-        done: course.sections.length && lessonCount ? course.sections.length : 0,
+        done: course.sections.filter((section) => !incompleteSectionIds.includes(section.id))
+          .length,
         total: Math.max(1, course.sections.length),
       },
-      {
-        id: "pricing" as StudioStep,
-        label: "Pricing & settings",
-        hint: "set",
-        done: course.price >= 0 ? 1 : 0,
-        total: 1,
-      },
+      { id: "pricing" as StudioStep, label: "Pricing & settings", hint: "", done: 0, total: 0 },
       {
         id: "certification" as StudioStep,
         label: "Certification",
-        hint: "configured",
+        hint: "SEO set",
         done: filled(course.metaDescription) ? 1 : 0,
         total: 1,
       },
       { id: "publish" as StudioStep, label: "Review & publish", hint: "", done: 0, total: 0 },
     ];
-  }, [course]);
+  }, [course, incompleteSectionIds]);
 
   const stepIndex = stepProgress.findIndex((entry) => entry.id === step);
-
-  const incompleteSectionIds = useMemo(
-    () =>
-      course.sections
-        .filter(
-          (section) =>
-            !section.title.trim() ||
-            !section.lessons.length ||
-            section.lessons.some((lesson) => {
-              if (!lesson.title.trim()) return true;
-              if (lesson.contentType === "video") return !lesson.videoUrl.trim();
-              if (lesson.contentType === "resource") {
-                return !lesson.resourceLinks.some((link) => link.url.trim());
-              }
-              return !stripHtml(lesson.textContent);
-            }),
-        )
-        .map((section) => section.id),
-    [course.sections],
-  );
 
   useEffect(() => {
     const interval = window.setInterval(() => {
