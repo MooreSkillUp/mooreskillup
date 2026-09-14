@@ -1,20 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { BarChart3, Download, GraduationCap, TrendingUp, Users } from "lucide-react";
 import {
-  BarChart3,
-  BookOpen,
-  Clock3,
-  Download,
-  GraduationCap,
-  TrendingUp,
-  Users,
-  XCircle,
-} from "lucide-react";
-import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -23,11 +15,16 @@ import {
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { useFeedback } from "@/lib/feedback";
-import {
-  downloadTeacherAnalyticsCsv,
-  useTeacherAnalytics,
-} from "@/lib/teacher-analytics";
+import { downloadTeacherAnalyticsCsv, useTeacherAnalytics } from "@/lib/teacher-analytics";
 
+/**
+ * How a teacher's courses are actually doing.
+ *
+ * Deliberately about learners, not about course admin. It used to open with
+ * eight cards, half of them counts of courses by status — the same thing the
+ * dashboard pipeline shows, and zero for most teachers. Four figures remain,
+ * each about people.
+ */
 export default function TeacherAnalyticsPage() {
   const { notifyError } = useFeedback();
   const { data, isLoading, error } = useTeacherAnalytics();
@@ -48,119 +45,162 @@ export default function TeacherAnalyticsPage() {
   };
 
   const totals = data?.totals;
+  const trend = data?.enrollmentTrend ?? [];
+  const hasEnrollments = (totals?.totalEnrollments ?? 0) > 0;
 
   return (
     <AppShell allowedRoles={["teacher"]}>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-              Analytics
-            </div>
-            <h1 className="mt-2 font-display text-4xl font-bold">Your course performance</h1>
-            <p className="mt-2 max-w-3xl text-muted-foreground">
-              These numbers cover only the courses assigned to you — enrollments, active learners, completion,
-              and pipeline status across your own courses.
+            <h1 className="font-display text-2xl font-bold sm:text-3xl">Course performance</h1>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Covers only the courses assigned to you.
             </p>
             {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           </div>
-          <Button variant="outline" onClick={() => void onExport()} loading={exporting} loadingText="Exporting...">
+          <Button
+            variant="outline"
+            className="shrink-0"
+            onClick={() => void onExport()}
+            loading={exporting}
+            loadingText="Exporting…"
+          >
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-          <MetricCard icon={BookOpen} label="Your courses" value={totals?.totalCourses ?? 0} sub={`${totals?.publishedCourses ?? 0} published`} />
-          <MetricCard icon={Clock3} label="Awaiting review" value={totals?.pendingReviewCourses ?? 0} />
-          <MetricCard icon={XCircle} label="Declined" value={totals?.declinedCourses ?? 0} />
-          <MetricCard icon={Users} label="Total enrollments" value={totals?.totalEnrollments ?? 0} />
-          <MetricCard icon={GraduationCap} label="Active learners (30d)" value={totals?.activeLearners ?? 0} />
-          <MetricCard icon={TrendingUp} label="Completion rate" value={`${totals?.completionRate ?? 0}%`} />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            icon={Users}
+            label="Total enrollments"
+            value={totals?.totalEnrollments ?? 0}
+            sub="One per student per course"
+          />
           <MetricCard
             icon={BarChart3}
             label="Engaged learners"
-            value={totals?.totalViews ?? 0}
-            sub="Opened at least one lesson"
+            value={totals?.engagedLearners ?? 0}
+            sub="People who opened a lesson"
           />
-          <MetricCard icon={BookOpen} label="Drafts" value={totals?.draftCourses ?? 0} />
+          <MetricCard
+            icon={GraduationCap}
+            label="Active learners"
+            value={totals?.activeLearners ?? 0}
+            sub="Studied in the last 30 days"
+          />
+          <MetricCard
+            icon={TrendingUp}
+            label="Completion rate"
+            value={`${totals?.completionRate ?? 0}%`}
+            sub="Enrollments finished"
+          />
         </div>
 
-        <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-          <h2 className="flex items-center gap-2 font-display text-2xl font-bold">
-            <BarChart3 className="h-5 w-5 text-primary" />
-            Enrollment trend (last 8 weeks)
-          </h2>
-          <div className="mt-5 h-64 w-full">
+        <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <h2 className="font-display text-lg font-semibold">New enrollments</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Eight weekly totals. Bars rather than a curve — a line between two weeks would
+            draw growth that never happened.
+          </p>
+          <div className="mt-5 h-60 w-full">
             {isLoading ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Loading analytics...
+                Loading…
               </div>
-            ) : (
+            ) : hasEnrollments ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data?.enrollmentTrend ?? []}>
-                  <defs>
-                    <linearGradient id="enrollGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="label" className="text-xs" />
-                  <YAxis allowDecimals={false} className="text-xs" />
-                  <Tooltip />
-                  <Area
-                    type="monotone"
-                    dataKey="enrollments"
-                    stroke="var(--color-primary)"
-                    fill="url(#enrollGradient)"
-                    strokeWidth={2}
+                <BarChart data={trend} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    className="text-xs"
+                    stroke="currentColor"
                   />
-                </AreaChart>
+                  <YAxis
+                    allowDecimals={false}
+                    tickLine={false}
+                    axisLine={false}
+                    className="text-xs"
+                    stroke="currentColor"
+                  />
+                  <Tooltip
+                    cursor={{ fill: "var(--color-muted)", opacity: 0.4 }}
+                    contentStyle={{
+                      background: "var(--color-card)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "0.75rem",
+                      fontSize: "0.8125rem",
+                    }}
+                  />
+                  <Bar dataKey="enrollments" radius={[6, 6, 0, 0]} maxBarSize={44}>
+                    {trend.map((week, index) => (
+                      // The final bar is the week in progress, so it is drawn
+                      // faded — it is not yet comparable with the ones beside it.
+                      <Cell
+                        key={week.label}
+                        fill="var(--color-accent)"
+                        fillOpacity={index === trend.length - 1 ? 0.45 : 1}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
+                <p className="text-sm font-medium">No enrollments yet</p>
+                <p className="text-sm text-muted-foreground">
+                  This chart fills in as students join your courses.
+                </p>
+              </div>
             )}
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-          <h2 className="font-display text-2xl font-bold">Per-course breakdown</h2>
+        <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <h2 className="font-display text-lg font-semibold">Per course</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            &quot;Engaged learners&quot; counts enrolled students who have accessed course content at least once.
+            &quot;Engaged&quot; counts enrollments where at least one lesson has been opened. The
+            headline figure above counts people instead, so a student taking three of your
+            courses is one learner there and three rows here.
           </p>
           <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-xs uppercase tracking-[0.15em] text-muted-foreground">
-                  <th className="pb-3 pr-4">Course</th>
-                  <th className="pb-3 pr-4">Status</th>
-                  <th className="pb-3 pr-4">Enrollments</th>
-                  <th className="pb-3 pr-4">Active (30d)</th>
-                  <th className="pb-3 pr-4">Completion</th>
-                  <th className="pb-3">Engaged</th>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="pb-3 pr-4 font-medium">Course</th>
+                  <th className="pb-3 pr-4 font-medium">Status</th>
+                  <th className="pb-3 pr-4 text-right font-medium">Enrolled</th>
+                  <th className="pb-3 pr-4 text-right font-medium">Engaged</th>
+                  <th className="pb-3 pr-4 text-right font-medium">Active 30d</th>
+                  <th className="pb-3 text-right font-medium">Completion</th>
                 </tr>
               </thead>
               <tbody>
                 {!isLoading && !data?.courses.length && (
                   <tr>
                     <td colSpan={6} className="py-6 text-center text-muted-foreground">
-                      No courses yet. Create a course to start seeing analytics.
+                      No courses yet. Create one to start seeing analytics.
                     </td>
                   </tr>
                 )}
                 {data?.courses.map((course) => (
-                  <tr key={course.courseId} className="border-b border-border/60">
+                  <tr key={course.courseId} className="border-b border-border/60 last:border-0">
                     <td className="py-3 pr-4 font-medium">{course.title || "Untitled course"}</td>
                     <td className="py-3 pr-4 capitalize text-muted-foreground">{course.status}</td>
-                    <td className="py-3 pr-4">{course.enrollments}</td>
-                    <td className="py-3 pr-4">{course.activeLearners}</td>
-                    <td className="py-3 pr-4">{course.completionRate}%</td>
-                    <td className="py-3">{course.views}</td>
+                    <td className="py-3 pr-4 text-right tabular-nums">{course.enrollments}</td>
+                    <td className="py-3 pr-4 text-right tabular-nums">{course.engaged}</td>
+                    <td className="py-3 pr-4 text-right tabular-nums">{course.activeLearners}</td>
+                    <td className="py-3 text-right tabular-nums">{course.completionRate}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
       </div>
     </AppShell>
   );
@@ -178,12 +218,12 @@ function MetricCard({
   sub?: string;
 }) {
   return (
-    <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-        <Icon className="h-6 w-6" />
+    <div className="rounded-2xl border border-border bg-card p-5">
+      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent">
+        <Icon className="h-4.5 w-4.5" />
       </div>
-      <div className="mt-5 font-display text-3xl font-bold">{value}</div>
-      <div className="mt-1 text-sm text-muted-foreground">{label}</div>
+      <div className="mt-4 font-display text-3xl font-bold tabular-nums">{value}</div>
+      <div className="mt-0.5 text-sm font-medium">{label}</div>
       {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
     </div>
   );

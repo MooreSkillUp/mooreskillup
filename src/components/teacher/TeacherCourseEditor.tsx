@@ -1875,7 +1875,7 @@ export function TeacherCourseEditor({
               </div>
             </summary>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <MetricCard label="Views" value={`${course.analytics.views}`} />
+              <MetricCard label="Engaged" value={`${course.analytics.engaged}`} />
               <MetricCard label="Enrollments" value={`${course.analytics.enrollments}`} />
               <MetricCard label="Completion rate" value={`${course.analytics.completionRate}%`} />
               <MetricCard label="Status" value={course.status} />

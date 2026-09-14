@@ -8,7 +8,7 @@ export interface TeacherAnalyticsCourseRow {
   enrollments: number;
   activeLearners: number;
   completionRate: number;
-  views: number;
+  engaged: number;
 }
 
 export interface TeacherAnalyticsData {
@@ -21,7 +21,7 @@ export interface TeacherAnalyticsData {
     totalEnrollments: number;
     activeLearners: number;
     completionRate: number;
-    totalViews: number;
+    engagedLearners: number;
   };
   courses: TeacherAnalyticsCourseRow[];
   enrollmentTrend: { label: string; enrollments: number }[];
@@ -97,11 +97,13 @@ export interface TeacherStudentRow {
 
 export interface TeacherStudentsData {
   summary: {
-    totalEnrolled: number;
+    /** Enrollment rows — one per student per course. */
+    totalEnrollments: number;
+    /** Distinct people behind those rows. */
     uniqueStudents: number;
-    activeStudents: number;
-    completedStudents: number;
-    inactiveStudents: number;
+    activeEnrollments: number;
+    completedEnrollments: number;
+    dormantEnrollments: number;
   };
   students: TeacherStudentRow[];
 }

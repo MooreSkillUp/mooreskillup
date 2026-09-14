@@ -103,7 +103,10 @@ export interface TeacherSection {
 }
 
 export interface TeacherCourseAnalytics {
-  views: number;
+  /** Enrollments in which at least one lesson has been opened. */
+  engaged: number;
+  /** Distinct lessons opened across all enrollments — always the larger number. */
+  lessonOpens: number;
   enrollments: number;
   completionRate: number;
 }
@@ -175,7 +178,7 @@ export interface TeacherDashboardStats {
   declinedCourses: number;
   approvedCourses: number;
   completionRate: number;
-  totalViews: number;
+  engagedLearners: number;
 }
 
 interface TeacherDashboardPayload {
@@ -334,7 +337,8 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
       };
     }),
     analytics: {
-      views: Number(analytics.views ?? 0),
+      engaged: Number(analytics.engaged ?? 0),
+      lessonOpens: Number(analytics.lessonOpens ?? 0),
       enrollments: Number(analytics.enrollments ?? 0),
       completionRate: Number(analytics.completionRate ?? 0),
     },
@@ -406,7 +410,7 @@ export function useTeacherPlatform(
     declinedCourses: 0,
     approvedCourses: 0,
     completionRate: 0,
-    totalViews: 0,
+    engagedLearners: 0,
   });
   const [categories, setCategories] = useState<TeacherCategory[]>([]);
   const [teacherCourses, setTeacherCourses] = useState<TeacherCourse[]>([]);
@@ -443,7 +447,7 @@ export function useTeacherPlatform(
               declinedCourses: 0,
               approvedCourses: 0,
               completionRate: 0,
-              totalViews: 0,
+              engagedLearners: 0,
             },
           }),
           authenticatedRequest<unknown>("/api/admin/categories/"),
@@ -601,7 +605,8 @@ export function useTeacherPlatform(
         },
       ],
       analytics: {
-        views: 0,
+        engaged: 0,
+        lessonOpens: 0,
         enrollments: 0,
         completionRate: 0,
       },

@@ -113,6 +113,6 @@ def test_student_list_scoped_to_own_courses(taxonomy, db):
     res = client_for(user_a).get("/api/teacher/students/")
     assert res.status_code == 200
     data = res.json()
-    assert data["summary"]["totalEnrolled"] == 1
+    assert data["summary"]["totalEnrollments"] == 1
     assert data["students"][0]["email"] == "p1@t.dev"
     assert data["students"][0]["courseTitle"] == "A"
