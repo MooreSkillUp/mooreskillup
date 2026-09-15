@@ -855,17 +855,44 @@ export function TeacherCourseEditor({
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Track</label>
-                <select
-                  value={course.track || profile.tracks[0] || profile.track}
-                  onChange={(event) => updateCourse("track", event.target.value)}
-                  className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
-                >
-                  {(profile.tracks.length ? profile.tracks : profile.track ? [profile.track] : []).map((track) => (
-                    <option key={track} value={track}>
-                      {track}
-                    </option>
-                  ))}
-                </select>
+                {(() => {
+                  const assigned = profile.tracks.length
+                    ? profile.tracks
+                    : profile.track
+                      ? [profile.track]
+                      : [];
+                  const current = course.track || assigned[0] || "";
+                  // A course reassigned to this teacher, or built before an admin
+                  // changed their tracks, can sit in a track they aren't assigned.
+                  // A <select> whose value isn't among its options silently shows
+                  // the first option instead — which is how a Data Analysis course
+                  // read "Frontend Development". List the real track, and say why.
+                  const outsideAssigned = Boolean(current) && !assigned.includes(current);
+                  return (
+                    <>
+                      <select
+                        value={current}
+                        onChange={(event) => updateCourse("track", event.target.value)}
+                        className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
+                      >
+                        {outsideAssigned && (
+                          <option value={current}>{current} (current track)</option>
+                        )}
+                        {assigned.map((track) => (
+                          <option key={track} value={track}>
+                            {track}
+                          </option>
+                        ))}
+                      </select>
+                      {outsideAssigned && (
+                        <p className="text-xs text-muted-foreground">
+                          This course is in a track you aren&apos;t assigned to. It stays there
+                          unless you pick another.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 

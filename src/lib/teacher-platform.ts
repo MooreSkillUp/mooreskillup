@@ -624,23 +624,86 @@ export function useTeacherPlatform(
 
   const getCourseById = useCallback((id: string) => teacherCourses.find((course) => course.id === id), [teacherCourses]);
 
+  /**
+   * Work out a course's category and track before it is saved.
+   *
+   * This runs on every save, autosave included. It used to re-derive the
+   * classification from the *teacher's* program every time, and when the
+   * course's track wasn't among the teacher's, fall back to the first track of
+   * the first category. So a course reassigned to a teacher — or built before an
+   * admin changed their tracks — was moved to a different category by the next
+   * autosave after any edit at all. Typing into the subtitle of an AI and Data
+   * course turned it into Web Development / Frontend Development.
+   *
+   * The rule now: a classification the course already has is never replaced by
+   * a guess. It changes only when the teacher picks a different track, and the
+   * fallback is reserved for a course that has no classification yet.
+   */
   const syncCourseClassification = useCallback(
     (course: TeacherCourse): TeacherCourse => {
+      const themed = (category: TeacherCategory | undefined) =>
+        category?.bannerTheme ?? course.bannerTheme ?? "default";
+
+      // 1. What the course is already in, found by id across every category —
+      //    not only the ones this teacher is assigned.
+      const currentCategory = categories.find((category) => category.id === course.categoryId);
+      const currentTrack = currentCategory?.subcategories.find(
+        (subcategory) => subcategory.id === course.subcategoryId,
+      );
+      const trackUnchanged = !course.track || course.track === currentTrack?.name;
+
+      if (currentCategory && currentTrack && trackUnchanged) {
+        return {
+          ...course,
+          program: currentCategory.name,
+          track: currentTrack.name,
+          bannerTheme: themed(currentCategory),
+        };
+      }
+
+      // 2. The teacher chose a different track: resolve it exactly, no fallback.
       const selectedTrack = course.track || profile.tracks[0] || profile.track;
+      const chosenCategory = allowedCategories.find((category) =>
+        category.subcategories.some((subcategory) => subcategory.name === selectedTrack),
+      );
+      const chosenTrack = chosenCategory?.subcategories.find(
+        (subcategory) => subcategory.name === selectedTrack,
+      );
+
+      if (chosenCategory && chosenTrack) {
+        return {
+          ...course,
+          program: chosenCategory.name,
+          categoryId: chosenCategory.id,
+          track: chosenTrack.name,
+          subcategoryId: chosenTrack.id,
+          bannerTheme: themed(chosenCategory),
+        };
+      }
+
+      // 3. A track name that resolves to nothing: keep what the course had.
+      if (currentCategory && currentTrack) {
+        return {
+          ...course,
+          program: currentCategory.name,
+          track: currentTrack.name,
+          bannerTheme: themed(currentCategory),
+        };
+      }
+
+      // 4. Only a course with no classification at all inherits one.
       const category = getCategoryForTrack(allowedCategories, profile.program, selectedTrack);
       const subcategory = getInheritedTrack(category, selectedTrack);
-
       return {
         ...course,
         program: category?.name ?? profile.program,
         categoryId: category?.id ?? course.categoryId,
         track: subcategory?.name ?? selectedTrack,
         subcategoryId: subcategory?.id ?? course.subcategoryId,
-        // Inherit banner theme from the admin-configured category (not hardcoded)
-        bannerTheme: category?.bannerTheme ?? course.bannerTheme ?? "default",
+        bannerTheme: themed(category),
       };
     },
-    [allowedCategories, profile.program, profile.track, profile.tracks],
+    [allowedCategories, categories, profile.program, profile.track, profile.tracks],
   );
 
   const validateCourse = useCallback((course: TeacherCourse) => {
