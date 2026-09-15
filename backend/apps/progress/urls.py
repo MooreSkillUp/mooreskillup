@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    AdminAlertsView,
     AdminDashboardView,
     CourseProgressDetailView,
     LessonProgressUpdateView,
@@ -22,4 +23,5 @@ urlpatterns = [
     path("teacher/students/", TeacherStudentsView.as_view(), name="teacher-students"),
     path("teacher/students/export/", TeacherStudentsExportView.as_view(), name="teacher-students-export"),
     path("dashboard/admin/", AdminDashboardView.as_view(), name="dashboard-admin"),
+    path("admin/alerts/", AdminAlertsView.as_view(), name="admin-alerts"),
 ]

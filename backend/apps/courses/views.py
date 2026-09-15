@@ -227,25 +227,17 @@ class AdminCourseListView(APIView):
     permission_classes = [AdminAction("courses:view")]
 
     def get(self, request):
+        from .serializers import AdminCourseListSerializer
+
         courses = (
             Course.objects.all()
             .select_related("teacher__user", "category", "subcategory", "reviewed_by")
-            .prefetch_related(
-                "sections__lessons",
-                "sections__tasks",
-                "sections__projects",
-                "tags",
-                # The reviewer checklist reads these. Prefetched, the queue costs
-                # the same queries however many courses are waiting in it.
-                "quizzes__questions__choices",
-            )
+            # Only what the reviewer checklist reads. Prefetched, the list costs
+            # the same queries for three courses as for three hundred.
+            .prefetch_related("sections__lessons", "quizzes__questions__choices")
             .order_by("-updated_at", "-created_at")
         )
-        return response.Response(
-            CourseSerializer(
-                courses, many=True, context={"request": request, "include_review_summary": True}
-            ).data
-        )
+        return response.Response(AdminCourseListSerializer(courses, many=True).data)
 
 
 class TeacherCourseViewSet(viewsets.ModelViewSet):

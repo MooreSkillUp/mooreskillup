@@ -787,3 +787,38 @@ class AdminDashboardView(views.APIView):
                 },
             }
         )
+
+
+class AdminAlertsView(views.APIView):
+    """The two counts and three courses the admin chrome shows on every page.
+
+    The sidebar badge and the notification bell each used to run the full admin
+    loader — eight endpoints, the course list among them — on every admin page,
+    alongside the page's own copy. This is the little they actually need.
+    """
+
+    permission_classes = [AdminAction("dashboard:view")]
+
+    def get(self, request):
+        queue = (
+            Course.objects.filter(status="review")
+            .select_related("teacher__user")
+            # Oldest first. A course with no submission time predates the field,
+            # so it is older than any that has one.
+            .order_by(models.F("submitted_at").asc(nulls_first=True))
+        )
+        return response.Response(
+            {
+                "pendingReviews": queue.count(),
+                "failedPayments": Payment.objects.filter(status="failed").count(),
+                "reviewQueue": [
+                    {
+                        "id": str(course.id),
+                        "title": course.title,
+                        "teacherName": course.teacher.user.display_name if course.teacher else "Admin-owned",
+                        "submittedAt": course.submitted_at.isoformat() if course.submitted_at else None,
+                    }
+                    for course in queue[:3]
+                ],
+            }
+        )

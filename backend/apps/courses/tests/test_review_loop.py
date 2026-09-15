@@ -149,9 +149,65 @@ def test_the_queue_reports_what_a_reviewer_would_otherwise_open_every_lesson_to_
     assert row["submittedAt"] is not None
 
 
-def test_the_checklist_is_not_computed_outside_the_review_queue(loop):
+def test_the_checklist_is_not_computed_outside_the_admin_list(loop):
     """The catalog and the studio never ask for it, so they must not pay for it."""
     teacher_user, course, _ = loop
     seen = client_for(teacher_user).get(f"/api/teacher/courses/{course.id}/").json()
-    assert seen["reviewSummary"] is None
+    assert "reviewSummary" not in seen
     assert Course.objects.filter(id=course.id).exists()
+
+
+def test_the_admin_course_list_costs_the_same_however_many_courses(loop):
+    """It reused the catalog serializer: 248 queries for thirteen courses.
+
+    A constant query count is the property that matters — whatever the number
+    is today, a fortieth course must not add to it.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from apps.courses.models import Section
+
+    teacher_user, course, admin = loop
+    client = client_for(admin)
+
+    def queries():
+        with CaptureQueriesContext(connection) as ctx:
+            assert client.get("/api/admin/courses/").status_code == 200
+        # Count the list's own work. The platform-settings singleton is read by
+        # middleware and created on first access, so whether its queries appear
+        # depends on the cache, not on how many courses there are.
+        return len(
+            [
+                q
+                for q in ctx.captured_queries
+                if "platform_platformsettings" not in q["sql"] and "SAVEPOINT" not in q["sql"]
+            ]
+        )
+
+    baseline = queries()
+    for index in range(4):
+        extra = Course.objects.create(
+            teacher=course.teacher, category=course.category, subcategory=course.subcategory,
+            title=f"Extra course {index}", subtitle="s", overview="o", scheme_of_work="w",
+        )
+        section = Section.objects.create(course=extra, title="S", description="d", order=1)
+        Lesson.objects.create(section=section, title="L", content_type="text", order=1)
+
+    assert queries() == baseline
+
+
+def test_the_admin_chrome_gets_its_counts_without_the_course_list(loop):
+    """The sidebar badge and the bell read this, not the eight-endpoint loader."""
+    teacher_user, course, admin = loop
+    submit(teacher_user, course)
+
+    data = client_for(admin).get("/api/admin/alerts/").json()
+    assert data["pendingReviews"] == 1
+    assert data["reviewQueue"][0]["id"] == str(course.id)
+    assert data["reviewQueue"][0]["submittedAt"] is not None
+
+
+def test_a_teacher_cannot_read_the_admin_alerts(loop):
+    teacher_user, _, _ = loop
+    assert client_for(teacher_user).get("/api/admin/alerts/").status_code in (401, 403)

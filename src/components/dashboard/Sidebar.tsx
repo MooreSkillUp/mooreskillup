@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { UserAvatar } from "@/components/shared/UserAvatar";
-import { useAdminPlatform } from "@/lib/admin-platform";
+import { useAdminAlerts } from "@/lib/admin-platform";
 import { useFeatureFlags } from "@/lib/feature-flags";
 import { usePlatformNotifications } from "@/lib/platform-notifications";
 import { hasUserPermission } from "@/lib/admin-rbac";
@@ -57,9 +57,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const role = user?.role ?? "student";
   const platformNotifications = usePlatformNotifications(role !== "admin" && !!user);
   const { flags } = useFeatureFlags();
-  const { systemAlerts } = useAdminPlatform({ enabled: role === "admin" && !!user });
+  // Two counts for a badge. This used to run the entire admin loader — eight
+  // endpoints, the full course list among them — on every admin page.
+  const adminAlerts = useAdminAlerts(role === "admin" && !!user);
   const adminNotificationBadge =
-    (systemAlerts.pendingReviews ?? 0) + (systemAlerts.failedPayments ?? 0);
+    (adminAlerts?.pendingReviews ?? 0) + (adminAlerts?.failedPayments ?? 0);
 
   // Grouped so a ten-item list reads as three short ones. Quiz Shop, Leaderboard
   // and Achievements have no backend yet and appear only when a Super Admin
@@ -142,7 +144,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         },
         {
           href: "/admin/reviews",
-          label: "Pending reviews",
+          label: "Course reviews",
           icon: ClipboardCheck,
           permission: "courses:approve",
         },
