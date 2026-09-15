@@ -19,7 +19,19 @@ export interface AdminTeacher {
   academicTrack: string;
   academicTracks: string[];
   status: "active" | "inactive";
+  /**
+   * Present only on the response that created the account, and only when email
+   * couldn't deliver it — the admin is then the one route to the teacher.
+   */
   temporaryPassword?: string | null;
+  emailDelivered?: boolean;
+}
+
+/** What resending an invite returns. The password comes back only when email is off. */
+export interface InviteResend {
+  detail: string;
+  emailDelivered: boolean;
+  temporaryPassword: string | null;
 }
 
 export interface AdminStudent {
@@ -440,7 +452,7 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
 
   const resendTeacherInvite = useCallback(
     async (teacherId: string) =>
-      authenticatedRequest<{ detail: string }>(`/api/admin/teachers/${teacherId}/resend-invite/`, {
+      authenticatedRequest<InviteResend>(`/api/admin/teachers/${teacherId}/resend-invite/`, {
         method: "POST",
       }),
     [],

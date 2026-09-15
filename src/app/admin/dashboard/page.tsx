@@ -172,7 +172,7 @@ export default function AdminDashboardPage() {
   const revenue = Number(totals?.revenue ?? 0);
   const tiles = [
     { label: "Students", value: `${totals?.students ?? 0}`, href: "/admin/students", permission: "students:view" },
-    { label: "Active teachers", value: `${activeTeachers}`, href: "/admin/users", permission: "teachers:view" },
+    { label: "Active teachers", value: `${activeTeachers}`, href: "/admin/teachers", permission: "teachers:view" },
     { label: "Live courses", value: `${totals?.publishedCourses ?? 0}`, href: "/admin/courses", permission: "courses:view" },
     {
       label: "Active enrollments",
@@ -215,7 +215,7 @@ export default function AdminDashboardPage() {
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             {can("teachers:create") && (
-              <Link href="/admin/teachers">
+              <Link href="/admin/teachers?new=1">
                 <Button variant="accent">
                   <UserPlus className="h-4 w-4" /> Create teacher
                 </Button>

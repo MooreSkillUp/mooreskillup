@@ -164,13 +164,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       title: "People",
       items: [
         { href: "/admin/students", label: "Students", icon: Users, permission: "students:view" },
-        { href: "/admin/users", label: "Manage teachers", icon: Users, permission: "teachers:view" },
-        {
-          href: "/admin/teachers",
-          label: "Create teacher",
-          icon: UserPlus,
-          permission: "teachers:create",
-        },
+        // One teacher screen. "Manage teachers" and "Create teacher" were two
+        // overlapping pages that disagreed about what their buttons did.
+        { href: "/admin/teachers", label: "Teachers", icon: Users, permission: "teachers:view" },
         { href: "/admin/admins", label: "Admin team", icon: Shield, permission: "admins:view" },
       ],
     },
