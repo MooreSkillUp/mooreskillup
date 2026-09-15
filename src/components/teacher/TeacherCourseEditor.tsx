@@ -1247,7 +1247,12 @@ export function TeacherCourseEditor({
                                           setCourse,
                                         )
                                       }
-                                      hint="Use a YouTube, Vimeo, or direct hosted video link. Learners will only see the player inside the lesson view."
+                                      // The old hint said learners "will only see the player
+                                      // inside the lesson view", which reads as access control
+                                      // and is not: the link is in the lesson payload and an
+                                      // unlisted video is public to anyone holding the URL. A
+                                      // teacher chooses where to host based on this sentence.
+                                      hint="Paste a YouTube, Vimeo, or direct video link. Anyone with the link can open it outside MooreSkillUp, so use Vimeo's privacy settings for anything you need kept private."
                                     />
                                     {lesson.videoUrl.trim() && (
                                       <details className="group rounded-2xl border border-border bg-card p-4">
