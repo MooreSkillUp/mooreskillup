@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -262,11 +264,30 @@ class TeacherCourseViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         course = serializer.save()
+        teacher = self.request.user.teacher_profile
+        message = f"Updated course {course.title}"
+
+        # Autosave runs every twelve seconds while a teacher types, and each save
+        # wrote its own entry — "Updated course" four times in a few minutes,
+        # burying everything else in the teacher's and the admin's feeds. One
+        # editing session is one entry: a recent one is refreshed instead.
+        recent = (
+            TeacherActivityLog.objects.filter(
+                teacher=teacher,
+                course=course,
+                activity_type="edit-course",
+                created_at__gte=timezone.now() - timedelta(minutes=30),
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if recent:
+            TeacherActivityLog.objects.filter(pk=recent.pk).update(
+                created_at=timezone.now(), message=message
+            )
+            return
         TeacherActivityLog.objects.create(
-            teacher=self.request.user.teacher_profile,
-            course=course,
-            message=f"Updated course {course.title}",
-            activity_type="edit-course",
+            teacher=teacher, course=course, message=message, activity_type="edit-course"
         )
 
     def destroy(self, request, *args, **kwargs):

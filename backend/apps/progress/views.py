@@ -18,6 +18,7 @@ from apps.enrollments.models import Enrollment
 from apps.notifications.models import Notification
 from apps.payments.models import Payment
 from apps.payments.paystack import is_live as paystack_is_live
+from common.mail_backend import backend_delivers
 from common.permissions import IsStudentUserRole, IsTeacherUserRole
 from common.rbac import AdminAction
 
@@ -714,7 +715,7 @@ class AdminDashboardView(views.APIView):
             {
                 "id": f"user-{user.id}",
                 "title": "New user registered",
-                "message": f"{user.display_name} joined as a {user.role}.",
+                "message": f"{user.display_name} joined as {'an' if user.role[:1] in 'aeiou' else 'a'} {user.role}.",
                 "timestamp": user.created_at,
                 "type": "registration",
             }
@@ -782,7 +783,10 @@ class AdminDashboardView(views.APIView):
                     # copy of a generated password. False on paymentsLive means
                     # no key reached the server; checkout now refuses rather
                     # than enrolling students into paid courses for nothing.
-                    "emailDelivers": getattr(settings, "EMAIL_IS_DELIVERED", False),
+                    # Read from the backend actually in force, not a flag computed
+                    # earlier in settings — a later override (dev.py forces the
+                    # console backend) left that flag claiming mail was delivered.
+                    "emailDelivers": backend_delivers(settings.EMAIL_BACKEND),
                     "paymentsLive": paystack_is_live(),
                 },
             }

@@ -60,8 +60,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   // Two counts for a badge. This used to run the entire admin loader — eight
   // endpoints, the full course list among them — on every admin page.
   const adminAlerts = useAdminAlerts(role === "admin" && !!user);
-  const adminNotificationBadge =
-    (adminAlerts?.pendingReviews ?? 0) + (adminAlerts?.failedPayments ?? 0);
+  // Each count sits on the item where it is dealt with. Both used to be summed
+  // onto "Notifications", which is broadcast history — the one page where
+  // neither a waiting course nor a failed payment can be handled.
+  const reviewsBadge = adminAlerts?.pendingReviews ?? 0;
+  const failedPaymentsBadge = adminAlerts?.failedPayments ?? 0;
 
   // Grouped so a ten-item list reads as three short ones. Quiz Shop, Leaderboard
   // and Achievements have no backend yet and appear only when a Super Admin
@@ -121,7 +124,6 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           href: "/admin/notifications",
           label: "Notifications",
           icon: Bell,
-          badge: adminNotificationBadge,
           permission: "notifications:view",
         },
         {
@@ -145,6 +147,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         {
           href: "/admin/reviews",
           label: "Course reviews",
+          badge: reviewsBadge,
           icon: ClipboardCheck,
           permission: "courses:approve",
         },
@@ -174,7 +177,13 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     {
       title: "Operations",
       items: [
-        { href: "/admin/payments", label: "Payments", icon: CreditCard, permission: "payments:view" },
+        {
+          href: "/admin/payments",
+          label: "Payments",
+          icon: CreditCard,
+          badge: failedPaymentsBadge,
+          permission: "payments:view",
+        },
         { href: "/admin/support", label: "Support", icon: LifeBuoy, permission: "support:view" },
         {
           href: "/admin/activity-logs",
