@@ -1,139 +1,132 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, GiftIcon, GraduationCap, PencilLine, Trash2 } from "lucide-react";
+import { Download, GiftIcon, PencilLine, Search, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
+import { hasUserPermission, type AdminResourceAction } from "@/lib/admin-rbac";
+import { useAdminPlatform, type AdminStudent } from "@/lib/admin-platform";
 import { useAuth } from "@/lib/auth";
-import { hasUserPermission } from "@/lib/admin-rbac";
 import { useFeedback } from "@/lib/feedback";
-import { useAdminPlatform } from "@/lib/admin-platform";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+function ago(iso?: string | null) {
+  if (!iso) return null;
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  return months <= 1 ? "a month ago" : `${months} months ago`;
+}
+
+type SortKey = "studied" | "name" | "enrolled" | "paid";
+type Expanded = { id: string; mode: "edit" | "grant" } | null;
+
+/**
+ * Every student, with what they're doing and what an admin can do about it.
+ *
+ * Rebuilt from a seven-column table squeezed beside an editor panel — it clipped
+ * its own actions off the right edge, and its filter dropdowns read "All st"
+ * and "Last .". Two controls were removed rather than restyled: a Plan editor
+ * that saved a value nothing on the platform reads, and nothing else.
+ */
 export default function AdminStudentsPage() {
   const { user } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
-  const canDelete = hasUserPermission(user?.permissions, "students:delete");
+  const can = (permission: string) =>
+    hasUserPermission(user?.permissions, permission as AdminResourceAction);
   const { students, courses, updateStudent, deleteStudent, grantStudentAccess, isLoading, error } =
     useAdminPlatform();
+
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("recent");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "disabled">("all");
+  const [sortBy, setSortBy] = useState<SortKey>("studied");
   const [page, setPage] = useState(1);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const [draftName, setDraftName] = useState("");
-  const [draftEmail, setDraftEmail] = useState("");
-  const [draftPlan, setDraftPlan] = useState("free");
-  const [actionKey, setActionKey] = useState<string | null>(null);
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [grantCourseId, setGrantCourseId] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Expanded>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminStudent | null>(null);
 
-  const publishedCourses = useMemo(
-    () => courses.filter((course) => course.status === "published"),
-    [courses],
-  );
+  const canEdit = can("students:edit");
+  // Bulk suspension is its own permission in the matrix (super admin only);
+  // the old page offered it to anyone who could edit a single student.
+  const canBulk = can("students:bulk-suspend");
 
-  const filteredStudents = useMemo(() => {
+  const liveCourses = useMemo(() => courses.filter((course) => course.status === "published"), [courses]);
+
+  const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const nextStudents = students.filter((student) => {
-      const matchesSearch =
-        !query ||
-        [student.displayName, student.email, student.selectedInterest, student.selectedTrack]
-          .filter(Boolean)
-          .some((value) => value.toLowerCase().includes(query));
-      const matchesStatus = statusFilter === "all" || student.status === statusFilter;
-      return matchesSearch && matchesStatus;
+    const rows = students.filter((student) => {
+      if (statusFilter !== "all" && student.status !== statusFilter) return false;
+      if (!query) return true;
+      return [student.displayName, student.email, student.selectedInterest, student.selectedTrack]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(query));
     });
-
-    return [...nextStudents].sort((left, right) => {
-      if (sortBy === "name") return left.displayName.localeCompare(right.displayName);
-      if (sortBy === "enrollments") return right.enrolledCourses - left.enrolledCourses;
-      if (sortBy === "payments") return right.totalPayments - left.totalPayments;
-      const leftTime = left.lastActiveAt ? new Date(left.lastActiveAt).getTime() : 0;
-      const rightTime = right.lastActiveAt ? new Date(right.lastActiveAt).getTime() : 0;
-      return rightTime - leftTime;
+    const time = (iso?: string | null) => (iso ? new Date(iso).getTime() : 0);
+    return rows.sort((a, b) => {
+      if (sortBy === "name") return a.displayName.localeCompare(b.displayName);
+      if (sortBy === "enrolled") return b.enrolledCourses - a.enrolledCourses;
+      if (sortBy === "paid") return b.totalPayments - a.totalPayments;
+      return time(b.lastActiveAt) - time(a.lastActiveAt);
     });
   }, [search, sortBy, statusFilter, students]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const paginatedStudents = filteredStudents.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-
-  const selectedStudent = students.find((student) => student.id === selectedStudentId) ?? null;
-  const deleteTarget = students.find((student) => student.id === deleteTargetId) ?? null;
-
-  const beginEdit = (studentId: string) => {
-    const student = students.find((item) => item.id === studentId);
-    if (!student) return;
-    setSelectedStudentId(studentId);
-    setDraftName(student.displayName);
-    setDraftEmail(student.email);
-    setDraftPlan(student.plan);
-  };
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const current = Math.min(page, pages);
+  const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   const activeCount = students.filter((student) => student.status === "active").length;
-  const disabledCount = students.filter((student) => student.status === "disabled").length;
 
-  const toggleSelect = (studentId: string) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(studentId)) next.delete(studentId);
-      else next.add(studentId);
-      return next;
-    });
-  };
-
-  const toggleSelectPage = () => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      const allSelected = paginatedStudents.every((student) => next.has(student.id));
-      paginatedStudents.forEach((student) => {
-        if (allSelected) next.delete(student.id);
-        else next.add(student.id);
-      });
-      return next;
-    });
-  };
-
-  const bulkUpdateStatus = async (status: "active" | "disabled") => {
-    const ids = Array.from(selectedIds);
-    if (!ids.length) return;
-    setActionKey("bulk-status");
+  const run = async (key: string, action: () => Promise<void>, failure: string) => {
+    setBusy(key);
     try {
-      await Promise.all(ids.map((id) => updateStudent(id, { status })));
-      notifySuccess(
-        status === "disabled" ? "Selected students suspended" : "Selected students reactivated",
-        `${ids.length} account${ids.length === 1 ? "" : "s"} updated.`,
-      );
-      setSelectedIds(new Set());
+      await action();
     } catch (actionError) {
-      notifyError(
-        "Bulk update failed",
-        actionError instanceof Error ? actionError.message : "Request failed.",
-      );
+      notifyError(failure, actionError instanceof Error ? actionError.message : "Request failed.");
     } finally {
-      setActionKey(null);
+      setBusy(null);
     }
   };
 
+  const setStatus = (student: AdminStudent, next: "active" | "disabled") =>
+    run(
+      `${student.id}:status`,
+      async () => {
+        await updateStudent(student.id, { status: next });
+        notifySuccess(next === "disabled" ? `${student.displayName} suspended` : `${student.displayName} reactivated`);
+      },
+      "Could not update student",
+    );
+
+  const bulkStatus = (next: "active" | "disabled") =>
+    run(
+      "bulk",
+      async () => {
+        const ids = Array.from(selected);
+        await Promise.all(ids.map((id) => updateStudent(id, { status: next })));
+        notifySuccess(
+          next === "disabled" ? "Suspended" : "Reactivated",
+          `${plural(ids.length, "account")} updated.`,
+        );
+        setSelected(new Set());
+      },
+      "Bulk update failed",
+    );
+
   const exportCsv = () => {
-    const rows = filteredStudents.length ? filteredStudents : students;
-    const header = ["Name", "Email", "Program", "Track", "Enrollments", "Completed", "Payments", "Status"];
-    const escape = (value: string | number) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = filtered.length ? filtered : students;
+    const cell = (value: string | number) => `"${String(value ?? "").replace(/"/g, '""')}"`;
     const lines = [
-      header.join(","),
+      ["Name", "Email", "Program", "Track", "Enrolled", "Completed", "Paid courses", "Last studied", "Last signed in", "Status"]
+        .map(cell)
+        .join(","),
       ...rows.map((student) =>
         [
           student.displayName,
@@ -143,439 +136,503 @@ export default function AdminStudentsPage() {
           student.enrolledCourses,
           student.completedCourses,
           student.totalPayments,
-          student.status,
+          student.lastActiveAt ?? "",
+          student.lastSignedInAt ?? "",
+          student.status === "active" ? "Active" : "Suspended",
         ]
-          .map(escape)
+          .map(cell)
           .join(","),
       ),
     ];
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" }));
     const link = document.createElement("a");
     link.href = url;
     link.download = `students-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    notifySuccess("CSV exported", `${rows.length} student${rows.length === 1 ? "" : "s"} exported.`);
+    notifySuccess("CSV exported", `${plural(rows.length, "student")}.`);
   };
 
-  const grantAccess = async () => {
-    if (!selectedStudent || !grantCourseId) return;
-    setActionKey("grant-access");
-    try {
-      const result = await grantStudentAccess(selectedStudent.id, grantCourseId);
-      notifySuccess("Access granted", result.detail);
-      setGrantCourseId("");
-    } catch (actionError) {
-      notifyError(
-        "Unable to grant access",
-        actionError instanceof Error ? actionError.message : "Request failed.",
-      );
-    } finally {
-      setActionKey(null);
-    }
-  };
+  const pageIds = visible.map((student) => student.id);
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
 
   return (
     <AppShell allowedRoles={["admin"]}>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-              Student management
-            </div>
-            <h1 className="mt-2 font-display text-4xl font-bold">Manage learners with scale in mind</h1>
-            <p className="mt-2 max-w-3xl text-muted-foreground">
-              Search, filter, sort, and page through learner accounts so the workspace stays fast and usable even with thousands of students.
+            <h1 className="font-display text-2xl font-bold sm:text-3xl">Students</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {isLoading
+                ? "Loading…"
+                : `${plural(students.length, "student")} · ${activeCount} active · ${students.length - activeCount} suspended`}
             </p>
-            {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
           </div>
-          <div className="flex w-full max-w-xl items-end gap-3">
-            <div className="flex-1">
-              <Input
-                label="Search students"
+          <Button variant="outline" className="shrink-0" onClick={exportCsv} disabled={!students.length}>
+            <Download className="h-4 w-4" /> Export CSV
+          </Button>
+        </header>
+
+        {canBulk && selected.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-accent/30 bg-accent/5 px-4 py-3">
+            <p className="mr-auto text-sm font-medium">{plural(selected.size, "student")} selected</p>
+            <Button variant="outline" size="sm" loading={busy === "bulk"} loadingText="Working…" onClick={() => void bulkStatus("disabled")}>
+              Suspend
+            </Button>
+            <Button variant="outline" size="sm" disabled={busy === "bulk"} onClick={() => void bulkStatus("active")}>
+              Reactivate
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+              Clear
+            </Button>
+          </div>
+        )}
+
+        <section className="rounded-2xl border border-border bg-card">
+          <div className="flex flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center">
+            {canBulk && (
+              <input
+                type="checkbox"
+                aria-label="Select everyone on this page"
+                checked={allOnPageSelected}
+                onChange={() =>
+                  setSelected((prev) => {
+                    const next = new Set(prev);
+                    pageIds.forEach((id) => (allOnPageSelected ? next.delete(id) : next.add(id)));
+                    return next;
+                  })
+                }
+                className="h-4 w-4 rounded border-border"
+              />
+            )}
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                id="student-search"
+                aria-label="Search students"
                 value={search}
                 onChange={(event) => {
                   setSearch(event.target.value);
                   setPage(1);
                 }}
-                placeholder="Search by name, email, program, or track"
+                placeholder="Search name, email, program or track"
+                className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm"
               />
             </div>
-            <Button variant="outline" onClick={exportCsv} disabled={!students.length}>
-              <Download className="h-4 w-4" /> Export CSV
-            </Button>
+            <select
+              id="student-status"
+              aria-label="Filter by status"
+              value={statusFilter}
+              onChange={(event) => {
+                setStatusFilter(event.target.value as typeof statusFilter);
+                setPage(1);
+              }}
+              className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="disabled">Suspended</option>
+            </select>
+            <select
+              id="student-sort"
+              aria-label="Sort by"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as SortKey)}
+              className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
+            >
+              <option value="studied">Most recently studied</option>
+              <option value="name">Name</option>
+              <option value="enrolled">Most enrolled</option>
+              <option value="paid">Most paid courses</option>
+            </select>
           </div>
-        </div>
 
-        {selectedIds.size > 0 && (
-          <div className="flex flex-col gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm font-medium">
-              {selectedIds.size} student{selectedIds.size === 1 ? "" : "s"} selected
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                loading={actionKey === "bulk-status"}
-                onClick={() => void bulkUpdateStatus("disabled")}
-              >
-                Suspend selected
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                loading={actionKey === "bulk-status"}
-                onClick={() => void bulkUpdateStatus("active")}
-              >
-                Reactivate selected
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
-                Clear
-              </Button>
-            </div>
-          </div>
-        )}
+          {!isLoading && !visible.length && (
+            <p className="p-6 text-center text-sm text-muted-foreground">
+              {students.length ? "No students match." : "No students have signed up yet."}
+            </p>
+          )}
 
-        <div className="grid gap-5 md:grid-cols-4">
-          <MetricCard label="Students" value={`${students.length}`} />
-          <MetricCard label="Active" value={`${activeCount}`} />
-          <MetricCard label="Disabled" value={`${disabledCount}`} />
-          <MetricCard label="Enrolled courses" value={`${students.reduce((sum, student) => sum + student.enrolledCourses, 0)}`} />
-        </div>
-
-        <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
-            <div className="border-b border-border px-6 py-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <div className="font-display text-2xl font-bold">Students table</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    Review learner status, enrollment progress, and payment activity in grouped pages.
-                  </div>
-                </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  <select
-                    value={statusFilter}
-                    onChange={(event) => {
-                      setStatusFilter(event.target.value);
-                      setPage(1);
-                    }}
-                    className="h-11 rounded-lg border border-input bg-background px-3.5 text-sm"
-                  >
-                    <option value="all">All statuses</option>
-                    <option value="active">Active</option>
-                    <option value="disabled">Disabled</option>
-                  </select>
-                  <select
-                    value={sortBy}
-                    onChange={(event) => setSortBy(event.target.value)}
-                    className="h-11 rounded-lg border border-input bg-background px-3.5 text-sm"
-                  >
-                    <option value="recent">Last active</option>
-                    <option value="name">Name</option>
-                    <option value="enrollments">Enrollments</option>
-                    <option value="payments">Payments</option>
-                  </select>
-                  <div className="flex items-center rounded-lg border border-input bg-background px-3.5 text-sm text-muted-foreground">
-                    Page {safePage} of {totalPages}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/60 text-left">
-                  <tr>
-                    <th className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        aria-label="Select all on page"
-                        checked={paginatedStudents.length > 0 && paginatedStudents.every((student) => selectedIds.has(student.id))}
-                        onChange={toggleSelectPage}
-                        className="h-4 w-4 rounded border-border"
-                      />
-                    </th>
-                    <th className="px-4 py-3">Student</th>
-                    <th className="px-4 py-3">Path</th>
-                    <th className="px-4 py-3">Enrollments</th>
-                    <th className="px-4 py-3">Payments</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedStudents.length ? (
-                    paginatedStudents.map((student) => (
-                      <tr key={student.id} className="border-t border-border align-top">
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${student.displayName}`}
-                            checked={selectedIds.has(student.id)}
-                            onChange={() => toggleSelect(student.id)}
-                            className="h-4 w-4 rounded border-border"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-medium">{student.displayName}</div>
-                          <div className="text-xs text-muted-foreground">{student.email}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div>{student.selectedInterest || "Unassigned"}</div>
-                          <div className="text-xs text-muted-foreground">{student.selectedTrack || "No track"}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div>{student.enrolledCourses}</div>
-                          <div className="text-xs text-muted-foreground">{student.completedCourses} completed</div>
-                        </td>
-                        <td className="px-4 py-3">{student.totalPayments}</td>
-                        <td className="px-4 py-3">{student.status === "active" ? "Active" : "Disabled"}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => beginEdit(student.id)}
-                              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                setActionKey(`${student.id}:status`);
-                                try {
-                                  await updateStudent(student.id, {
-                                    status: student.status === "active" ? "disabled" : "active",
-                                  });
-                                  notifySuccess(
-                                    student.status === "active" ? "Student suspended" : "Student reactivated",
-                                  );
-                                } catch (actionError) {
-                                  notifyError(
-                                    "Unable to update student",
-                                    actionError instanceof Error ? actionError.message : "Request failed.",
-                                  );
-                                } finally {
-                                  setActionKey(null);
-                                }
-                              }}
-                              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-                            >
-                              {actionKey === `${student.id}:status`
-                                ? "Updating..."
-                                : student.status === "active"
-                                  ? "Suspend"
-                                  : "Reactivate"}
-                            </button>
-                            {canDelete && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDeleteTargetId(student.id);
-                                  setDeleteConfirmation("");
-                                }}
-                                className="rounded-full border border-destructive/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-destructive"
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-6 text-muted-foreground">
-                        {isLoading ? "Loading students..." : "No students matched your filters."}
-                      </td>
-                    </tr>
+          <ul className="divide-y divide-border">
+            {visible.map((student) => {
+              const active = student.status === "active";
+              const rowBusy = busy?.startsWith(student.id) ?? false;
+              const studied = ago(student.lastActiveAt);
+              const signedIn = ago(student.lastSignedInAt);
+              return (
+                <li key={student.id} className="flex gap-3 p-4 sm:p-5">
+                  {canBulk && (
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${student.displayName}`}
+                      checked={selected.has(student.id)}
+                      onChange={() =>
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(student.id)) next.delete(student.id);
+                          else next.add(student.id);
+                          return next;
+                        })
+                      }
+                      className="mt-1 h-4 w-4 shrink-0 rounded border-border"
+                    />
                   )}
-                </tbody>
-              </table>
-            </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">{student.displayName}</p>
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                              active ? "bg-success/15 text-success" : "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            {active ? "Active" : "Suspended"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{student.email}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {student.selectedInterest || "No program chosen"}
+                          {student.selectedTrack ? ` · ${student.selectedTrack}` : ""}
+                        </p>
+                      </div>
+                      <dl className="flex gap-5 text-right">
+                        {[
+                          ["Enrolled", student.enrolledCourses],
+                          ["Completed", student.completedCourses],
+                          ["Paid", student.totalPayments],
+                        ].map(([label, value]) => (
+                          <div key={label}>
+                            <dd className="font-display text-lg font-bold tabular-nums">{value}</dd>
+                            <dt className="text-[11px] text-muted-foreground">{label}</dt>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
 
-            <div className="flex items-center justify-between border-t border-border px-6 py-4">
-              <div className="text-sm text-muted-foreground">
-                Showing {paginatedStudents.length ? (safePage - 1) * PAGE_SIZE + 1 : 0}-
-                {Math.min(safePage * PAGE_SIZE, filteredStudents.length)} of {filteredStudents.length}
-              </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {studied ? `Last studied ${studied}` : "Hasn't opened a lesson"}
+                      {" · "}
+                      {signedIn ? `signed in ${signedIn}` : "no sign-in recorded yet"}
+                    </p>
+
+                    {canEdit && (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={rowBusy}
+                          onClick={() =>
+                            setExpanded(expanded?.id === student.id && expanded.mode === "grant" ? null : { id: student.id, mode: "grant" })
+                          }
+                        >
+                          <GiftIcon className="h-4 w-4" /> Give a course
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={rowBusy}
+                          onClick={() =>
+                            setExpanded(expanded?.id === student.id && expanded.mode === "edit" ? null : { id: student.id, mode: "edit" })
+                          }
+                        >
+                          <PencilLine className="h-4 w-4" /> Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          loading={busy === `${student.id}:status`}
+                          loadingText="Working…"
+                          disabled={rowBusy}
+                          onClick={() => void setStatus(student, active ? "disabled" : "active")}
+                        >
+                          {active ? "Suspend" : "Reactivate"}
+                        </Button>
+                        {can("students:delete") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={rowBusy}
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setDeleteTarget(student)}
+                          >
+                            <Trash2 className="h-4 w-4" /> Delete
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {expanded?.id === student.id && expanded.mode === "edit" && (
+                      <EditStudentForm
+                        student={student}
+                        onCancel={() => setExpanded(null)}
+                        onSave={(patch) =>
+                          run(
+                            `${student.id}:save`,
+                            async () => {
+                              await updateStudent(student.id, patch);
+                              setExpanded(null);
+                              notifySuccess("Student updated");
+                            },
+                            "Could not update student",
+                          )
+                        }
+                      />
+                    )}
+
+                    {expanded?.id === student.id && expanded.mode === "grant" && (
+                      <GrantCourseForm
+                        student={student}
+                        courses={liveCourses}
+                        onCancel={() => setExpanded(null)}
+                        onGrant={(courseId) =>
+                          run(
+                            `${student.id}:grant`,
+                            async () => {
+                              const result = await grantStudentAccess(student.id, courseId);
+                              setExpanded(null);
+                              notifySuccess("Access given", result.detail);
+                            },
+                            "Could not give access",
+                          )
+                        }
+                      />
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {filtered.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between border-t border-border px-4 py-3">
+              <p className="text-sm text-muted-foreground">
+                {(current - 1) * PAGE_SIZE + 1}–{Math.min(current * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </p>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={safePage === 1}>
+                <Button variant="outline" size="sm" disabled={current === 1} onClick={() => setPage(current - 1)}>
                   Previous
                 </Button>
-                <Button variant="outline" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={safePage === totalPages}>
+                <Button variant="outline" size="sm" disabled={current === pages} onClick={() => setPage(current + 1)}>
                   Next
                 </Button>
               </div>
             </div>
-          </div>
-
-          <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
-            <div className="font-display text-2xl font-bold">Student profile editor</div>
-            {selectedStudent ? (
-              <div className="mt-5 space-y-4">
-                <Input label="Display name" value={draftName} onChange={(event) => setDraftName(event.target.value)} />
-                <Input label="Email" value={draftEmail} onChange={(event) => setDraftEmail(event.target.value)} />
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Plan</label>
-                  <select
-                    value={draftPlan}
-                    onChange={(event) => setDraftPlan(event.target.value)}
-                    className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
-                  >
-                    <option value="free">Free</option>
-                    <option value="pro">Pro</option>
-                    <option value="premium">Premium</option>
-                  </select>
-                </div>
-
-                <div className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-                  <div>
-                    Last active:{" "}
-                    {selectedStudent.lastActiveAt
-                      ? new Date(selectedStudent.lastActiveAt).toLocaleString("en-NG")
-                      : "No recent activity"}
-                  </div>
-                  <div className="mt-2">
-                    Tracks: {selectedStudent.selectedTracks.join(", ") || "No tracks set"}
-                  </div>
-                  <div className="mt-2">
-                    Enrollments: {selectedStudent.enrolledCourses} | Completed: {selectedStudent.completedCourses}
-                  </div>
-                </div>
-
-                <Button
-                  variant="accent"
-                  loading={actionKey === "save-student"}
-                  loadingText="Saving student..."
-                  onClick={async () => {
-                    setActionKey("save-student");
-                    try {
-                      await updateStudent(selectedStudent.id, {
-                        displayName: draftName,
-                        email: draftEmail,
-                        plan: draftPlan,
-                      });
-                      notifySuccess("Student updated successfully");
-                    } catch (actionError) {
-                      notifyError(
-                        "Unable to update student",
-                        actionError instanceof Error ? actionError.message : "Request failed.",
-                      );
-                    } finally {
-                      setActionKey(null);
-                    }
-                  }}
-                >
-                  <PencilLine className="h-4 w-4" /> Save student changes
-                </Button>
-
-                <div className="rounded-2xl border border-border bg-background p-4">
-                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <GiftIcon className="h-4 w-4 text-primary" /> Grant free course access
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Enroll this student in a published course at no cost. They&apos;ll be notified immediately.
-                  </p>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <select
-                      value={grantCourseId}
-                      onChange={(event) => setGrantCourseId(event.target.value)}
-                      className="h-11 flex-1 rounded-lg border border-input bg-card px-3.5 text-sm"
-                    >
-                      <option value="">Select a course…</option>
-                      {publishedCourses.map((course) => (
-                        <option key={course.id} value={course.id}>
-                          {course.title}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      variant="outline"
-                      disabled={!grantCourseId}
-                      loading={actionKey === "grant-access"}
-                      loadingText="Granting..."
-                      onClick={() => void grantAccess()}
-                    >
-                      Grant access
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-5 rounded-2xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-                Select a student from the table to edit profile details or review account activity.
-              </div>
-            )}
-          </section>
-        </div>
+          )}
+        </section>
       </div>
 
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => (!open ? setDeleteTargetId(null) : null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete student account</DialogTitle>
-            <DialogDescription>
-              This action cannot be undone. Type the student's name exactly to confirm permanent deletion.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-            Type <span className="font-semibold">{deleteTarget?.displayName}</span> to confirm deletion.
-          </div>
-          <Input
-            label="Confirmation"
-            value={deleteConfirmation}
-            onChange={(event) => setDeleteConfirmation(event.target.value)}
-            placeholder={deleteTarget?.displayName}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTargetId(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="accent"
-              loading={actionKey === "delete-student"}
-              loadingText="Deleting student..."
-              disabled={deleteConfirmation !== deleteTarget?.displayName}
-              onClick={async () => {
-                if (!deleteTarget) return;
-                setActionKey("delete-student");
-                try {
-                  await deleteStudent(deleteTarget.id);
-                  notifySuccess("Student deleted successfully");
-                  setDeleteTargetId(null);
-                  setDeleteConfirmation("");
-                  if (selectedStudentId === deleteTarget.id) {
-                    setSelectedStudentId(null);
-                  }
-                } catch (actionError) {
-                  notifyError(
-                    "Unable to delete student",
-                    actionError instanceof Error ? actionError.message : "Request failed.",
-                  );
-                } finally {
-                  setActionKey(null);
-                }
-              }}
-            >
-              <Trash2 className="h-4 w-4" /> Delete student
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {deleteTarget && (
+        <DeleteStudentDialog
+          student={deleteTarget}
+          onCancel={() => setDeleteTarget(null)}
+          onDelete={async () => {
+            await deleteStudent(deleteTarget.id);
+            notifySuccess(`${deleteTarget.displayName} deleted`);
+            setDeleteTarget(null);
+          }}
+          onSuspendInstead={async () => {
+            await updateStudent(deleteTarget.id, { status: "disabled" });
+            notifySuccess(`${deleteTarget.displayName} suspended`, "Their records are kept.");
+            setDeleteTarget(null);
+          }}
+        />
+      )}
     </AppShell>
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function EditStudentForm({
+  student,
+  onSave,
+  onCancel,
+}: {
+  student: AdminStudent;
+  onSave: (patch: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [displayName, setDisplayName] = useState(student.displayName);
+  const [email, setEmail] = useState(student.email);
+  const [saving, setSaving] = useState(false);
+
   return (
-    <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-        <GraduationCap className="h-6 w-6" />
+    <form
+      className="mt-3 space-y-3 rounded-xl border border-border bg-background p-4"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        await onSave({ displayName: displayName.trim(), email: email.trim() });
+        setSaving(false);
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input id={`student-name-${student.id}`} label="Name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />
+        <Input id={`student-email-${student.id}`} label="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
       </div>
-      <div className="mt-5 font-display text-3xl font-bold">{value}</div>
-      <div className="mt-1 text-sm text-muted-foreground">{label}</div>
+      <div className="flex gap-2">
+        <Button type="submit" variant="accent" size="sm" loading={saving} loadingText="Saving…">
+          Save
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function GrantCourseForm({
+  student,
+  courses,
+  onGrant,
+  onCancel,
+}: {
+  student: AdminStudent;
+  courses: { id: string; title: string }[];
+  onGrant: (courseId: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [courseId, setCourseId] = useState("");
+  const [granting, setGranting] = useState(false);
+
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-background p-4">
+      <label htmlFor={`grant-${student.id}`} className="text-sm font-medium">
+        Give {student.displayName} a course for free
+      </label>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        They&apos;re enrolled straight away and get a notification. No payment is recorded.
+      </p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <select
+          id={`grant-${student.id}`}
+          value={courseId}
+          onChange={(event) => setCourseId(event.target.value)}
+          className="h-10 flex-1 rounded-lg border border-input bg-card px-3 text-sm"
+        >
+          <option value="">Choose a live course…</option>
+          {courses.map((course) => (
+            <option key={course.id} value={course.id}>
+              {course.title}
+            </option>
+          ))}
+        </select>
+        <Button
+          variant="accent"
+          size="sm"
+          disabled={!courseId}
+          loading={granting}
+          loadingText="Giving…"
+          onClick={async () => {
+            setGranting(true);
+            await onGrant(courseId);
+            setGranting(false);
+          }}
+        >
+          Give course
+        </Button>
+        <Button variant="outline" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DeleteStudentDialog({
+  student,
+  onDelete,
+  onSuspendInstead,
+  onCancel,
+}: {
+  student: AdminStudent;
+  onDelete: () => Promise<void>;
+  onSuspendInstead: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const [working, setWorking] = useState<"delete" | "suspend" | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
+
+  const attempt = async (kind: "delete" | "suspend") => {
+    setWorking(kind);
+    try {
+      if (kind === "delete") await onDelete();
+      else await onSuspendInstead();
+    } catch (failure) {
+      // The server refuses to delete a student with payments or certificates,
+      // and says why. Show that here, beside the alternative, not in a toast.
+      setRefusal(failure instanceof Error ? failure.message : "Request failed.");
+      setWorking(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !working && onCancel()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-student-title"
+        className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2 id="delete-student-title" className="font-display text-lg font-bold">
+          Delete {student.displayName}?
+        </h2>
+
+        {refusal ? (
+          <p className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm">{refusal}</p>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This permanently deletes their account, with their enrollments, lesson progress and
+              reviews. It can&apos;t be undone. Students with payments or certificates can&apos;t be
+              deleted — suspend them instead.
+            </p>
+            <label htmlFor="delete-student-name" className="mt-4 block text-sm font-medium">
+              Type <span className="font-semibold">{student.displayName}</span> to confirm
+            </label>
+            <input
+              id="delete-student-name"
+              value={typed}
+              onChange={(event) => setTyped(event.target.value)}
+              autoFocus
+              className="mt-1.5 h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+            />
+          </>
+        )}
+
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Button variant="outline" disabled={Boolean(working)} onClick={onCancel}>
+            Cancel
+          </Button>
+          {student.status === "active" && (
+            <Button
+              variant={refusal ? "accent" : "outline"}
+              loading={working === "suspend"}
+              loadingText="Suspending…"
+              disabled={Boolean(working)}
+              onClick={() => void attempt("suspend")}
+            >
+              Suspend instead
+            </Button>
+          )}
+          {!refusal && (
+            <Button
+              variant="accent"
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={typed.trim() !== student.displayName || Boolean(working)}
+              loading={working === "delete"}
+              loadingText="Deleting…"
+              onClick={() => void attempt("delete")}
+            >
+              Delete student
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
