@@ -78,6 +78,28 @@ export interface AdminCourse {
   isRecommended?: boolean;
   pendingDeletion?: boolean;
   deletionReason?: string;
+  /** The last reviewer note — present on a declined or resubmitted course. */
+  declineReason?: string;
+  reviewedAt?: string | null;
+  reviewedByName?: string | null;
+  submittedAt?: string | null;
+  lastUpdated?: string;
+  certificateEnabled?: boolean;
+  reviewSummary?: AdminReviewSummary | null;
+}
+
+/** Objective facts about a course, for the reviewer. Present only in the review queue. */
+export interface AdminReviewSummary {
+  sections: number;
+  lessons: number;
+  emptyLessons: number;
+  lessonsWithoutDuration: number;
+  totalMinutes: number;
+  hasBanner: boolean;
+  hasOverview: boolean;
+  quizzes: number;
+  unreadyQuizzes: number;
+  hasReadyFinal: boolean;
 }
 
 export interface AdminBroadcast {

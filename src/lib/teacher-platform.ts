@@ -135,6 +135,9 @@ export interface TeacherCourse {
   bannerImageAlt: string;
   bannerTheme: string;
   pendingDeletion: boolean;
+  /** The reviewer's note from the last time this course was sent back. */
+  declineReason: string;
+  reviewedAt: string | null;
   status: TeacherCourseStatus;
   visibility: TeacherCourseVisibility;
   sections: TeacherSection[];
@@ -258,6 +261,8 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
     bannerImageAlt: String(raw.bannerImageAlt ?? raw.banner_image_alt ?? ""),
     bannerTheme: String(raw.bannerTheme ?? raw.banner_theme ?? "default"),
     pendingDeletion: Boolean(raw.pendingDeletion ?? raw.pending_deletion ?? false),
+    declineReason: String(raw.declineReason ?? raw.decline_reason ?? ""),
+    reviewedAt: (raw.reviewedAt ?? raw.reviewed_at ?? null) as string | null,
     status: (String(raw.status ?? "draft") as TeacherCourseStatus),
     visibility: (String(raw.visibility ?? "hidden") as TeacherCourseVisibility),
     sections: sections.map((section) => {
@@ -579,6 +584,8 @@ export function useTeacherPlatform(
       bannerImageAlt: "",
       bannerTheme: "default",
       pendingDeletion: false,
+      declineReason: "",
+      reviewedAt: null,
       status: "draft",
       visibility: "hidden",
       sections: [

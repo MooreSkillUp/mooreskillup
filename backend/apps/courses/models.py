@@ -85,6 +85,29 @@ class Course(UUIDPrimaryKeyModel, TimeStampedModel):
     progression_mode = models.CharField(
         max_length=20, choices=PROGRESSION_CHOICES, default="open"
     )
+    # The review record: why a reviewer last sent this course back, who, when.
+    #
+    # The reason used to exist only inside an email and a notification, so a
+    # teacher opening a declined course saw "Declined" and no explanation — and
+    # production had never sent an email at all, which made the review loop a
+    # dead end. It lives on the course now, because the course is where the
+    # teacher goes to fix it.
+    #
+    # It survives resubmission on purpose: a reviewer picking up a course that
+    # was sent back needs to see what was asked for last time, or they review
+    # blind. Approval clears it.
+    decline_reason = models.TextField(blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="courses_reviewed",
+    )
+    # When the teacher last submitted, so the queue can be worked oldest first.
+    # `updated_at` moves on every autosave and cannot answer that.
+    submitted_at = models.DateTimeField(null=True, blank=True)
     # Teachers can't delete courses directly — they request deletion, which an
     # admin approves (deletes) or aborts. Protects platform content.
     pending_deletion = models.BooleanField(default=False)

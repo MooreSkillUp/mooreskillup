@@ -748,6 +748,39 @@ export function TeacherCourseEditor({
             <span>{autosaveMessage}</span>
           </div>
 
+          {/* The reviewer's note, here where the fixing happens. It used to live
+              only in an email — which production never sent — so a declined
+              course arrived in the studio with no explanation at all. Kept on a
+              resubmitted course as a reminder of what was asked for. */}
+          {course.declineReason && (course.status === "declined" || course.status === "review") && (
+            <div
+              className={`mt-4 rounded-xl border px-4 py-3 ${
+                course.status === "declined"
+                  ? "border-destructive/30 bg-destructive/10"
+                  : "border-border bg-muted/40"
+              }`}
+            >
+              <p
+                className={`text-xs font-semibold ${
+                  course.status === "declined" ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {course.status === "declined"
+                  ? "Sent back by the reviewer — fix this, then resubmit"
+                  : "Resubmitted. The reviewer had asked for:"}
+                {course.reviewedAt && (
+                  <span className="ml-2 font-normal">
+                    {new Date(course.reviewedAt).toLocaleDateString("en-NG", {
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </span>
+                )}
+              </p>
+              <p className="mt-1 whitespace-pre-line text-sm text-foreground">{course.declineReason}</p>
+            </div>
+          )}
+
           {/* One line saying what stands between this course and review. It
               replaces finding out by pressing Submit and reading a 400. */}
           {canSubmitForReview && !readyForReview && (

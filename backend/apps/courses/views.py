@@ -46,6 +46,16 @@ def transition_course_or_error(course, next_status, next_visibility, request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    decline_reason = (request.data.get("reason") or "").strip() if next_status == "declined" else ""
+    if next_status == "declined" and not decline_reason:
+        # A course sent back with no reason is a dead end: the teacher can see
+        # it failed and has nothing to act on. The reviewer is the only person
+        # who knows what is wrong, so they have to say.
+        return response.Response(
+            {"reason": ["Tell the teacher what to change before sending the course back."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     previous_status = course.status
     if request.user.role == "admin":
         record_audit(
@@ -62,13 +72,20 @@ def transition_course_or_error(course, next_status, next_visibility, request):
     if next_status == "published" and not course.published_at:
         course.published_at = timezone.now()
         update_fields.append("published_at")
+
+    # The decision lives on the course, where the teacher goes to act on it.
+    # A decline writes the note; approval answers it, so the note goes.
+    if next_status in {"declined", "approved", "published"}:
+        course.decline_reason = decline_reason
+        course.reviewed_at = timezone.now()
+        course.reviewed_by = request.user
+        update_fields += ["decline_reason", "reviewed_at", "reviewed_by"]
     course.save(update_fields=update_fields)
 
     if next_status in {"published", "declined"} and course.teacher:
         from common.email import frontend_url, send_transactional_email
 
         approved = next_status == "published"
-        decline_reason = "" if approved else (request.data.get("reason") or "").strip()
         send_transactional_email(
             to_email=course.teacher.user.email,
             subject=f"Your course was {'approved' if approved else 'declined'} — {course.title}",
@@ -210,11 +227,23 @@ class AdminCourseListView(APIView):
     def get(self, request):
         courses = (
             Course.objects.all()
-            .select_related("teacher__user", "category", "subcategory")
-            .prefetch_related("sections__lessons", "sections__tasks", "sections__projects", "tags")
+            .select_related("teacher__user", "category", "subcategory", "reviewed_by")
+            .prefetch_related(
+                "sections__lessons",
+                "sections__tasks",
+                "sections__projects",
+                "tags",
+                # The reviewer checklist reads these. Prefetched, the queue costs
+                # the same queries however many courses are waiting in it.
+                "quizzes__questions__choices",
+            )
             .order_by("-updated_at", "-created_at")
         )
-        return response.Response(CourseSerializer(courses, many=True, context={"request": request}).data)
+        return response.Response(
+            CourseSerializer(
+                courses, many=True, context={"request": request, "include_review_summary": True}
+            ).data
+        )
 
 
 class TeacherCourseViewSet(viewsets.ModelViewSet):
@@ -276,7 +305,10 @@ class TeacherCourseViewSet(viewsets.ModelViewSet):
         save_course_version(course, user=request.user, note="Submitted for review")
         course.status = "review"
         course.visibility = "hidden"
-        course.save(update_fields=["status", "visibility", "updated_at"])
+        # The decline note is deliberately left in place — the next reviewer
+        # needs to see what was asked for last time. Approval clears it.
+        course.submitted_at = timezone.now()
+        course.save(update_fields=["status", "visibility", "submitted_at", "updated_at"])
         TeacherActivityLog.objects.create(
             teacher=request.user.teacher_profile,
             course=course,

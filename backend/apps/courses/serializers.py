@@ -395,6 +395,63 @@ class CourseSerializer(serializers.ModelSerializer):
     reviewCount = serializers.SerializerMethodField()
     categoryAccentColor = serializers.CharField(source="category.accent_color", read_only=True)
     categoryBannerTheme = serializers.CharField(source="category.banner_theme", read_only=True)
+    declineReason = serializers.CharField(source="decline_reason", read_only=True)
+    reviewedAt = serializers.DateTimeField(source="reviewed_at", read_only=True)
+    reviewedByName = serializers.CharField(source="reviewed_by.display_name", read_only=True)
+    submittedAt = serializers.DateTimeField(source="submitted_at", read_only=True)
+    reviewSummary = serializers.SerializerMethodField()
+
+    def get_reviewSummary(self, obj):
+        """The objective facts a reviewer checks before approving.
+
+        Only the admin review queue asks for this (via serializer context), so
+        the public catalog pays nothing for it. It reads data the admin list
+        already prefetches, so a queue of twenty courses is not twenty queries.
+
+        Facts, not verdicts — the reviewer decides. What it removes is opening
+        every lesson in a course to find the one with no video.
+        """
+        if not self.context.get("include_review_summary"):
+            return None
+
+        sections = [section for section in obj.sections.all() if section.is_published]
+        lessons = [
+            lesson for section in sections for lesson in section.lessons.all() if lesson.is_published
+        ]
+
+        def is_empty(lesson):
+            if lesson.content_type == "video":
+                return not (lesson.video_url or "").strip()
+            if lesson.content_type == "text":
+                return not (lesson.text_content or "").strip()
+            if lesson.content_type == "resource":
+                return not lesson.resource_links
+            return False
+
+        # Mirrors Quiz.is_ready, but over prefetched rows — is_ready queries.
+        def quiz_ready(quiz):
+            questions = list(quiz.questions.all())
+            return (
+                quiz.is_published
+                and bool(questions)
+                and all(any(choice.is_correct for choice in q.choices.all()) for q in questions)
+            )
+
+        quizzes = list(obj.quizzes.all())
+        final = next((quiz for quiz in quizzes if quiz.kind == "final"), None)
+
+        return {
+            "sections": len(sections),
+            "lessons": len(lessons),
+            "emptyLessons": sum(1 for lesson in lessons if is_empty(lesson)),
+            "lessonsWithoutDuration": sum(1 for lesson in lessons if not lesson.duration_minutes),
+            "totalMinutes": sum(lesson.duration_minutes or 0 for lesson in lessons),
+            "hasBanner": bool(obj.banner_image),
+            "hasOverview": bool((obj.overview or "").strip()),
+            "quizzes": len(quizzes),
+            "unreadyQuizzes": sum(1 for quiz in quizzes if quiz.is_published and not quiz_ready(quiz)),
+            "hasReadyFinal": bool(final and quiz_ready(final)),
+        }
 
     def to_internal_value(self, data):
         import json
@@ -454,6 +511,11 @@ class CourseSerializer(serializers.ModelSerializer):
             "bannerTheme",
             "pendingDeletion",
             "deletionReason",
+            "declineReason",
+            "reviewedAt",
+            "reviewedByName",
+            "submittedAt",
+            "reviewSummary",
             "averageRating",
             "reviewCount",
             "teacherName",

@@ -111,8 +111,114 @@ class Command(BaseCommand):
             students = self._seed_students()
             self._seed_enrolments(students, courses)
             self._seed_events(teacher, courses)
+            self._seed_review_queue(categories, teacher)
 
         self._report(students)
+
+    def _seed_review_queue(self, categories, teacher):
+        """Three courses in the states the admin review queue exists to handle.
+
+        Every seeded course used to be published, so the review screen was empty
+        and could not be exercised at all. These cover what a reviewer actually
+        meets: a fresh submission, a resubmission that still has a gap in it (so
+        the checklist has something to catch), and a course out with its teacher.
+
+        Each course's content agrees with its reviewer note — demo data that
+        contradicts itself teaches the wrong lesson about the product. State is
+        reset on every run, so approving one while testing and reseeding puts the
+        queue back as it was.
+        """
+        now = timezone.now()
+        moderator = User.objects.filter(email=f"moderator@{DEMO_DOMAIN}").first()
+        super_admin = User.objects.filter(email=f"admin@{DEMO_DOMAIN}").first()
+
+        specs = [
+            {
+                "title": "TypeScript for React Developers",
+                "category": "Web Development",
+                "track": "React and Modern UI",
+                "subtitle": "Types that catch bugs before your users do",
+                "sections": 3,
+                "state": {
+                    "status": "review",
+                    "submitted_at": now - timedelta(days=3),
+                    "decline_reason": "",
+                    "reviewed_at": None,
+                    "reviewed_by": None,
+                },
+            },
+            {
+                "title": "APIs with FastAPI",
+                "category": "Backend Development",
+                "track": "Backend with Python",
+                "subtitle": "Fast, typed Python APIs from first route to deployment",
+                "sections": 3,
+                # Resubmitted having fixed the overview but not the videos.
+                "empty_videos_in_section": 1,
+                "state": {
+                    "status": "review",
+                    "submitted_at": now - timedelta(days=1),
+                    "decline_reason": (
+                        "Section 2's video lessons have no video yet, and the overview doesn't "
+                        "say who the course is for. Please add both and resubmit."
+                    ),
+                    "reviewed_at": now - timedelta(days=5),
+                    "reviewed_by": moderator,
+                },
+            },
+            {
+                "title": "Intro to Machine Learning",
+                "category": "AI and Data",
+                "track": "Data Analysis",
+                "subtitle": "The ideas behind the models, without the hype",
+                "sections": 2,
+                "clear_durations": True,
+                "state": {
+                    "status": "declined",
+                    "submitted_at": now - timedelta(days=4),
+                    "decline_reason": (
+                        "No lesson has a length set, so students can't plan their time. "
+                        "Please add a length to every lesson, then resubmit."
+                    ),
+                    "reviewed_at": now - timedelta(days=2),
+                    "reviewed_by": super_admin,
+                },
+            },
+        ]
+
+        for spec in specs:
+            category = categories[spec["category"]]
+            subcategory = Subcategory.objects.get(category=category, name=spec["track"])
+            course, created = Course.objects.update_or_create(
+                title=spec["title"],
+                defaults={
+                    "teacher": teacher,
+                    "category": category,
+                    "subcategory": subcategory,
+                    "subtitle": spec["subtitle"],
+                    "overview": (
+                        f"{spec['subtitle']}. For developers who know the basics and want to "
+                        "build something real, section by section."
+                    ),
+                    "scheme_of_work": "Week by week, building toward a finished project.",
+                    "level": "intermediate",
+                    "price": Decimal(22000),
+                    "visibility": "hidden",
+                    "certificate_enabled": True,
+                    **spec["state"],
+                },
+            )
+            if created:
+                self._seed_sections(course, spec["sections"])
+                self._seed_quizzes(course)
+
+            if "empty_videos_in_section" in spec:
+                section = course.sections.order_by("order")[spec["empty_videos_in_section"]]
+                section.lessons.filter(content_type="video").update(video_url="")
+            if spec.get("clear_durations"):
+                Lesson.objects.filter(section__course=course).update(duration_minutes=None)
+
+        self.stdout.write(f"  review queue: {len(specs)} courses")
 
     # -- guards ---------------------------------------------------------------
 
@@ -155,7 +261,17 @@ class Command(BaseCommand):
         # CASCADE, so deleting the teacher leaves every demo course behind with
         # no owner — and the next seed then finds them by title, skips its
         # defaults, and quietly produces stale data.
-        course_count, _ = Course.objects.filter(title__in=[spec[2] for spec in COURSES]).delete()
+        #
+        # Matched by owner as well as by title, so a course the seeder gains
+        # later (the review-queue courses, for one) is removed without anyone
+        # remembering to extend a title list. The title match still sweeps up
+        # courses an older wipe had already orphaned.
+        from django.db.models import Q
+
+        course_count, _ = Course.objects.filter(
+            Q(teacher__user__email__endswith=f"@{DEMO_DOMAIN}")
+            | Q(title__in=[spec[2] for spec in COURSES])
+        ).delete()
 
         users.delete()
         Category.objects.filter(
@@ -558,6 +674,9 @@ class Command(BaseCommand):
             f"  {'admin':<9} {f'moderator@{DEMO_DOMAIN}':<34} moderator — approvals and support only"
         )
         self.stdout.write(f"  {'teacher':<9} {f'teacher@{DEMO_DOMAIN}':<34} owns every demo course")
+        self.stdout.write(
+            f"  {'':<9} {'':<34} + 2 courses awaiting review, 1 sent back"
+        )
         described = {
             "advanced": "4 courses, 1 certificate, 6-day streak",
             "midway": "3 courses, midway through",

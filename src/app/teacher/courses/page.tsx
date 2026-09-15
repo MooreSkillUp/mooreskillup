@@ -28,17 +28,22 @@ const TAB_NOTE: Record<(typeof TABS)[number], string> = {
   review: "With the review team. You can still preview, but not edit.",
   approved: "Cleared by review and ready to go live.",
   draft: "Only you can see these. They save as you write.",
-  declined: "Sent back with notes. Fix and resubmit.",
+  // True as of the reviewer's note being stored on the course. Before that it
+  // promised notes that existed only in an email nobody received.
+  declined: "Sent back by the reviewer. Their note is on each course — fix it and resubmit.",
   archived: "Hidden from students and kept safely. Restore any time.",
 };
 
+// The badge sits on the course artwork, which can be any colour. A translucent
+// tint vanished completely — a red "Declined" on an orange banner was
+// unreadable — so the badge is a solid surface and the status colour is the text.
 const STATUS_BADGE: Record<(typeof TABS)[number], string> = {
-  published: "bg-success/15 text-success",
-  review: "bg-warning/15 text-warning",
-  approved: "bg-success/15 text-success",
-  draft: "bg-muted text-muted-foreground",
-  declined: "bg-destructive/15 text-destructive",
-  archived: "bg-muted text-muted-foreground",
+  published: "bg-background/95 text-success",
+  review: "bg-background/95 text-warning",
+  approved: "bg-background/95 text-success",
+  draft: "bg-background/95 text-muted-foreground",
+  declined: "bg-background/95 text-destructive",
+  archived: "bg-background/95 text-muted-foreground",
 };
 
 /** `?status=draft` so the dashboard pipeline can link straight to a tab. */
@@ -221,6 +226,13 @@ function TeacherCoursesView() {
                         </div>
                       ))}
                     </dl>
+
+                    {course.status === "declined" && course.declineReason && (
+                      <p className="mt-3 line-clamp-3 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        <span className="font-semibold">Reviewer: </span>
+                        {course.declineReason}
+                      </p>
+                    )}
 
                     {course.pendingDeletion && (
                       <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
