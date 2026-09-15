@@ -65,6 +65,9 @@ class AdminStudentSerializer(serializers.ModelSerializer):
     enrolledCourses = serializers.SerializerMethodField()
     completedCourses = serializers.SerializerMethodField()
     totalPayments = serializers.SerializerMethodField()
+    # Recorded from the first sign-in after last_login started being stamped;
+    # empty means "not since then", not "never".
+    lastSignedInAt = serializers.DateTimeField(source="user.last_login", read_only=True)
 
     class Meta:
         model = StudentProfile
@@ -79,6 +82,7 @@ class AdminStudentSerializer(serializers.ModelSerializer):
             "plan",
             "status",
             "lastActiveAt",
+            "lastSignedInAt",
             "enrolledCourses",
             "completedCourses",
             "totalPayments",
@@ -87,21 +91,34 @@ class AdminStudentSerializer(serializers.ModelSerializer):
     def get_status(self, obj):
         return "active" if obj.user.is_active else "disabled"
 
+    # The list view annotates these in one query. A single student (the PATCH
+    # response) has no annotations, so each falls back to asking directly.
+
     def get_lastActiveAt(self, obj):
-        latest = (
-            obj.enrollments.order_by("-last_accessed_at", "-updated_at")
-            .values_list("last_accessed_at", flat=True)
-            .first()
-        )
-        return latest
+        if hasattr(obj, "last_studied"):
+            return obj.last_studied
+        from django.db.models import Max
+        from django.db.models.functions import Coalesce
+
+        from apps.progress.models import LessonProgress
+
+        return LessonProgress.objects.filter(enrollment__student=obj).aggregate(
+            latest=Coalesce(Max("last_accessed_at"), Max("completed_at"))
+        )["latest"]
 
     def get_enrolledCourses(self, obj):
+        if hasattr(obj, "enrolled_count"):
+            return obj.enrolled_count
         return obj.enrollments.count()
 
     def get_completedCourses(self, obj):
+        if hasattr(obj, "completed_count"):
+            return obj.completed_count
         return obj.enrollments.filter(status="completed").count()
 
     def get_totalPayments(self, obj):
+        if hasattr(obj, "paid_count"):
+            return obj.paid_count
         return obj.payments.filter(status="successful").count()
 
 
