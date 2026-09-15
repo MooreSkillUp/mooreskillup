@@ -748,6 +748,39 @@ export function TeacherCourseEditor({
             <span>{autosaveMessage}</span>
           </div>
 
+          {/* The reviewer's note, here where the fixing happens. It used to live
+              only in an email — which production never sent — so a declined
+              course arrived in the studio with no explanation at all. Kept on a
+              resubmitted course as a reminder of what was asked for. */}
+          {course.declineReason && (course.status === "declined" || course.status === "review") && (
+            <div
+              className={`mt-4 rounded-xl border px-4 py-3 ${
+                course.status === "declined"
+                  ? "border-destructive/30 bg-destructive/10"
+                  : "border-border bg-muted/40"
+              }`}
+            >
+              <p
+                className={`text-xs font-semibold ${
+                  course.status === "declined" ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {course.status === "declined"
+                  ? "Sent back by the reviewer — fix this, then resubmit"
+                  : "Resubmitted. The reviewer had asked for:"}
+                {course.reviewedAt && (
+                  <span className="ml-2 font-normal">
+                    {new Date(course.reviewedAt).toLocaleDateString("en-NG", {
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </span>
+                )}
+              </p>
+              <p className="mt-1 whitespace-pre-line text-sm text-foreground">{course.declineReason}</p>
+            </div>
+          )}
+
           {/* One line saying what stands between this course and review. It
               replaces finding out by pressing Submit and reading a 400. */}
           {canSubmitForReview && !readyForReview && (
@@ -822,17 +855,44 @@ export function TeacherCourseEditor({
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Track</label>
-                <select
-                  value={course.track || profile.tracks[0] || profile.track}
-                  onChange={(event) => updateCourse("track", event.target.value)}
-                  className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
-                >
-                  {(profile.tracks.length ? profile.tracks : profile.track ? [profile.track] : []).map((track) => (
-                    <option key={track} value={track}>
-                      {track}
-                    </option>
-                  ))}
-                </select>
+                {(() => {
+                  const assigned = profile.tracks.length
+                    ? profile.tracks
+                    : profile.track
+                      ? [profile.track]
+                      : [];
+                  const current = course.track || assigned[0] || "";
+                  // A course reassigned to this teacher, or built before an admin
+                  // changed their tracks, can sit in a track they aren't assigned.
+                  // A <select> whose value isn't among its options silently shows
+                  // the first option instead — which is how a Data Analysis course
+                  // read "Frontend Development". List the real track, and say why.
+                  const outsideAssigned = Boolean(current) && !assigned.includes(current);
+                  return (
+                    <>
+                      <select
+                        value={current}
+                        onChange={(event) => updateCourse("track", event.target.value)}
+                        className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
+                      >
+                        {outsideAssigned && (
+                          <option value={current}>{current} (current track)</option>
+                        )}
+                        {assigned.map((track) => (
+                          <option key={track} value={track}>
+                            {track}
+                          </option>
+                        ))}
+                      </select>
+                      {outsideAssigned && (
+                        <p className="text-xs text-muted-foreground">
+                          This course is in a track you aren&apos;t assigned to. It stays there
+                          unless you pick another.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 

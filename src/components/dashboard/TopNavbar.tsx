@@ -21,7 +21,7 @@ import {
 import { Dropdown } from "@/components/shared/Dropdown";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { getHomeRouteForUser, getRoleLabel, getWorkspaceLabel, useAuth } from "@/lib/auth";
-import { useAdminPlatform } from "@/lib/admin-platform";
+import { useAdminAlerts } from "@/lib/admin-platform";
 import { usePlatformNotifications } from "@/lib/platform-notifications";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,16 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+type BellItem = {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  sender: string;
+  /** Where the item is handled; otherwise the notifications page. */
+  href?: string;
+};
+
 export function TopNavbar({ onMenu }: { onMenu: () => void }) {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
@@ -48,7 +58,9 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
   const [profileOpen, setProfileOpen] = useState(false);
 
   const role = user?.role ?? "student";
-  const adminPlatform = useAdminPlatform({ enabled: role === "admin" });
+  // A few counts, shared with the sidebar. This used to run the full admin
+  // loader — eight endpoints, the whole course list — on every admin page.
+  const adminAlerts = useAdminAlerts(role === "admin");
   const platformNotifications = usePlatformNotifications(role !== "admin" && !!user);
   const wishlistCount = user?.wishlist.length ?? 0;
 
@@ -57,7 +69,7 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
   // buttons kept working. Saved courses live on the Courses page now.
   const savedHref = "/dashboard/courses?tab=saved";
 
-  const visibleNotifications = useMemo(() => {
+  const visibleNotifications = useMemo((): BellItem[] => {
     if (role !== "admin") {
       return platformNotifications.notifications.slice(0, 5).map((item) => ({
         id: item.id,
@@ -68,30 +80,39 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
       }));
     }
 
-    const reviewItems = adminPlatform.courses
-      .filter((course) => course.status === "review")
-      .slice(0, 3)
-      .map((course) => ({
-        id: `review-${course.id}`,
-        title: "Course awaiting review",
-        body: `${course.title} from ${course.teacherName} is waiting for admin approval.`,
-        createdAt: new Date().toISOString(),
-        sender: "Teacher workflow",
-      }));
-
-    const broadcastItems = adminPlatform.broadcasts.slice(0, 5).map((item) => ({
-      id: item.id,
-      title: item.title,
-      body: item.description,
-      createdAt: item.sentAt ?? new Date().toISOString(),
-      sender: "Admin broadcast",
+    // For an admin the bell holds work, not messages: courses waiting and failed
+    // payments, each linking to where it is handled. Two things changed here.
+    // Queued courses were stamped with the current time, so every one read "just
+    // now" forever. And the broadcasts listed were ones the admins had sent
+    // themselves — and "Clear" deleted the platform's broadcast history.
+    const reviewItems = (adminAlerts?.reviewQueue ?? []).map((course) => ({
+      id: `review-${course.id}`,
+      title: "Waiting for review",
+      body: `${course.title} from ${course.teacherName}`,
+      createdAt: course.submittedAt ?? "",
+      sender: "Submitted",
+      href: "/admin/reviews",
     }));
-
-    return [...reviewItems, ...broadcastItems].slice(0, 5);
-  }, [adminPlatform.broadcasts, adminPlatform.courses, platformNotifications.notifications, role]);
+    const failed = adminAlerts?.failedPayments ?? 0;
+    const paymentItems = failed
+      ? [
+          {
+            id: "failed-payments",
+            title: failed === 1 ? "1 failed payment" : `${failed} failed payments`,
+            body: "Check whether the student was charged.",
+            createdAt: "",
+            sender: "Payments",
+            href: "/admin/payments",
+          },
+        ]
+      : [];
+    return [...paymentItems, ...reviewItems];
+  }, [adminAlerts, platformNotifications.notifications, role]);
 
   const unreadCount =
-    role === "admin" ? visibleNotifications.length : platformNotifications.unreadCount;
+    role === "admin"
+      ? (adminAlerts?.pendingReviews ?? 0) + (adminAlerts?.failedPayments ?? 0)
+      : platformNotifications.unreadCount;
   const notificationsHref = role === "admin" ? "/admin/notifications" : "/notifications";
 
   // Shortcuts to the things people actually leave the current page for.
@@ -181,19 +202,17 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
             >
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <span className="text-sm font-semibold">Notifications</span>
-                {visibleNotifications.length > 0 && (
+                {/* Admin items disappear when the work is done, so there is nothing
+                    to clear — and there is no button that deletes history. */}
+                {role !== "admin" && visibleNotifications.length > 0 && (
                   <button
                     onClick={() => {
-                      if (role === "admin") {
-                        void adminPlatform.clearBroadcastHistory();
-                      } else {
-                        void platformNotifications.markAllAsRead();
-                      }
+                      void platformNotifications.markAllAsRead();
                       setNotificationsOpen(false);
                     }}
                     className="text-xs font-semibold text-primary transition-colors hover:text-accent"
                   >
-                    {role === "admin" ? "Clear" : "Mark all read"}
+                    Mark all read
                   </button>
                 )}
               </div>
@@ -209,7 +228,7 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
                           void platformNotifications.markAsRead(item.id);
                         }
                         setNotificationsOpen(false);
-                        router.push(notificationsHref);
+                        router.push(item.href ?? notificationsHref);
                       }}
                       className="flex w-full gap-3 border-b border-border/60 px-4 py-3 text-left transition-colors last:border-0 hover:bg-muted/60"
                     >
@@ -220,7 +239,8 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
                           {item.body}
                         </span>
                         <span className="mt-1 block text-[11px] text-muted-foreground/70">
-                          {item.sender} · {timeAgo(item.createdAt)}
+                          {item.sender}
+                          {timeAgo(item.createdAt) ? ` · ${timeAgo(item.createdAt)}` : ""}
                         </span>
                       </span>
                     </button>
@@ -228,17 +248,19 @@ export function TopNavbar({ onMenu }: { onMenu: () => void }) {
                 ) : (
                   <div className="px-4 py-8 text-center">
                     <Bell className="mx-auto h-8 w-8 text-muted-foreground/30" />
-                    <p className="mt-2 text-sm text-muted-foreground">You&apos;re all caught up</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {role === "admin" ? "Nothing waiting on you" : "You're all caught up"}
+                    </p>
                   </div>
                 )}
               </div>
 
               <Link
-                href={notificationsHref}
+                href={role === "admin" ? "/admin/reviews" : notificationsHref}
                 onClick={() => setNotificationsOpen(false)}
                 className="block border-t border-border px-4 py-3 text-center text-sm font-semibold text-primary transition-colors hover:bg-muted/60"
               >
-                View all notifications
+                {role === "admin" ? "Open course reviews" : "View all notifications"}
               </Link>
             </Dropdown>
           </div>

@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { UserAvatar } from "@/components/shared/UserAvatar";
-import { useAdminPlatform } from "@/lib/admin-platform";
+import { useAdminAlerts } from "@/lib/admin-platform";
 import { useFeatureFlags } from "@/lib/feature-flags";
 import { usePlatformNotifications } from "@/lib/platform-notifications";
 import { hasUserPermission } from "@/lib/admin-rbac";
@@ -57,9 +57,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const role = user?.role ?? "student";
   const platformNotifications = usePlatformNotifications(role !== "admin" && !!user);
   const { flags } = useFeatureFlags();
-  const { systemAlerts } = useAdminPlatform({ enabled: role === "admin" && !!user });
-  const adminNotificationBadge =
-    (systemAlerts.pendingReviews ?? 0) + (systemAlerts.failedPayments ?? 0);
+  // Two counts for a badge. This used to run the entire admin loader — eight
+  // endpoints, the full course list among them — on every admin page.
+  const adminAlerts = useAdminAlerts(role === "admin" && !!user);
+  // Each count sits on the item where it is dealt with. Both used to be summed
+  // onto "Notifications", which is broadcast history — the one page where
+  // neither a waiting course nor a failed payment can be handled.
+  const reviewsBadge = adminAlerts?.pendingReviews ?? 0;
+  const failedPaymentsBadge = adminAlerts?.failedPayments ?? 0;
 
   // Grouped so a ten-item list reads as three short ones. Quiz Shop, Leaderboard
   // and Achievements have no backend yet and appear only when a Super Admin
@@ -119,7 +124,6 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           href: "/admin/notifications",
           label: "Notifications",
           icon: Bell,
-          badge: adminNotificationBadge,
           permission: "notifications:view",
         },
         {
@@ -142,7 +146,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         },
         {
           href: "/admin/reviews",
-          label: "Pending reviews",
+          label: "Course reviews",
+          badge: reviewsBadge,
           icon: ClipboardCheck,
           permission: "courses:approve",
         },
@@ -159,20 +164,22 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       title: "People",
       items: [
         { href: "/admin/students", label: "Students", icon: Users, permission: "students:view" },
-        { href: "/admin/users", label: "Manage teachers", icon: Users, permission: "teachers:view" },
-        {
-          href: "/admin/teachers",
-          label: "Create teacher",
-          icon: UserPlus,
-          permission: "teachers:create",
-        },
+        // One teacher screen. "Manage teachers" and "Create teacher" were two
+        // overlapping pages that disagreed about what their buttons did.
+        { href: "/admin/teachers", label: "Teachers", icon: Users, permission: "teachers:view" },
         { href: "/admin/admins", label: "Admin team", icon: Shield, permission: "admins:view" },
       ],
     },
     {
       title: "Operations",
       items: [
-        { href: "/admin/payments", label: "Payments", icon: CreditCard, permission: "payments:view" },
+        {
+          href: "/admin/payments",
+          label: "Payments",
+          icon: CreditCard,
+          badge: failedPaymentsBadge,
+          permission: "payments:view",
+        },
         { href: "/admin/support", label: "Support", icon: LifeBuoy, permission: "support:view" },
         {
           href: "/admin/activity-logs",

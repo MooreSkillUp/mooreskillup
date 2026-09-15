@@ -135,6 +135,9 @@ export interface TeacherCourse {
   bannerImageAlt: string;
   bannerTheme: string;
   pendingDeletion: boolean;
+  /** The reviewer's note from the last time this course was sent back. */
+  declineReason: string;
+  reviewedAt: string | null;
   status: TeacherCourseStatus;
   visibility: TeacherCourseVisibility;
   sections: TeacherSection[];
@@ -258,6 +261,8 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
     bannerImageAlt: String(raw.bannerImageAlt ?? raw.banner_image_alt ?? ""),
     bannerTheme: String(raw.bannerTheme ?? raw.banner_theme ?? "default"),
     pendingDeletion: Boolean(raw.pendingDeletion ?? raw.pending_deletion ?? false),
+    declineReason: String(raw.declineReason ?? raw.decline_reason ?? ""),
+    reviewedAt: (raw.reviewedAt ?? raw.reviewed_at ?? null) as string | null,
     status: (String(raw.status ?? "draft") as TeacherCourseStatus),
     visibility: (String(raw.visibility ?? "hidden") as TeacherCourseVisibility),
     sections: sections.map((section) => {
@@ -579,6 +584,8 @@ export function useTeacherPlatform(
       bannerImageAlt: "",
       bannerTheme: "default",
       pendingDeletion: false,
+      declineReason: "",
+      reviewedAt: null,
       status: "draft",
       visibility: "hidden",
       sections: [
@@ -617,23 +624,86 @@ export function useTeacherPlatform(
 
   const getCourseById = useCallback((id: string) => teacherCourses.find((course) => course.id === id), [teacherCourses]);
 
+  /**
+   * Work out a course's category and track before it is saved.
+   *
+   * This runs on every save, autosave included. It used to re-derive the
+   * classification from the *teacher's* program every time, and when the
+   * course's track wasn't among the teacher's, fall back to the first track of
+   * the first category. So a course reassigned to a teacher — or built before an
+   * admin changed their tracks — was moved to a different category by the next
+   * autosave after any edit at all. Typing into the subtitle of an AI and Data
+   * course turned it into Web Development / Frontend Development.
+   *
+   * The rule now: a classification the course already has is never replaced by
+   * a guess. It changes only when the teacher picks a different track, and the
+   * fallback is reserved for a course that has no classification yet.
+   */
   const syncCourseClassification = useCallback(
     (course: TeacherCourse): TeacherCourse => {
+      const themed = (category: TeacherCategory | undefined) =>
+        category?.bannerTheme ?? course.bannerTheme ?? "default";
+
+      // 1. What the course is already in, found by id across every category —
+      //    not only the ones this teacher is assigned.
+      const currentCategory = categories.find((category) => category.id === course.categoryId);
+      const currentTrack = currentCategory?.subcategories.find(
+        (subcategory) => subcategory.id === course.subcategoryId,
+      );
+      const trackUnchanged = !course.track || course.track === currentTrack?.name;
+
+      if (currentCategory && currentTrack && trackUnchanged) {
+        return {
+          ...course,
+          program: currentCategory.name,
+          track: currentTrack.name,
+          bannerTheme: themed(currentCategory),
+        };
+      }
+
+      // 2. The teacher chose a different track: resolve it exactly, no fallback.
       const selectedTrack = course.track || profile.tracks[0] || profile.track;
+      const chosenCategory = allowedCategories.find((category) =>
+        category.subcategories.some((subcategory) => subcategory.name === selectedTrack),
+      );
+      const chosenTrack = chosenCategory?.subcategories.find(
+        (subcategory) => subcategory.name === selectedTrack,
+      );
+
+      if (chosenCategory && chosenTrack) {
+        return {
+          ...course,
+          program: chosenCategory.name,
+          categoryId: chosenCategory.id,
+          track: chosenTrack.name,
+          subcategoryId: chosenTrack.id,
+          bannerTheme: themed(chosenCategory),
+        };
+      }
+
+      // 3. A track name that resolves to nothing: keep what the course had.
+      if (currentCategory && currentTrack) {
+        return {
+          ...course,
+          program: currentCategory.name,
+          track: currentTrack.name,
+          bannerTheme: themed(currentCategory),
+        };
+      }
+
+      // 4. Only a course with no classification at all inherits one.
       const category = getCategoryForTrack(allowedCategories, profile.program, selectedTrack);
       const subcategory = getInheritedTrack(category, selectedTrack);
-
       return {
         ...course,
         program: category?.name ?? profile.program,
         categoryId: category?.id ?? course.categoryId,
         track: subcategory?.name ?? selectedTrack,
         subcategoryId: subcategory?.id ?? course.subcategoryId,
-        // Inherit banner theme from the admin-configured category (not hardcoded)
-        bannerTheme: category?.bannerTheme ?? course.bannerTheme ?? "default",
+        bannerTheme: themed(category),
       };
     },
-    [allowedCategories, profile.program, profile.track, profile.tracks],
+    [allowedCategories, categories, profile.program, profile.track, profile.tracks],
   );
 
   const validateCourse = useCallback((course: TeacherCourse) => {
@@ -719,6 +789,8 @@ export function useTeacherPlatform(
             taskDetail: (id: string) => `/api/admin/tasks/${id}/`,
             createProject: (id: string) => `/api/admin/sections/${id}/projects/`,
             projectDetail: (id: string) => `/api/admin/projects/${id}/`,
+            reorderSections: (id: string) => `/api/admin/courses/${id}/sections/reorder/`,
+            reorderSectionChildren: (id: string) => `/api/admin/sections/${id}/reorder/`,
           }
         : {
             courseCollection: "/api/teacher/courses/",
@@ -732,6 +804,8 @@ export function useTeacherPlatform(
             taskDetail: (id: string) => `/api/teacher/tasks/${id}/`,
             createProject: (id: string) => `/api/teacher/sections/${id}/projects/`,
             projectDetail: (id: string) => `/api/teacher/projects/${id}/`,
+            reorderSections: (id: string) => `/api/teacher/courses/${id}/sections/reorder/`,
+            reorderSectionChildren: (id: string) => `/api/teacher/sections/${id}/reorder/`,
           },
     [isAdminOwnedMode],
   );
@@ -741,11 +815,14 @@ export function useTeacherPlatform(
     const existingSectionIds = new Set(previousSections.map((section) => section.id));
     const nextSectionIds = new Set<string>();
 
-    for (const [sectionIndex, section] of nextCourse.sections.entries()) {
+    // Rows are saved without positions; each parent is re-sequenced once, atomically,
+    // after every row exists. Writing `order` row by row collided with the unique
+    // constraint whenever a row moved into a slot another still held — a 500 on
+    // any reorder, and on every save of a course numbered from zero.
+    for (const section of nextCourse.sections) {
       const sectionPayload = {
         title: section.title,
         description: section.description,
-        order: sectionIndex + 1,
         access_type: section.accessType,
         is_published: true,
       };
@@ -785,7 +862,6 @@ export function useTeacherPlatform(
           text_content: lesson.contentType === "text" ? lesson.textContent : "",
           resourceLinks: lesson.contentType === "resource" ? lesson.resourceLinks : [],
           tags: lesson.tags,
-          order: lessonIndex + 1,
           is_previewable: lessonIndex === 0,
           is_published: true,
         };
@@ -812,7 +888,7 @@ export function useTeacherPlatform(
         }
       }
 
-      for (const [taskIndex, task] of section.tasks.entries()) {
+      for (const task of section.tasks) {
         const taskPayload = {
           title: task.title,
           instructions: task.instructions,
@@ -820,7 +896,6 @@ export function useTeacherPlatform(
           submissionUrl: task.submissionUrl,
           howToSubmit: task.howToSubmit,
           dueDate: task.dueDate || null,
-          order: taskIndex + 1,
           is_required: false,
         };
 
@@ -848,7 +923,7 @@ export function useTeacherPlatform(
 
       // Projects (only when the endpoint set supports them).
       if (endpoints.createProject && endpoints.projectDetail) {
-        for (const [projectIndex, project] of section.projects.entries()) {
+        for (const project of section.projects) {
           const projectPayload = {
             title: project.title,
             description: project.description,
@@ -856,15 +931,15 @@ export function useTeacherPlatform(
             deliverables: project.deliverables,
             submissionUrl: project.submissionUrl,
             howToSubmit: project.howToSubmit,
-            order: projectIndex + 1,
             is_required: false,
           };
 
           if (!previousProjectIds.has(project.id)) {
-            await authenticatedRequest(endpoints.createProject(savedSectionId), {
-              method: "POST",
-              body: JSON.stringify(projectPayload),
-            });
+            const createdProject = await authenticatedRequest<Record<string, unknown>>(
+              endpoints.createProject(savedSectionId),
+              { method: "POST", body: JSON.stringify(projectPayload) },
+            );
+            nextProjectIds.add(String(createdProject.id));
           } else {
             await authenticatedRequest(endpoints.projectDetail(project.id), {
               method: "PATCH",
@@ -880,6 +955,15 @@ export function useTeacherPlatform(
           }
         }
       }
+
+      await authenticatedRequest(endpoints.reorderSectionChildren(savedSectionId), {
+        method: "POST",
+        body: JSON.stringify({
+          lessons: [...nextLessonIds],
+          tasks: [...nextTaskIds],
+          projects: [...nextProjectIds],
+        }),
+      });
     }
 
     for (const previousSection of previousSections) {
@@ -887,6 +971,11 @@ export function useTeacherPlatform(
         await authenticatedRequest(endpoints.sectionDetail(previousSection.id), { method: "DELETE" });
       }
     }
+
+    await authenticatedRequest(endpoints.reorderSections(courseId), {
+      method: "POST",
+      body: JSON.stringify({ sections: [...nextSectionIds] }),
+    });
   }, [endpoints]);
 
   const saveCourse = useCallback(

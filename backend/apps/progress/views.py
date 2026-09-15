@@ -10,7 +10,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import response, status, views
 
-from apps.accounts.models import User
+from apps.accounts.models import StudentProfile, User
 from apps.courses.activity import prune_teacher_activity_logs
 from apps.courses.models import Course, Lesson, TeacherActivityLog
 from apps.courses.serializers import CourseSerializer, TeacherActivitySerializer
@@ -18,6 +18,7 @@ from apps.enrollments.models import Enrollment
 from apps.notifications.models import Notification
 from apps.payments.models import Payment
 from apps.payments.paystack import is_live as paystack_is_live
+from common.mail_backend import backend_delivers
 from common.permissions import IsStudentUserRole, IsTeacherUserRole
 from common.rbac import AdminAction
 
@@ -714,7 +715,7 @@ class AdminDashboardView(views.APIView):
             {
                 "id": f"user-{user.id}",
                 "title": "New user registered",
-                "message": f"{user.display_name} joined as a {user.role}.",
+                "message": f"{user.display_name} joined as {'an' if user.role[:1] in 'aeiou' else 'a'} {user.role}.",
                 "timestamp": user.created_at,
                 "type": "registration",
             }
@@ -745,7 +746,10 @@ class AdminDashboardView(views.APIView):
                 "totals": {
                     "users": User.objects.count(),
                     "teachers": User.objects.filter(role="teacher").count(),
-                    "students": User.objects.filter(role="student").count(),
+                    # Profiles, not user rows: a sign-up that never got a profile is
+                    # not a student, and the Students page counts profiles. The two
+                    # disagreed — 17 here, 15 there.
+                    "students": StudentProfile.objects.count(),
                     "courses": Course.objects.count(),
                     "payments": successful_payments.count(),
                     "transactions": successful_payments.count(),
@@ -782,8 +786,46 @@ class AdminDashboardView(views.APIView):
                     # copy of a generated password. False on paymentsLive means
                     # no key reached the server; checkout now refuses rather
                     # than enrolling students into paid courses for nothing.
-                    "emailDelivers": getattr(settings, "EMAIL_IS_DELIVERED", False),
+                    # Read from the backend actually in force, not a flag computed
+                    # earlier in settings — a later override (dev.py forces the
+                    # console backend) left that flag claiming mail was delivered.
+                    "emailDelivers": backend_delivers(settings.EMAIL_BACKEND),
                     "paymentsLive": paystack_is_live(),
                 },
+            }
+        )
+
+
+class AdminAlertsView(views.APIView):
+    """The two counts and three courses the admin chrome shows on every page.
+
+    The sidebar badge and the notification bell each used to run the full admin
+    loader — eight endpoints, the course list among them — on every admin page,
+    alongside the page's own copy. This is the little they actually need.
+    """
+
+    permission_classes = [AdminAction("dashboard:view")]
+
+    def get(self, request):
+        queue = (
+            Course.objects.filter(status="review")
+            .select_related("teacher__user")
+            # Oldest first. A course with no submission time predates the field,
+            # so it is older than any that has one.
+            .order_by(models.F("submitted_at").asc(nulls_first=True))
+        )
+        return response.Response(
+            {
+                "pendingReviews": queue.count(),
+                "failedPayments": Payment.objects.filter(status="failed").count(),
+                "reviewQueue": [
+                    {
+                        "id": str(course.id),
+                        "title": course.title,
+                        "teacherName": course.teacher.user.display_name if course.teacher else "Admin-owned",
+                        "submittedAt": course.submitted_at.isoformat() if course.submitted_at else None,
+                    }
+                    for course in queue[:3]
+                ],
             }
         )

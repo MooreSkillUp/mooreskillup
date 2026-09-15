@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, response, status, viewsets
@@ -10,6 +13,7 @@ from common.rbac import AdminAction
 
 from .activity import prune_teacher_activity_logs
 from .models import Course, CourseReview, Lesson, Project, Section, Task, TeacherActivityLog
+from .ordering import OrderMismatch, apply_order, next_order
 from .serializers import (
     CourseReviewSerializer,
     CourseSerializer,
@@ -46,6 +50,16 @@ def transition_course_or_error(course, next_status, next_visibility, request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    decline_reason = (request.data.get("reason") or "").strip() if next_status == "declined" else ""
+    if next_status == "declined" and not decline_reason:
+        # A course sent back with no reason is a dead end: the teacher can see
+        # it failed and has nothing to act on. The reviewer is the only person
+        # who knows what is wrong, so they have to say.
+        return response.Response(
+            {"reason": ["Tell the teacher what to change before sending the course back."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     previous_status = course.status
     if request.user.role == "admin":
         record_audit(
@@ -62,13 +76,20 @@ def transition_course_or_error(course, next_status, next_visibility, request):
     if next_status == "published" and not course.published_at:
         course.published_at = timezone.now()
         update_fields.append("published_at")
+
+    # The decision lives on the course, where the teacher goes to act on it.
+    # A decline writes the note; approval answers it, so the note goes.
+    if next_status in {"declined", "approved", "published"}:
+        course.decline_reason = decline_reason
+        course.reviewed_at = timezone.now()
+        course.reviewed_by = request.user
+        update_fields += ["decline_reason", "reviewed_at", "reviewed_by"]
     course.save(update_fields=update_fields)
 
     if next_status in {"published", "declined"} and course.teacher:
         from common.email import frontend_url, send_transactional_email
 
         approved = next_status == "published"
-        decline_reason = "" if approved else (request.data.get("reason") or "").strip()
         send_transactional_email(
             to_email=course.teacher.user.email,
             subject=f"Your course was {'approved' if approved else 'declined'} — {course.title}",
@@ -208,13 +229,17 @@ class AdminCourseListView(APIView):
     permission_classes = [AdminAction("courses:view")]
 
     def get(self, request):
+        from .serializers import AdminCourseListSerializer
+
         courses = (
             Course.objects.all()
-            .select_related("teacher__user", "category", "subcategory")
-            .prefetch_related("sections__lessons", "sections__tasks", "sections__projects", "tags")
+            .select_related("teacher__user", "category", "subcategory", "reviewed_by")
+            # Only what the reviewer checklist reads. Prefetched, the list costs
+            # the same queries for three courses as for three hundred.
+            .prefetch_related("sections__lessons", "quizzes__questions__choices")
             .order_by("-updated_at", "-created_at")
         )
-        return response.Response(CourseSerializer(courses, many=True, context={"request": request}).data)
+        return response.Response(AdminCourseListSerializer(courses, many=True).data)
 
 
 class TeacherCourseViewSet(viewsets.ModelViewSet):
@@ -239,11 +264,30 @@ class TeacherCourseViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         course = serializer.save()
+        teacher = self.request.user.teacher_profile
+        message = f"Updated course {course.title}"
+
+        # Autosave runs every twelve seconds while a teacher types, and each save
+        # wrote its own entry — "Updated course" four times in a few minutes,
+        # burying everything else in the teacher's and the admin's feeds. One
+        # editing session is one entry: a recent one is refreshed instead.
+        recent = (
+            TeacherActivityLog.objects.filter(
+                teacher=teacher,
+                course=course,
+                activity_type="edit-course",
+                created_at__gte=timezone.now() - timedelta(minutes=30),
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if recent:
+            TeacherActivityLog.objects.filter(pk=recent.pk).update(
+                created_at=timezone.now(), message=message
+            )
+            return
         TeacherActivityLog.objects.create(
-            teacher=self.request.user.teacher_profile,
-            course=course,
-            message=f"Updated course {course.title}",
-            activity_type="edit-course",
+            teacher=teacher, course=course, message=message, activity_type="edit-course"
         )
 
     def destroy(self, request, *args, **kwargs):
@@ -276,7 +320,10 @@ class TeacherCourseViewSet(viewsets.ModelViewSet):
         save_course_version(course, user=request.user, note="Submitted for review")
         course.status = "review"
         course.visibility = "hidden"
-        course.save(update_fields=["status", "visibility", "updated_at"])
+        # The decline note is deliberately left in place — the next reviewer
+        # needs to see what was asked for last time. Approval clears it.
+        course.submitted_at = timezone.now()
+        course.save(update_fields=["status", "visibility", "submitted_at", "updated_at"])
         TeacherActivityLog.objects.create(
             teacher=request.user.teacher_profile,
             course=course,
@@ -370,7 +417,7 @@ class TeacherCourseSectionCreateView(APIView):
         course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher_profile)
         serializer = SectionSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(course=course)
+        serializer.save(course=course, order=next_order(Section.objects.filter(course=course)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -381,7 +428,7 @@ class TeacherSectionLessonCreateView(APIView):
         section = get_object_or_404(Section, id=section_id, course__teacher=request.user.teacher_profile)
         serializer = LessonSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(section=section)
+        serializer.save(section=section, order=next_order(Lesson.objects.filter(section=section)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -392,7 +439,7 @@ class TeacherSectionTaskCreateView(APIView):
         section = get_object_or_404(Section, id=section_id, course__teacher=request.user.teacher_profile)
         serializer = TaskSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(section=section)
+        serializer.save(section=section, order=next_order(Task.objects.filter(section=section)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -403,8 +450,64 @@ class TeacherSectionProjectCreateView(APIView):
         section = get_object_or_404(Section, id=section_id, course__teacher=request.user.teacher_profile)
         serializer = ProjectSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(section=section)
+        serializer.save(section=section, order=next_order(Project.objects.filter(section=section)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+def reorder_children(children, data):
+    """Re-sequence one parent's children from the id lists in `data`, all or nothing.
+
+    `children` maps a key in the request body to the queryset it orders, such as
+    {"lessons": ...}. A key the body leaves out is untouched; a key it includes
+    must list every child exactly once. Several lists arrive together because
+    they are one decision — a rejected task list must not leave a lesson
+    reorder half-applied.
+    """
+    lists = {}
+    for key in children:
+        if key not in data:
+            continue
+        if not isinstance(data[key], list):
+            return response.Response(
+                {key: ["Expected a list of ids."]}, status=status.HTTP_400_BAD_REQUEST
+            )
+        lists[key] = data[key]
+    if not lists:
+        return response.Response({"detail": "Nothing to reorder."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        with transaction.atomic():
+            for key, ids in lists.items():
+                try:
+                    apply_order(children[key], ids)
+                except OrderMismatch as mismatch:
+                    raise OrderMismatch(f"{key}: {mismatch}") from mismatch
+    except OrderMismatch as mismatch:
+        return response.Response({"detail": str(mismatch)}, status=status.HTTP_400_BAD_REQUEST)
+    return response.Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TeacherCourseSectionReorderView(APIView):
+    permission_classes = [IsTeacherUserRole]
+
+    def post(self, request, course_id):
+        course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher_profile)
+        return reorder_children({"sections": Section.objects.filter(course=course)}, request.data)
+
+
+class TeacherSectionReorderView(APIView):
+    permission_classes = [IsTeacherUserRole]
+
+    def post(self, request, section_id):
+        section = get_object_or_404(Section, id=section_id, course__teacher=request.user.teacher_profile)
+        return reorder_children(
+            {
+                "lessons": Lesson.objects.filter(section=section),
+                "tasks": Task.objects.filter(section=section),
+                "projects": Project.objects.filter(section=section),
+            },
+            request.data,
+        )
 
 
 class TeacherCoursePricingView(APIView):

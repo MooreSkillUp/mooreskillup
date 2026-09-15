@@ -8,6 +8,7 @@ from apps.platform.audit import record_audit
 from common.rbac import AdminActionsPerMethod, user_has_admin_permission
 
 from .models import Course, Lesson, Project, Section, Task
+from .ordering import next_order
 from .serializers import (
     CourseSerializer,
     LessonSerializer,
@@ -15,6 +16,7 @@ from .serializers import (
     SectionSerializer,
     TaskSerializer,
 )
+from .views import reorder_children
 
 # Editing content (sections/lessons/tasks) inside an admin-owned course is part
 # of "courses:edit"; "courses:delete" is reserved for removing whole courses.
@@ -116,7 +118,7 @@ class AdminOwnedCourseSectionCreateView(AdminOwnedCourseMixin, APIView):
         course = self.get_course(course_id)
         serializer = SectionSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(course=course)
+        serializer.save(course=course, order=next_order(Section.objects.filter(course=course)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -153,7 +155,7 @@ class AdminOwnedSectionLessonCreateView(AdminActionsPerMethod, APIView):
         _require_managed_course_access(self.request, section.course, write=True)
         serializer = LessonSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(section=section)
+        serializer.save(section=section, order=next_order(Lesson.objects.filter(section=section)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -190,7 +192,7 @@ class AdminOwnedSectionTaskCreateView(AdminActionsPerMethod, APIView):
         _require_managed_course_access(self.request, section.course, write=True)
         serializer = TaskSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(section=section)
+        serializer.save(section=section, order=next_order(Task.objects.filter(section=section)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -227,7 +229,7 @@ class AdminOwnedSectionProjectCreateView(AdminActionsPerMethod, APIView):
         _require_managed_course_access(self.request, section.course, write=True)
         serializer = ProjectSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(section=section)
+        serializer.save(section=section, order=next_order(Project.objects.filter(section=section)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -254,3 +256,29 @@ class AdminOwnedProjectView(AdminActionsPerMethod, APIView):
         project = self.get_object(project_id)
         project.delete()
         return response.Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AdminOwnedCourseSectionReorderView(AdminOwnedCourseMixin, APIView):
+    """The admin studio's counterpart to the teacher reorder — see ordering.py."""
+
+    admin_actions = OWNED_CONTENT_ACTIONS
+
+    def post(self, request, course_id):
+        course = self.get_course(course_id)
+        return reorder_children({"sections": Section.objects.filter(course=course)}, request.data)
+
+
+class AdminOwnedSectionReorderView(AdminActionsPerMethod, APIView):
+    admin_actions = OWNED_CONTENT_ACTIONS
+
+    def post(self, request, section_id):
+        section = get_object_or_404(Section.objects.select_related("course"), id=section_id)
+        _require_managed_course_access(self.request, section.course, write=True)
+        return reorder_children(
+            {
+                "lessons": Lesson.objects.filter(section=section),
+                "tasks": Task.objects.filter(section=section),
+                "projects": Project.objects.filter(section=section),
+            },
+            request.data,
+        )

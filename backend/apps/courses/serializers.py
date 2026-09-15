@@ -43,6 +43,8 @@ class LessonSerializer(serializers.ModelSerializer):
     durationMinutes = serializers.IntegerField(source="duration_minutes", read_only=True)
     isPreviewable = serializers.BooleanField(source="is_previewable", read_only=True)
     completed = serializers.SerializerMethodField()
+    # Position is written only on create and by the reorder endpoints (see ordering.py).
+    order = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Lesson
@@ -134,6 +136,8 @@ class TaskSerializer(serializers.ModelSerializer):
     submissionUrl = serializers.URLField(source="submission_url", read_only=True)
     howToSubmit = serializers.CharField(source="how_to_submit", read_only=True)
     dueDate = serializers.DateField(source="due_date", read_only=True)
+    # Position is written only on create and by the reorder endpoints (see ordering.py).
+    order = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Task
@@ -177,6 +181,8 @@ class TaskSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     submissionUrl = serializers.URLField(source="submission_url", read_only=True)
     howToSubmit = serializers.CharField(source="how_to_submit", read_only=True)
+    # Position is written only on create and by the reorder endpoints (see ordering.py).
+    order = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Project
@@ -213,6 +219,8 @@ class SectionSerializer(serializers.ModelSerializer):
     lessonCount = serializers.SerializerMethodField()
     durationMinutes = serializers.SerializerMethodField()
     completedCount = serializers.SerializerMethodField()
+    # Position is written only on create and by the reorder endpoints (see ordering.py).
+    order = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Section
@@ -395,7 +403,10 @@ class CourseSerializer(serializers.ModelSerializer):
     reviewCount = serializers.SerializerMethodField()
     categoryAccentColor = serializers.CharField(source="category.accent_color", read_only=True)
     categoryBannerTheme = serializers.CharField(source="category.banner_theme", read_only=True)
-
+    declineReason = serializers.CharField(source="decline_reason", read_only=True)
+    reviewedAt = serializers.DateTimeField(source="reviewed_at", read_only=True)
+    reviewedByName = serializers.CharField(source="reviewed_by.display_name", read_only=True)
+    submittedAt = serializers.DateTimeField(source="submitted_at", read_only=True)
     def to_internal_value(self, data):
         import json
         if hasattr(data, "_mutable") and not data._mutable:
@@ -454,6 +465,10 @@ class CourseSerializer(serializers.ModelSerializer):
             "bannerTheme",
             "pendingDeletion",
             "deletionReason",
+            "declineReason",
+            "reviewedAt",
+            "reviewedByName",
+            "submittedAt",
             "averageRating",
             "reviewCount",
             "teacherName",
@@ -627,3 +642,127 @@ class CourseVersionSerializer(serializers.ModelSerializer):
 
     def get_sectionCount(self, obj):
         return len(obj.snapshot.get("sections", []))
+
+
+class AdminCourseListSerializer(serializers.ModelSerializer):
+    """One row of the admin course list — only what admin screens read.
+
+    The list used to reuse the catalog's CourseSerializer, which works out
+    ratings, lengths, per-section quiz state and teacher analytics for every
+    course: 248 queries and ~850ms for thirteen courses, and the admin chrome
+    fetched it several times per page. No admin screen reads any of those.
+    """
+
+    categoryId = serializers.UUIDField(source="category_id", read_only=True)
+    subcategoryId = serializers.UUIDField(source="subcategory_id", read_only=True)
+    categoryName = serializers.CharField(source="category.name", read_only=True)
+    subcategoryName = serializers.CharField(source="subcategory.name", read_only=True)
+    program = serializers.CharField(source="category.name", read_only=True)
+    track = serializers.CharField(source="subcategory.name", read_only=True)
+    teacherId = serializers.SerializerMethodField()
+    teacherName = serializers.SerializerMethodField()
+    ownerType = serializers.SerializerMethodField()
+    ownerId = serializers.SerializerMethodField()
+    isRecommended = serializers.BooleanField(source="is_recommended", read_only=True)
+    certificateEnabled = serializers.BooleanField(source="certificate_enabled", read_only=True)
+    pendingDeletion = serializers.BooleanField(source="pending_deletion", read_only=True)
+    deletionReason = serializers.CharField(source="deletion_reason", read_only=True)
+    declineReason = serializers.CharField(source="decline_reason", read_only=True)
+    reviewedAt = serializers.DateTimeField(source="reviewed_at", read_only=True)
+    reviewedByName = serializers.CharField(source="reviewed_by.display_name", read_only=True)
+    submittedAt = serializers.DateTimeField(source="submitted_at", read_only=True)
+    lastUpdated = serializers.DateTimeField(source="updated_at", read_only=True)
+    reviewSummary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Course
+        fields = (
+            "id",
+            "title",
+            "price",
+            "status",
+            "visibility",
+            "featured",
+            "category",
+            "subcategory",
+            "categoryId",
+            "subcategoryId",
+            "categoryName",
+            "subcategoryName",
+            "program",
+            "track",
+            "teacherId",
+            "teacherName",
+            "ownerType",
+            "ownerId",
+            "isRecommended",
+            "certificateEnabled",
+            "pendingDeletion",
+            "deletionReason",
+            "declineReason",
+            "reviewedAt",
+            "reviewedByName",
+            "submittedAt",
+            "lastUpdated",
+            "reviewSummary",
+        )
+
+    def get_teacherId(self, obj):
+        return str(obj.teacher_id) if obj.teacher_id else "admin-owned"
+
+    def get_teacherName(self, obj):
+        return obj.teacher.user.display_name if obj.teacher else "Admin ownership"
+
+    def get_ownerType(self, obj):
+        return "teacher" if obj.teacher_id else "admin"
+
+    def get_ownerId(self, obj):
+        return str(obj.teacher_id) if obj.teacher_id else "admin"
+
+    def get_reviewSummary(self, obj):
+        """The objective facts a reviewer checks before approving.
+
+        Reads only what the admin list prefetches, so a queue of twenty courses
+        costs the same queries as a queue of one.
+
+        Facts, not verdicts — the reviewer decides. What it removes is opening
+        every lesson in a course to find the one with no video.
+        """
+        sections = [section for section in obj.sections.all() if section.is_published]
+        lessons = [
+            lesson for section in sections for lesson in section.lessons.all() if lesson.is_published
+        ]
+
+        def is_empty(lesson):
+            if lesson.content_type == "video":
+                return not (lesson.video_url or "").strip()
+            if lesson.content_type == "text":
+                return not (lesson.text_content or "").strip()
+            if lesson.content_type == "resource":
+                return not lesson.resource_links
+            return False
+
+        # Mirrors Quiz.is_ready, but over prefetched rows — is_ready queries.
+        def quiz_ready(quiz):
+            questions = list(quiz.questions.all())
+            return (
+                quiz.is_published
+                and bool(questions)
+                and all(any(choice.is_correct for choice in q.choices.all()) for q in questions)
+            )
+
+        quizzes = list(obj.quizzes.all())
+        final = next((quiz for quiz in quizzes if quiz.kind == "final"), None)
+
+        return {
+            "sections": len(sections),
+            "lessons": len(lessons),
+            "emptyLessons": sum(1 for lesson in lessons if is_empty(lesson)),
+            "lessonsWithoutDuration": sum(1 for lesson in lessons if not lesson.duration_minutes),
+            "totalMinutes": sum(lesson.duration_minutes or 0 for lesson in lessons),
+            "hasBanner": bool(obj.banner_image),
+            "hasOverview": bool((obj.overview or "").strip()),
+            "quizzes": len(quizzes),
+            "unreadyQuizzes": sum(1 for quiz in quizzes if quiz.is_published and not quiz_ready(quiz)),
+            "hasReadyFinal": bool(final and quiz_ready(final)),
+        }

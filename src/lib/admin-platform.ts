@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   authenticatedRequest,
   extractErrorMessage,
@@ -19,7 +19,19 @@ export interface AdminTeacher {
   academicTrack: string;
   academicTracks: string[];
   status: "active" | "inactive";
+  /**
+   * Present only on the response that created the account, and only when email
+   * couldn't deliver it — the admin is then the one route to the teacher.
+   */
   temporaryPassword?: string | null;
+  emailDelivered?: boolean;
+}
+
+/** What resending an invite returns. The password comes back only when email is off. */
+export interface InviteResend {
+  detail: string;
+  emailDelivered: boolean;
+  temporaryPassword: string | null;
 }
 
 export interface AdminStudent {
@@ -78,6 +90,28 @@ export interface AdminCourse {
   isRecommended?: boolean;
   pendingDeletion?: boolean;
   deletionReason?: string;
+  /** The last reviewer note — present on a declined or resubmitted course. */
+  declineReason?: string;
+  reviewedAt?: string | null;
+  reviewedByName?: string | null;
+  submittedAt?: string | null;
+  lastUpdated?: string;
+  certificateEnabled?: boolean;
+  reviewSummary?: AdminReviewSummary | null;
+}
+
+/** Objective facts about a course, for the reviewer. Present only in the review queue. */
+export interface AdminReviewSummary {
+  sections: number;
+  lessons: number;
+  emptyLessons: number;
+  lessonsWithoutDuration: number;
+  totalMinutes: number;
+  hasBanner: boolean;
+  hasOverview: boolean;
+  quizzes: number;
+  unreadyQuizzes: number;
+  hasReadyFinal: boolean;
 }
 
 export interface AdminBroadcast {
@@ -106,6 +140,22 @@ export interface AdminTotals {
   monthlyRevenue?: string;
   courseCompletionRate?: number;
   activeUsersToday?: number;
+}
+
+/**
+ * Operational state the dashboard reports. The two booleans exist because both
+ * integrations fail silently and completely when unconfigured — production had
+ * never sent an email and was completing paid checkouts without charging — so
+ * they are shown rather than assumed.
+ */
+export interface AdminSystemAlerts {
+  pendingReviews?: number;
+  failedPayments?: number;
+  inactiveTeachers?: number;
+  /** False means mail goes to a server log, not to people. */
+  emailDelivers?: boolean;
+  /** False means no Paystack key reached the server; paid checkout refuses. */
+  paymentsLive?: boolean;
 }
 
 export interface AdminAnalytics {
@@ -242,16 +292,26 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
   const [totals, setTotals] = useState<AdminTotals | null>(null);
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
   const [activityFeed, setActivityFeed] = useState<AdminActivityEvent[]>([]);
-  const [systemAlerts, setSystemAlerts] = useState<Record<string, number>>({});
+  const [systemAlerts, setSystemAlerts] = useState<AdminSystemAlerts>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Keyed on who the user is and what they may do — not on the user object.
+  // /auth/me/ replaces it with an identical copy after sign-in, which gave it a
+  // new identity and restarted every admin load a second time.
+  const userKey = user ? `${user.id}|${(user.permissions ?? []).join(",")}` : "";
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   const load = useCallback(async () => {
-    if (!user) return;
+    const currentUser = userRef.current;
+    if (!currentUser) return;
     setIsLoading(true);
     setError("");
 
-    const hasPerm = (p: string) => !!user.permissions?.includes(p);
+    const hasPerm = (p: string) => !!currentUser.permissions?.includes(p);
 
     const promises: Promise<unknown>[] = [];
     const keys: string[] = [];
@@ -326,7 +386,9 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
       setError(failures.join(" | "));
     }
     setIsLoading(false);
-  }, [user]);
+    // userKey stands in for the user: it changes exactly when a reload is due.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userKey]);
 
   const runAction = useCallback(async <T,>(action: () => Promise<T>) => {
     setError("");
@@ -341,12 +403,12 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (!enabled || !user) {
+    if (!enabled || !userKey) {
       setIsLoading(false);
       return;
     }
     void load();
-  }, [enabled, user, load]);
+  }, [enabled, userKey, load]);
 
 
   const activeTeachers = useMemo(
@@ -390,7 +452,7 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
 
   const resendTeacherInvite = useCallback(
     async (teacherId: string) =>
-      authenticatedRequest<{ detail: string }>(`/api/admin/teachers/${teacherId}/resend-invite/`, {
+      authenticatedRequest<InviteResend>(`/api/admin/teachers/${teacherId}/resend-invite/`, {
         method: "POST",
       }),
     [],
@@ -644,6 +706,7 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
       );
       const normalizedCourse = normalizeCoursePayload([course])[0] ?? course;
       setCourses((current) => current.map((item) => (item.id === courseId ? normalizedCourse : item)));
+      invalidateAdminAlerts();
       return normalizedCourse;
     },
     [runAction],
@@ -690,4 +753,70 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     updateCourseCatalog,
     publishAdminOwnedCourse,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The admin chrome — sidebar badge and notification bell.
+//
+// Both used to call useAdminPlatform(), so every admin page ran the full loader
+// three times (the page, the sidebar, the navbar), each fetching eight endpoints
+// including the whole course list. They need two counts and the oldest three
+// courses in the queue. One small request, shared by both.
+// ---------------------------------------------------------------------------
+
+export interface AdminAlerts {
+  pendingReviews: number;
+  failedPayments: number;
+  reviewQueue: { id: string; title: string; teacherName: string; submittedAt: string | null }[];
+}
+
+const ALERTS_TTL_MS = 30_000;
+let alertsCache: { key: string; at: number; value: AdminAlerts } | null = null;
+let alertsInFlight: Promise<AdminAlerts> | null = null;
+
+/** Drop the cached alerts, so the next reader refetches after a change. */
+export function invalidateAdminAlerts() {
+  alertsCache = null;
+}
+
+function fetchAdminAlerts(key: string): Promise<AdminAlerts> {
+  if (alertsCache && alertsCache.key === key && Date.now() - alertsCache.at < ALERTS_TTL_MS) {
+    return Promise.resolve(alertsCache.value);
+  }
+  // The sidebar and navbar mount together; share the one request they both start.
+  if (!alertsInFlight) {
+    alertsInFlight = authenticatedRequest<AdminAlerts>("/api/admin/alerts/")
+      .then((value) => {
+        alertsCache = { key, at: Date.now(), value };
+        return value;
+      })
+      .finally(() => {
+        alertsInFlight = null;
+      });
+  }
+  return alertsInFlight;
+}
+
+export function useAdminAlerts(enabled: boolean): AdminAlerts | null {
+  const { user } = useAuth();
+  const key = user ? `${user.id}|${(user.permissions ?? []).join(",")}` : "";
+  const canView = Boolean(user?.permissions?.includes("dashboard:view"));
+  const [alerts, setAlerts] = useState<AdminAlerts | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !key || !canView) return;
+    let active = true;
+    fetchAdminAlerts(key)
+      .then((value) => {
+        if (active) setAlerts(value);
+      })
+      .catch(() => {
+        // The chrome is a convenience; a failed badge must not break the page.
+      });
+    return () => {
+      active = false;
+    };
+  }, [enabled, key, canView]);
+
+  return alerts;
 }

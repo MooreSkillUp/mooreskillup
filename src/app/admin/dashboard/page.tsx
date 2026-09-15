@@ -3,23 +3,21 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
-  Activity,
   AlertTriangle,
   CheckCircle2,
   CreditCard,
   FolderCheck,
-  FolderKanban,
   LifeBuoy,
-  Shield,
+  Mail,
   Trash2,
   UserPlus,
-  Users,
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { hasUserPermission, type AdminResourceAction } from "@/lib/admin-rbac";
 import { useAdminPlatform } from "@/lib/admin-platform";
 import { useAuth } from "@/lib/auth";
+import { formatNaira } from "@/lib/commerce";
 
 type RangeKey = "7" | "30" | "90" | "all";
 
@@ -30,208 +28,290 @@ const RANGE_OPTIONS: { value: RangeKey; label: string }[] = [
   { value: "all", label: "All time" },
 ];
 
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+type AttentionItem = {
+  key: string;
+  icon: typeof FolderCheck;
+  title: string;
+  detail: string | null;
+  href: string;
+  cta: string;
+  count: number;
+  permission: string;
+};
+
+/**
+ * The admin's home screen. Its one job is answering "what needs me?".
+ *
+ * It used to open with six stat tiles and show the review queue three times —
+ * a tile, a "needs attention" row and a shortcut, all the same number — while
+ * never saying how long a teacher had been left waiting. The heading now states
+ * the answer outright, the work comes first with its age, and numbers follow.
+ */
 export default function AdminDashboardPage() {
   const { user } = useAuth();
-  const {
-    teachers,
-    courses,
-    supportTickets,
-    totals,
-    activityFeed,
-    systemAlerts,
-    isLoading,
-    error,
-  } = useAdminPlatform();
+  const { teachers, courses, supportTickets, totals, activityFeed, systemAlerts, isLoading, error } =
+    useAdminPlatform();
   const [range, setRange] = useState<RangeKey>("30");
 
-  const hasPerm = (permission: string) =>
+  const can = (permission: string) =>
     hasUserPermission(user?.permissions, permission as AdminResourceAction);
 
-  const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
-  const reviewCourses = courses.filter((course) => course.status === "review");
+  const firstName = (user?.fullName || user?.displayName || "").trim().split(/\s+/)[0] || "there";
+
+  const queue = courses.filter((course) => course.status === "review");
+  const readyToPublish = courses.filter((course) => course.status === "approved");
   const deletionRequests = courses.filter((course) => course.pendingDeletion);
-  const openSupportTickets = supportTickets.filter((ticket) => ticket.status === "open");
+  const openTickets = supportTickets.filter((ticket) => ticket.status === "open");
   const failedPayments = systemAlerts.failedPayments ?? 0;
+  const activeTeachers = teachers.filter((teacher) => teacher.status === "active").length;
+
+  // How long a teacher has been left without an answer. Courses submitted before
+  // submission time was recorded carry no timestamp, and are older than any that do.
+  let oldestWait: string | null = null;
+  if (queue.length) {
+    if (queue.some((course) => !course.submittedAt)) {
+      oldestWait = "Oldest was submitted before timing was recorded";
+    } else {
+      const days = Math.max(
+        ...queue.map((course) =>
+          Math.floor((Date.now() - new Date(course.submittedAt as string).getTime()) / 86_400_000),
+        ),
+      );
+      oldestWait = days === 0 ? "All submitted today" : `Oldest waiting ${plural(days, "day")}`;
+    }
+  }
+
+  const attention = (
+    [
+      {
+        key: "reviews",
+        icon: FolderCheck,
+        title: `${plural(queue.length, "course")} waiting for review`,
+        detail: oldestWait,
+        href: "/admin/reviews",
+        cta: "Review",
+        count: queue.length,
+        permission: "courses:approve",
+      },
+      {
+        key: "publish",
+        icon: CheckCircle2,
+        title: `${plural(readyToPublish.length, "approved course")} ready to publish`,
+        detail: "Approved by a moderator, not yet visible to students",
+        href: "/admin/reviews",
+        cta: "Publish",
+        count: readyToPublish.length,
+        permission: "courses:publish",
+      },
+      {
+        key: "deletions",
+        icon: Trash2,
+        title: plural(deletionRequests.length, "course deletion request"),
+        detail: "A teacher asked to remove a course — it stays live until you decide",
+        href: "/admin/courses",
+        cta: "Decide",
+        count: deletionRequests.length,
+        permission: "courses:delete",
+      },
+      {
+        key: "tickets",
+        icon: LifeBuoy,
+        title: plural(openTickets.length, "open support ticket"),
+        detail: null,
+        href: "/admin/support",
+        cta: "Open",
+        count: openTickets.length,
+        permission: "support:view",
+      },
+      {
+        key: "payments",
+        icon: AlertTriangle,
+        title: plural(failedPayments, "failed payment"),
+        detail: null,
+        href: "/admin/payments",
+        cta: "View",
+        count: failedPayments,
+        permission: "payments:view",
+      },
+    ] satisfies AttentionItem[]
+  ).filter((item) => item.count > 0 && can(item.permission));
+
+  // Integrations that fail silently. Shown only to those who can act on settings,
+  // and only when the server has actually reported them off.
+  const setupIssues = [
+    systemAlerts.emailDelivers === false
+      ? {
+          key: "email",
+          icon: Mail,
+          title: "Email isn't being delivered",
+          detail:
+            "Teacher invites, password resets and completion emails are written to a server log instead of sent. Set BREVO_API_KEY and redeploy.",
+        }
+      : null,
+    systemAlerts.paymentsLive === false
+      ? {
+          key: "payments",
+          icon: CreditCard,
+          title: "Payments aren't configured",
+          detail:
+            "Paid checkout is refusing rather than enrolling anyone for free. Set PAYSTACK_SECRET_KEY and redeploy.",
+        }
+      : null,
+  ].filter((issue): issue is NonNullable<typeof issue> => issue !== null);
+  const showSetup = can("admin-settings:view") && setupIssues.length > 0;
+
+  const revenue = Number(totals?.revenue ?? 0);
+  const tiles = [
+    { label: "Students", value: `${totals?.students ?? 0}`, href: "/admin/students", permission: "students:view" },
+    { label: "Active teachers", value: `${activeTeachers}`, href: "/admin/teachers", permission: "teachers:view" },
+    { label: "Live courses", value: `${totals?.publishedCourses ?? 0}`, href: "/admin/courses", permission: "courses:view" },
+    {
+      label: "Active enrollments",
+      value: `${totals?.activeEnrollments ?? 0}`,
+      href: "/admin/analytics",
+      permission: "analytics:view",
+    },
+    {
+      label: "Revenue",
+      value: formatNaira(Number.isFinite(revenue) ? revenue : 0),
+      href: "/admin/payments",
+      permission: "payments:view",
+      // With no key on the server, every "successful" payment was simulated.
+      hint: systemAlerts.paymentsLive === false ? "Not real charges — payments aren't live" : undefined,
+    },
+  ].filter((tile) => can(tile.permission));
 
   const rangedActivity = useMemo(() => {
     if (range === "all") return activityFeed;
-    const cutoff = Date.now() - Number(range) * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - Number(range) * 86_400_000;
     return activityFeed.filter((event) => new Date(event.timestamp).getTime() >= cutoff);
   }, [activityFeed, range]);
 
-  const statCards = [
-    { icon: Users, label: "Students", value: `${totals?.students ?? 0}`, href: "/admin/students", permission: "students:view" },
-    { icon: Shield, label: "Active teachers", value: `${activeTeachers}`, href: "/admin/users", permission: "teachers:view" },
-    { icon: FolderKanban, label: "Total courses", value: `${courses.length}`, href: "/admin/courses", permission: "courses:view" },
-    { icon: FolderCheck, label: "Review queue", value: `${reviewCourses.length}`, href: "/admin/reviews", permission: "courses:approve" },
-    { icon: CreditCard, label: "Active enrollments", value: `${totals?.activeEnrollments ?? 0}`, href: "/admin/payments", permission: "payments:view" },
-    { icon: CreditCard, label: "Revenue", value: `NGN ${totals?.revenue ?? "0.00"}`, href: "/admin/payments", permission: "payments:view" },
-  ].filter((card) => hasPerm(card.permission));
-
-  const attention = [
-    {
-      key: "reviews",
-      icon: FolderCheck,
-      label: "Courses awaiting review",
-      count: reviewCourses.length,
-      href: "/admin/reviews",
-      cta: "Open review queue",
-      permission: "courses:approve",
-    },
-    {
-      key: "deletions",
-      icon: Trash2,
-      label: "Course deletion requests",
-      count: deletionRequests.length,
-      href: "/admin/courses",
-      cta: "Review requests",
-      permission: "courses:delete",
-    },
-    {
-      key: "tickets",
-      icon: LifeBuoy,
-      label: "Open support tickets",
-      count: openSupportTickets.length,
-      href: "/admin/support",
-      cta: "Open support",
-      permission: "support:view",
-    },
-    {
-      key: "payments",
-      icon: AlertTriangle,
-      label: "Failed payments",
-      count: failedPayments,
-      href: "/admin/payments",
-      cta: "Open payments",
-      permission: "payments:view",
-    },
-  ].filter((item) => item.count > 0 && hasPerm(item.permission));
+  const headline = isLoading
+    ? "Checking the platform…"
+    : attention.length
+      ? `${plural(attention.length, "thing")} need${attention.length === 1 ? "s" : ""} you`
+      : "Nothing needs you right now";
 
   return (
     <AppShell allowedRoles={["admin"]}>
       <div className="space-y-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-              Admin panel
-            </div>
-            <h1 className="mt-2 font-display text-4xl font-bold">Platform control room</h1>
-            <p className="mt-2 max-w-3xl text-muted-foreground">
-              A quick overview of what needs your attention and shortcuts into every admin area.
+            <p className="text-sm text-muted-foreground">
+              {greeting()}, {firstName}
             </p>
+            <h1 className="mt-0.5 font-display text-2xl font-bold sm:text-3xl">{headline}</h1>
+            {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex flex-wrap gap-3">
-            {hasPerm("teachers:create") && (
-              <Link href="/admin/teachers">
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {can("teachers:create") && (
+              <Link href="/admin/teachers?new=1">
                 <Button variant="accent">
                   <UserPlus className="h-4 w-4" /> Create teacher
                 </Button>
               </Link>
             )}
-            {hasPerm("notifications:broadcast") && (
+            {can("notifications:broadcast") && (
               <Link href="/admin/broadcast-notifications">
                 <Button variant="outline">Send a broadcast</Button>
               </Link>
             )}
           </div>
-        </div>
+        </header>
 
-        {/* Clickable stat cards */}
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-6">
-          {statCards.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className="group rounded-3xl border border-border bg-card p-6 shadow-sm transition hover:border-primary hover:shadow-md"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <item.icon className="h-6 w-6" />
-              </div>
-              <div className="mt-5 font-display text-3xl font-bold">{item.value}</div>
-              <div className="mt-1 text-sm text-muted-foreground group-hover:text-primary">{item.label} →</div>
-            </Link>
-          ))}
-        </div>
-
-        {/* Needs attention */}
-        <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-accent" />
-            <h2 className="font-display text-2xl font-bold">Needs attention</h2>
-          </div>
-          <div className="mt-5 space-y-3">
-            {attention.length ? (
-              attention.map((item) => (
-                <div
-                  key={item.key}
-                  className="flex flex-col gap-3 rounded-2xl border border-border bg-background p-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
-                      <item.icon className="h-5 w-5" />
-                    </span>
-                    <div>
-                      <div className="font-medium">{item.label}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {item.count} item{item.count === 1 ? "" : "s"} waiting
-                      </div>
-                    </div>
+        {showSetup && (
+          <section className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
+            <h2 className="text-sm font-semibold text-destructive">Setup that is silently failing</h2>
+            <ul className="mt-3 space-y-3">
+              {setupIssues.map(({ key, icon: Icon, title, detail }) => (
+                <li key={key} className="flex gap-3">
+                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  <div>
+                    <p className="text-sm font-medium">{title}</p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{detail}</p>
                   </div>
-                  <Link href={item.href}>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {attention.length > 0 ? (
+          <section>
+            <h2 className="sr-only">Needs your attention</h2>
+            <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
+              {attention.map(({ key, icon: Icon, title, detail, href, cta }) => (
+                <li key={key} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-warning/15 text-warning">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{title}</p>
+                    {detail && <p className="text-sm text-muted-foreground">{detail}</p>}
+                  </div>
+                  <Link href={href}>
                     <Button variant="outline" size="sm">
-                      {item.cta}
+                      {cta}
                     </Button>
                   </Link>
-                </div>
-              ))
-            ) : (
-              <div className="flex items-center gap-3 rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
-                <CheckCircle2 className="h-5 w-5 text-success" />
-                {isLoading ? "Loading platform status..." : "All clear — nothing needs your attention right now."}
-              </div>
-            )}
-          </div>
-        </section>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          !isLoading && (
+            <div className="flex items-center gap-3 rounded-2xl border border-dashed border-border px-5 py-4 text-sm text-muted-foreground">
+              <CheckCircle2 className="h-5 w-5 text-success" />
+              No courses waiting, no open tickets, no failed payments.
+            </div>
+          )
+        )}
 
-        {/* Shortcuts with mini-stats */}
-        <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-          <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-            Admin shortcuts
-          </div>
-          <h2 className="mt-2 font-display text-2xl font-bold">Jump to where the work is</h2>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              { href: "/admin/reviews", label: "Review queue", stat: reviewCourses.length, permission: "courses:approve" },
-              { href: "/admin/support", label: "Open tickets", stat: openSupportTickets.length, permission: "support:view" },
-              { href: "/admin/courses", label: "Deletion requests", stat: deletionRequests.length, permission: "courses:view" },
-              { href: "/admin/users", label: "Active teachers", stat: activeTeachers, permission: "teachers:view" },
-            ].filter((shortcut) => hasPerm(shortcut.permission)).map((shortcut) => (
+        <section>
+          <h2 className="sr-only">Platform at a glance</h2>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {tiles.map((tile) => (
               <Link
-                key={shortcut.href}
-                href={shortcut.href}
-                className="flex items-center justify-between rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium transition hover:border-primary hover:text-primary"
+                key={tile.label}
+                href={tile.href}
+                className="group rounded-2xl border border-border bg-card px-5 py-4 transition-colors hover:border-accent/50"
               >
-                <span>{shortcut.label}</span>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-primary">{shortcut.stat}</span>
+                <p className="text-xs font-medium text-muted-foreground">{tile.label}</p>
+                <p className="mt-1 font-display text-2xl font-bold tabular-nums">
+                  {isLoading ? (
+                    <span className="inline-block h-7 w-12 animate-pulse rounded bg-muted" />
+                  ) : (
+                    tile.value
+                  )}
+                </p>
+                {"hint" in tile && tile.hint && (
+                  <p className="mt-0.5 text-xs text-destructive">{tile.hint}</p>
+                )}
               </Link>
             ))}
           </div>
         </section>
 
-
-        {/* Trimmed activity feed with date-range filter */}
-        <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-accent" />
-              <h2 className="font-display text-2xl font-bold">Recent activity</h2>
-            </div>
-            <div className="flex items-center gap-2">
+        <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-display text-lg font-semibold">Recent activity</h2>
+            <div className="flex items-center gap-3">
               <select
+                id="activity-range"
+                aria-label="Activity date range"
                 value={range}
                 onChange={(event) => setRange(event.target.value as RangeKey)}
-                className="h-10 rounded-xl border border-border bg-background px-3 text-sm"
+                className="h-9 rounded-lg border border-border bg-background px-2.5 text-sm"
               >
                 {RANGE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -239,28 +319,33 @@ export default function AdminDashboardPage() {
                   </option>
                 ))}
               </select>
-              <Link href="/admin/activity-logs" className="text-sm font-semibold text-primary">
-                View all →
+              <Link href="/admin/activity-logs" className="text-sm font-medium text-accent hover:underline">
+                View all
               </Link>
             </div>
           </div>
-          <div className="mt-4 space-y-3">
+          <ul className="mt-4 divide-y divide-border">
             {rangedActivity.length ? (
               rangedActivity.slice(0, 6).map((event) => (
-                <div key={event.id} className="rounded-2xl border border-border bg-background p-4">
-                  <div className="font-medium">{event.title}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">{event.message}</div>
-                  <div className="mt-2 text-xs uppercase tracking-[0.2em] text-primary">
-                    {new Date(event.timestamp).toLocaleString("en-NG")}
-                  </div>
-                </div>
+                <li key={event.id} className="py-3">
+                  <p className="text-sm font-medium">{event.title}</p>
+                  <p className="text-sm text-muted-foreground">{event.message}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {new Date(event.timestamp).toLocaleString("en-NG", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </li>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
-                {isLoading ? "Loading activity feed..." : "No activity in this range."}
-              </div>
+              <li className="py-3 text-sm text-muted-foreground">
+                {isLoading ? "Loading activity…" : "No activity in this range."}
+              </li>
             )}
-          </div>
+          </ul>
         </section>
       </div>
     </AppShell>

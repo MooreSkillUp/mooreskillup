@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 
 from apps.courses.models import Course
 from apps.platform.audit import record_audit
+from common.mail_backend import backend_delivers
 from common.rbac import SUPER_ADMIN, AdminAction, AdminActionsPerMethod
 
 from .models import PasswordResetToken
@@ -587,6 +588,23 @@ class LogoutAllView(APIView):
         return clear_auth_cookies(cleared)
 
 
+def _credentials_handoff(temp_password):
+    """How a new password reaches the person it belongs to.
+
+    When email is delivered the password went to the teacher, and it never needs
+    to appear on an admin's screen. When it isn't — production had never sent a
+    single email — the invite goes nowhere and the admin is the only route, so
+    the password comes back for them to pass on.
+
+    Before, creation always returned it (even when emailed) while the UI said
+    "emailed" either way, and resending an invite reset the password and
+    returned nothing: with email off, that locked the teacher out with a
+    password nobody had.
+    """
+    delivered = backend_delivers(settings.EMAIL_BACKEND)
+    return {"emailDelivered": delivered, "temporaryPassword": None if delivered else temp_password}
+
+
 class AdminTeacherListView(AdminActionsPerMethod, APIView):
     admin_actions = {"GET": ("teachers:view",), "POST": ("teachers:create",)}
 
@@ -611,7 +629,7 @@ class AdminTeacherListView(AdminActionsPerMethod, APIView):
         temp_password = getattr(teacher, "_generated_password", None)
         _email_new_account_credentials(teacher.user, temp_password, "teacher")
         payload = TeacherProfileSerializer(teacher).data
-        payload["temporaryPassword"] = temp_password
+        payload.update(_credentials_handoff(temp_password))
         return response.Response(payload, status=status.HTTP_201_CREATED)
 
 
@@ -697,7 +715,14 @@ class AdminTeacherResendInviteView(AdminActionsPerMethod, APIView):
             resource_name=teacher.user.display_name,
             metadata={"email": teacher.user.email},
         )
-        return response.Response({"detail": f"New sign-in details emailed to {teacher.user.email}."})
+        handoff = _credentials_handoff(temp_password)
+        detail = (
+            f"New sign-in details emailed to {teacher.user.email}."
+            if handoff["emailDelivered"]
+            else "Email isn't being delivered, so the new password is shown here. "
+            "Pass it on securely — the previous one no longer works."
+        )
+        return response.Response({"detail": detail, **handoff})
 
 
 class AdminStudentListView(AdminActionsPerMethod, APIView):
@@ -841,7 +866,8 @@ class AdminAccountListView(AdminActionsPerMethod, APIView):
         _email_new_account_credentials(admin, temp_password, "admin")
         payload = AdminAccountSerializer(admin).data
         # Returned exactly once at creation; never retrievable again.
-        payload["temporaryPassword"] = temp_password
+        # Same rule as teachers: shown only when email can't deliver it.
+        payload.update(_credentials_handoff(temp_password))
         return response.Response(payload, status=status.HTTP_201_CREATED)
 
 

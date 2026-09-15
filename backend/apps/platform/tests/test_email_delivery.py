@@ -74,3 +74,24 @@ def test_creating_a_teacher_sends_them_their_password(db):
     # For a teacher the flag lives on the profile, not the user row.
     profile = TeacherProfile.objects.get(user__email="new.teacher@example.test")
     assert profile.must_change_password is True
+
+
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.console.EmailBackend",
+    EMAIL_IS_DELIVERED=True,
+)
+def test_the_dashboard_reports_the_backend_in_force_not_a_stale_flag(db):
+    """dev.py forces the console backend after base.py has computed its flag.
+
+    The dashboard read the flag, so locally it claimed mail was being delivered
+    while every message went to the console. It reads the backend now.
+    """
+    from rest_framework.test import APIClient
+
+    from apps.courses.tests.test_workflow import make_admin
+    from common.rbac import SUPER_ADMIN
+
+    client = APIClient()
+    client.force_authenticate(user=make_admin(SUPER_ADMIN, "ops@example.test"))
+    alerts = client.get("/api/dashboard/admin/").json()["systemAlerts"]
+    assert alerts["emailDelivers"] is False
