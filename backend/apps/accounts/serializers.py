@@ -716,6 +716,10 @@ class AdminAccountUpdateSerializer(serializers.Serializer):
         if "status" in validated_data:
             instance.is_active = validated_data["status"] == "active"
         instance.save()
+        if not instance.is_active:
+            from .session_auth import revoke_all_sessions
+
+            revoke_all_sessions(instance)
         return instance
 
 

@@ -653,6 +653,10 @@ class AdminTeacherUpdateView(AdminActionsPerMethod, APIView):
             teacher.status = request.data["status"]
             teacher.user.is_active = request.data["status"] == "active"
             teacher.user.save(update_fields=["is_active"])
+            if not teacher.user.is_active:
+                from .session_auth import revoke_all_sessions
+
+                revoke_all_sessions(teacher.user)
         if "program" in request.data:
             teacher.program = request.data["program"]
         if "track" in request.data:
@@ -786,6 +790,11 @@ class AdminStudentUpdateView(AdminActionsPerMethod, APIView):
                 student.selected_track = tracks[0]
         student.user.save()
         student.save()
+        if not student.user.is_active:
+            # Suspending has to end their sessions, not just the next sign-in.
+            from .session_auth import revoke_all_sessions
+
+            revoke_all_sessions(student.user)
         record_audit(
             request,
             "student.update",
@@ -1037,7 +1046,16 @@ class AdminAccountResendCredentialsView(AdminActionsPerMethod, APIView):
             resource_name=admin.display_name,
             metadata={"email": admin.email},
         )
-        return response.Response({"detail": f"New sign-in details emailed to {admin.email}."})
+        # Same handoff as teachers: resetting a password and emailing it into a
+        # backend that delivers nothing locked the admin out.
+        handoff = _credentials_handoff(temp_password)
+        detail = (
+            f"New sign-in details emailed to {admin.email}."
+            if handoff["emailDelivered"]
+            else "Email isn't being delivered, so the new password is shown here. "
+            "Pass it on securely — the previous one no longer works."
+        )
+        return response.Response({"detail": detail, **handoff})
 
 
 class AdminUserLockView(APIView):
