@@ -383,7 +383,21 @@ class Command(BaseCommand):
 
         for profile, pace, _ in students:
             course_count, completion, finish_outright = pace_map[pace]
-            for course_index, course in enumerate(courses[:course_count]):
+            intended = courses[:course_count]
+
+            # Drop enrolments this persona is no longer meant to have. Running
+            # the seeder twice used to leave the "first-run" student holding a
+            # finished course from an earlier version of this table, so the one
+            # persona that exists to test empty states was never empty.
+            stale = Enrollment.objects.filter(student=profile).exclude(
+                course__in=[course.id for course in intended]
+            )
+            if stale.exists():
+                stale.delete()
+            if not intended:
+                DailyActivity.objects.filter(student=profile).delete()
+
+            for course_index, course in enumerate(intended):
                 enrollment, _ = Enrollment.objects.get_or_create(
                     student=profile,
                     course=course,
@@ -415,6 +429,14 @@ class Command(BaseCommand):
                             "time_spent_seconds": (lesson.duration_minutes or 10) * 60,
                         },
                     )
+
+                # A seeded enrolment that has completed lessons but was never
+                # "last accessed" produced a teacher dashboard reporting a 20%
+                # completion rate beside 0 engaged learners. Demo data that
+                # contradicts itself teaches the wrong lesson about the product.
+                if finish_count:
+                    enrollment.last_accessed_at = timezone.now() - timedelta(days=1)
+                    enrollment.save(update_fields=["last_accessed_at", "updated_at"])
 
                 total = len(lessons)
                 CourseProgress.objects.update_or_create(
@@ -461,7 +483,11 @@ class Command(BaseCommand):
             ("Workshop: debugging like a professional", "workshop", 6, None),
         ]
         for title, kind, days, course in specs:
-            Event.objects.get_or_create(
+            # update_or_create, so re-seeding moves the dates forward. With
+            # get_or_create the defaults were skipped for a row that already
+            # existed, and the demo schedule slid into the past a day at a time
+            # until every "upcoming" session had already happened.
+            Event.objects.update_or_create(
                 title=title,
                 defaults={
                     "description": "Join on time — a recording is not guaranteed.",

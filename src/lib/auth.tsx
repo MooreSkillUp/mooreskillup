@@ -300,7 +300,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         });
 
-      let response = await send(getAccessToken());
+      // Same reasoning as the shared helper: the access token is memory-only,
+      // so a full page load starts with none. Refreshing first avoids a
+      // guaranteed 401 on the very request that bootstraps the session.
+      let token = getAccessToken();
+      if (!token) {
+        token = await refreshAccessToken();
+      }
+
+      let response = await send(token);
       if (response.status === 401) {
         const nextAccessToken = await refreshAccessToken();
         response = await send(nextAccessToken);

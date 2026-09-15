@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CalendarClock, Globe, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui-kit/Button";
 import { useFeedback } from "@/lib/feedback";
@@ -32,6 +32,22 @@ export function ScheduleManager({ scope }: { scope: "teacher" | "admin" }) {
   const [busy, setBusy] = useState(false);
 
   const isAdmin = scope === "admin";
+
+  // A past session and a cancelled one were both drawn at 60% opacity and
+  // nothing else, so a class that had already happened looked like one that
+  // had been called off. Splitting the list says which is which, and puts
+  // what is coming up first.
+  const { upcoming, past } = useMemo(() => {
+    const now = Date.now();
+    const ahead: ScheduleEvent[] = [];
+    const behind: ScheduleEvent[] = [];
+    for (const event of events) {
+      (new Date(event.startsAt).getTime() < now ? behind : ahead).push(event);
+    }
+    ahead.sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
+    behind.sort((a, b) => +new Date(b.startsAt) - +new Date(a.startsAt));
+    return { upcoming: ahead, past: behind };
+  }, [events]);
 
   const save = async (draft: EventDraft) => {
     setBusy(true);
@@ -123,76 +139,130 @@ export function ScheduleManager({ scope }: { scope: "teacher" | "admin" }) {
           </p>
         </div>
       ) : (
-        <ul className="space-y-3">
-          {events.map((event) => {
-            const past = new Date(event.startsAt).getTime() < Date.now();
-            return (
-              <li
-                key={event.id}
-                className={cn(
-                  "flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-border bg-card p-4",
-                  (past || event.isCancelled) && "opacity-60",
-                )}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{event.title}</span>
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                      {EVENT_KIND_LABELS[event.kind] ?? event.kind}
-                    </span>
-                    {!event.isPublished && (
-                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                        Draft
-                      </span>
-                    )}
-                    {event.isCancelled && (
-                      <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-semibold text-destructive">
-                        Cancelled
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {friendlyDay(event.startsAt)} · {timeOfDay(event.startsAt)}
-                    {event.endsAt ? ` – ${timeOfDay(event.endsAt)}` : ""}
-                  </p>
-
-                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {event.courseId ? (
-                      event.courseTitle
-                    ) : (
-                      <>
-                        <Globe className="h-3.5 w-3.5" />
-                        Everyone on the platform
-                      </>
-                    )}
-                  </p>
-                </div>
-
-                <div className="flex shrink-0 gap-1.5">
-                  <button
-                    onClick={() => {
+        <div className="space-y-6">
+          {upcoming.length > 0 && (
+            <section>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Coming up
+              </h2>
+              <ul className="mt-2.5 space-y-3">
+                {upcoming.map((event) => (
+                  <EventRow
+                    key={event.id}
+                    event={event}
+                    past={false}
+                    onEdit={() => {
                       setComposing(false);
                       setEditing(event);
                     }}
-                    className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    aria-label={`Edit ${event.title}`}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => void remove(event)}
-                    className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                    aria-label={`Delete ${event.title}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                    onDelete={() => void remove(event)}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {past.length > 0 && (
+            <section>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Already happened
+              </h2>
+              <ul className="mt-2.5 space-y-3">
+                {past.map((event) => (
+                  <EventRow
+                    key={event.id}
+                    event={event}
+                    past
+                    onEdit={() => {
+                      setComposing(false);
+                      setEditing(event);
+                    }}
+                    onDelete={() => void remove(event)}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
       )}
     </div>
+  );
+}
+
+function EventRow({
+  event,
+  past,
+  onEdit,
+  onDelete,
+}: {
+  event: ScheduleEvent;
+  past: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <li
+      className={cn(
+        "flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-border bg-card p-4",
+        (past || event.isCancelled) && "opacity-60",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{event.title}</span>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+            {EVENT_KIND_LABELS[event.kind] ?? event.kind}
+          </span>
+          {!event.isPublished && (
+            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-warning">
+              Draft
+            </span>
+          )}
+          {/* Named, not just faded — cancelled rows were drawn the same way. */}
+          {event.isCancelled ? (
+            <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+              Cancelled
+            </span>
+          ) : past ? (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+              Past
+            </span>
+          ) : null}
+        </div>
+
+        <p className="mt-1 text-sm text-muted-foreground">
+          {friendlyDay(event.startsAt)} · {timeOfDay(event.startsAt)}
+          {event.endsAt ? ` – ${timeOfDay(event.endsAt)}` : ""}
+        </p>
+
+        <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+          {event.courseId ? (
+            event.courseTitle
+          ) : (
+            <>
+              <Globe className="h-3.5 w-3.5" />
+              Everyone on the platform
+            </>
+          )}
+        </p>
+      </div>
+
+      <div className="flex shrink-0 gap-1.5">
+        <button
+          onClick={onEdit}
+          className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={`Edit ${event.title}`}
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
+        <button
+          onClick={onDelete}
+          className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          aria-label={`Delete ${event.title}`}
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </li>
   );
 }

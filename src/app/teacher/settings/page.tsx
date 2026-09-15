@@ -75,11 +75,10 @@ export default function TeacherSettingsPage() {
     <AppShell allowedRoles={["teacher", "admin"]}>
       <div className="mx-auto max-w-3xl space-y-6">
         <div>
-          <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Settings</div>
-          <h1 className="mt-2 font-display text-4xl font-bold">Your teacher profile</h1>
-          <p className="mt-2 max-w-2xl text-muted-foreground">
-            Update how you appear across the workspace. Your avatar updates in the header immediately after saving.
-            Program and tracks are assigned by your admin.
+          <h1 className="font-display text-2xl font-bold sm:text-3xl">Your profile</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            How you appear across the workspace. Your program and tracks are assigned by an
+            admin, so they are shown here rather than edited.
           </p>
           {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
         </div>

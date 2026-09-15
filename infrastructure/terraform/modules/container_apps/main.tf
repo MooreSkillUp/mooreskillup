@@ -98,6 +98,29 @@ resource "azurerm_container_app" "api" {
         name  = "AZURE_STORAGE_CONTAINER"
         value = var.storage_media_container
       }
+      # Without a key the API falls back to Django's console backend, which
+      # writes mail to the container log and delivers nothing. Teacher invites
+      # carry a temporary password, so that failure is silent and total.
+      env {
+        name  = "BREVO_API_KEY"
+        value = var.brevo_api_key
+      }
+      env {
+        name  = "DEFAULT_FROM_EMAIL"
+        value = var.default_from_email
+      }
+      # Never passed to the container before, so the API ran in Paystack's
+      # simulation mode: checkout reported success and enrolled the student
+      # without taking any money. The client now refuses to simulate unless
+      # DEBUG is on, so a missing key fails at checkout rather than silently.
+      env {
+        name  = "PAYSTACK_SECRET_KEY"
+        value = var.paystack_secret_key
+      }
+      env {
+        name  = "PAYSTACK_PUBLIC_KEY"
+        value = var.paystack_public_key
+      }
     }
   }
 }

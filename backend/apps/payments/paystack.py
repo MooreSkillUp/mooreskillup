@@ -19,12 +19,39 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+class PaystackError(Exception):
+    pass
+
+
 def is_live():
     # Only a real Paystack secret key ("sk_test_..." / "sk_live_...") counts as
     # live. Anything else (empty, or a placeholder like "paystack_test_secret")
     # falls back to simulation mode so local checkout still works.
     key = getattr(settings, "PAYSTACK_SECRET_KEY", "") or ""
     return key.startswith("sk_")
+
+
+def simulation_allowed():
+    """Simulated payments are a development convenience, never a deployment.
+
+    Without this, a production box with no `PAYSTACK_SECRET_KEY` quietly hands
+    out paid courses: checkout bounces straight to the callback, verify returns
+    success, and the student is enrolled having paid nothing. Nothing errors, so
+    nothing says so — the same silent-total failure the console email backend
+    had.
+
+    So simulation is tied to DEBUG. A production deploy missing the key fails
+    loudly at checkout instead, which is the safe direction to fail.
+    """
+    return bool(getattr(settings, "DEBUG", False))
+
+
+def _require_live_or_simulation():
+    if not is_live() and not simulation_allowed():
+        raise PaystackError(
+            "Payments are not configured on this server. "
+            "Set PAYSTACK_SECRET_KEY before taking money."
+        )
 
 
 def _secret():
@@ -76,6 +103,7 @@ def _request(method, path, payload=None):
 
 def initialize_transaction(*, email, amount_kobo, reference, callback_url, metadata=None):
     """Returns {authorization_url, reference}."""
+    _require_live_or_simulation()
     if not is_live():
         # Simulation: bounce the browser straight to our callback so verify runs.
         sep = "&" if "?" in (callback_url or "") else "?"
@@ -104,6 +132,7 @@ def initialize_transaction(*, email, amount_kobo, reference, callback_url, metad
 
 def verify_transaction(reference):
     """Returns {success: bool, amount_kobo: int, raw: dict}."""
+    _require_live_or_simulation()
     if not is_live():
         return {"success": True, "amount_kobo": None, "raw": {"simulated": True}}
 
@@ -114,6 +143,7 @@ def verify_transaction(reference):
 
 
 def create_refund(reference, amount_kobo=None):
+    _require_live_or_simulation()
     if not is_live():
         return {"success": True, "raw": {"simulated": True}}
     payload = {"transaction": reference}
@@ -133,6 +163,3 @@ def verify_signature(raw_body: bytes, signature: str) -> bool:
     computed = hmac.new(_secret().encode(), raw_body, hashlib.sha512).hexdigest()
     return hmac.compare_digest(computed, signature)
 
-
-class PaystackError(Exception):
-    pass

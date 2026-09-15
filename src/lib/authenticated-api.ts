@@ -236,8 +236,22 @@ export async function authenticatedRequest<T = unknown>(endpoint: string, option
       },
     });
 
-  let response = await send(accessTokenMemory);
+  // The access token lives in memory only, so every full page load starts
+  // without one. Firing anyway meant each page opened with two or three
+  // requests that were guaranteed to 401 before the refresh caught up — wasted
+  // round trips on every navigation, and slowest exactly where it hurts most:
+  // a cold-start API on a phone. Refresh first when we have nothing.
+  //
+  // refreshAccessToken() de-duplicates concurrent callers, so a page firing
+  // four requests at once still performs a single refresh.
+  let token = accessTokenMemory;
+  if (!token) {
+    token = await refreshAccessToken();
+  }
+
+  let response = await send(token);
   if (response.status === 401) {
+    // Still refused: the token we had has expired mid-flight. One retry.
     const nextAccessToken = await refreshAccessToken();
     response = await send(nextAccessToken);
   }

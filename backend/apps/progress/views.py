@@ -3,6 +3,9 @@ import csv
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
+from django.db import models
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import response, status, views
@@ -14,6 +17,7 @@ from apps.courses.serializers import CourseSerializer, TeacherActivitySerializer
 from apps.enrollments.models import Enrollment
 from apps.notifications.models import Notification
 from apps.payments.models import Payment
+from apps.payments.paystack import is_live as paystack_is_live
 from common.permissions import IsStudentUserRole, IsTeacherUserRole
 from common.rbac import AdminAction
 
@@ -27,6 +31,56 @@ from .activity import (
 )
 from .models import CourseProgress, LessonProgress
 from .serializers import CourseProgressSerializer, LessonProgressSerializer
+
+
+def with_last_studied(enrollments):
+    """Annotate each enrolment with when a lesson in it was last worked on.
+
+    `Enrollment.last_accessed_at` is a copy of this, written by the lesson-ping
+    endpoint. Deriving it instead keeps one source of truth, so a row can never
+    be recent by one measure and never-touched by the other.
+
+    Falls back to when a lesson was completed, because a completed lesson that
+    never recorded an access time still happened — without this a student who
+    had finished a course read "100% · last active: Never" on the teacher's
+    students table.
+    """
+    return enrollments.annotate(
+        last_studied=Coalesce(
+            models.Max("lesson_progress__last_accessed_at"),
+            models.Max("lesson_progress__completed_at"),
+        )
+    )
+
+
+def engaged_learner_count(enrollments):
+    """How many distinct people have opened at least one lesson.
+
+    Two things were wrong with the old count. It counted *enrolments*, under a
+    label that says "learners", so one student taking three of this teacher's
+    courses read as three people. And it read `Enrollment.last_accessed_at`, a
+    denormalised timestamp only stamped by the lesson-progress endpoint — which
+    left a dashboard reporting a 20% completion rate beside 0 engaged learners,
+    two numbers that cannot both be true.
+
+    A LessonProgress row *is* the evidence that a lesson was opened, so ask it
+    directly rather than trusting a copy of the fact kept somewhere else.
+    """
+    return (
+        enrollments.filter(lesson_progress__isnull=False)
+        .values("student_id")
+        .distinct()
+        .count()
+    )
+
+
+def engaged_enrollment_count(enrollments):
+    """Enrolments in which at least one lesson has been opened.
+
+    Per-course engagement, where the unit genuinely is the enrolment: a student
+    can be engaged in one of a teacher's courses and never open another.
+    """
+    return enrollments.filter(lesson_progress__isnull=False).distinct().count()
 
 
 def refresh_course_progress(enrollment: Enrollment):
@@ -358,7 +412,7 @@ class TeacherDashboardView(views.APIView):
         enrollments = Enrollment.objects.filter(course__teacher=teacher)
         total_enrollments = enrollments.count()
         total_completed = enrollments.filter(status="completed").count()
-        total_views = enrollments.filter(last_accessed_at__isnull=False).count()
+        engaged_learners = engaged_learner_count(enrollments)
         recent_activities = TeacherActivityLog.objects.filter(teacher=teacher)[:8]
         recent_courses = courses.order_by("-updated_at", "-created_at")[:6]
         return response.Response(
@@ -384,7 +438,7 @@ class TeacherDashboardView(views.APIView):
                     "completionRate": round((total_completed / total_enrollments) * 100, 1)
                     if total_enrollments
                     else 0,
-                    "totalViews": total_views,
+                    "engagedLearners": engaged_learners,
                 },
                 "recentActivities": TeacherActivitySerializer(recent_activities, many=True).data,
                 "recentCourses": CourseSerializer(recent_courses, many=True, context={"request": request}).data,
@@ -405,12 +459,13 @@ def build_teacher_analytics(teacher):
         total = course_enrollments.count()
         completed = course_enrollments.filter(status="completed").count()
         active = (
-            course_enrollments.filter(last_accessed_at__gte=active_window)
+            with_last_studied(course_enrollments)
+            .filter(last_studied__gte=active_window)
             .values("student_id")
             .distinct()
             .count()
         )
-        views = course_enrollments.filter(last_accessed_at__isnull=False).count()
+        engaged = engaged_enrollment_count(course_enrollments)
         course_rows.append(
             {
                 "courseId": str(course.id),
@@ -419,14 +474,18 @@ def build_teacher_analytics(teacher):
                 "enrollments": total,
                 "activeLearners": active,
                 "completionRate": round((completed / total) * 100, 1) if total else 0,
-                "views": views,
+                "engaged": engaged,
             }
         )
 
     total_enrollments = enrollments.count()
     total_completed = enrollments.filter(status="completed").count()
     active_learners = (
-        enrollments.filter(last_accessed_at__gte=active_window).values("student_id").distinct().count()
+        with_last_studied(enrollments)
+        .filter(last_studied__gte=active_window)
+        .values("student_id")
+        .distinct()
+        .count()
     )
 
     enrollment_trend = []
@@ -454,7 +513,7 @@ def build_teacher_analytics(teacher):
             "completionRate": round((total_completed / total_enrollments) * 100, 1)
             if total_enrollments
             else 0,
-            "totalViews": enrollments.filter(last_accessed_at__isnull=False).count(),
+            "engagedLearners": engaged_learner_count(enrollments),
         },
         "courses": course_rows,
         "enrollmentTrend": enrollment_trend,
@@ -465,7 +524,7 @@ def build_teacher_students(teacher, course_id=None):
     """One row per (student, course) for this teacher's courses only."""
     now = timezone.now()
     active_window = now - timedelta(days=30)
-    enrollments = (
+    enrollments = with_last_studied(
         Enrollment.objects.filter(course__teacher=teacher)
         .select_related("student__user", "course", "course_progress")
         .order_by("-enrolled_at")
@@ -476,7 +535,8 @@ def build_teacher_students(teacher, course_id=None):
     rows = []
     for enrollment in enrollments:
         progress = getattr(enrollment, "course_progress", None)
-        is_active = bool(enrollment.last_accessed_at and enrollment.last_accessed_at >= active_window)
+        last_studied = enrollment.last_studied
+        is_active = bool(last_studied and last_studied >= active_window)
         rows.append(
             {
                 "studentId": str(enrollment.student_id),
@@ -485,7 +545,7 @@ def build_teacher_students(teacher, course_id=None):
                 "courseId": str(enrollment.course_id),
                 "courseTitle": enrollment.course.title,
                 "enrolledAt": enrollment.enrolled_at.isoformat(),
-                "lastActiveAt": enrollment.last_accessed_at.isoformat() if enrollment.last_accessed_at else None,
+                "lastActiveAt": last_studied.isoformat() if last_studied else None,
                 "progressPercent": float(progress.progress_percent) if progress else 0.0,
                 "status": enrollment.status,
                 "isActive": is_active,
@@ -501,17 +561,20 @@ class TeacherStudentsView(views.APIView):
         rows = build_teacher_students(
             request.user.teacher_profile, course_id=request.query_params.get("courseId")
         )
+        # Every figure here counts enrolment rows except `uniqueStudents`,
+        # and the names now say so. They used to end in "Students" while
+        # counting rows, which put "Active (30d) 9" on a page that had just
+        # said there were 4 students.
         completed = sum(1 for row in rows if row["status"] == "completed")
         active = sum(1 for row in rows if row["isActive"])
-        unique_students = len({row["studentId"] for row in rows})
         return response.Response(
             {
                 "summary": {
-                    "totalEnrolled": len(rows),
-                    "uniqueStudents": unique_students,
-                    "activeStudents": active,
-                    "completedStudents": completed,
-                    "inactiveStudents": len(rows) - active,
+                    "totalEnrollments": len(rows),
+                    "uniqueStudents": len({row["studentId"] for row in rows}),
+                    "activeEnrollments": active,
+                    "completedEnrollments": completed,
+                    "dormantEnrollments": len(rows) - active,
                 },
                 "students": rows,
             }
@@ -560,7 +623,14 @@ class TeacherAnalyticsExportView(views.APIView):
         http_response["Content-Disposition"] = 'attachment; filename="course-analytics.csv"'
         writer = csv.writer(http_response)
         writer.writerow(
-            ["Course", "Status", "Enrollments", "Active learners (30d)", "Completion rate %", "Views"]
+            [
+                "Course",
+                "Status",
+                "Enrollments",
+                "Active learners (30d)",
+                "Completion rate %",
+                "Engaged enrollments",
+            ]
         )
         for course in data["courses"]:
             writer.writerow(
@@ -570,7 +640,7 @@ class TeacherAnalyticsExportView(views.APIView):
                     course["enrollments"],
                     course["activeLearners"],
                     course["completionRate"],
-                    course["views"],
+                    course["engaged"],
                 ]
             )
         return http_response
@@ -705,6 +775,15 @@ class AdminDashboardView(views.APIView):
                     "pendingReviews": Course.objects.filter(status="review").count(),
                     "failedPayments": Payment.objects.filter(status="failed").count(),
                     "inactiveTeachers": User.objects.filter(role="teacher", teacher_profile__status="inactive").count(),
-                }
+                    # Two integrations that fail silently and totally when
+                    # unconfigured, so they are reported rather than assumed.
+                    # False on emailDelivers means mail is going to a log file,
+                    # not to people — and a teacher invite carries their only
+                    # copy of a generated password. False on paymentsLive means
+                    # no key reached the server; checkout now refuses rather
+                    # than enrolling students into paid courses for nothing.
+                    "emailDelivers": getattr(settings, "EMAIL_IS_DELIVERED", False),
+                    "paymentsLive": paystack_is_live(),
+                },
             }
         )

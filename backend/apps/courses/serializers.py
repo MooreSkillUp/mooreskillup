@@ -583,14 +583,23 @@ class CourseSerializer(serializers.ModelSerializer):
             completion_rate = round(sum(progress_values) / len(progress_values))
 
         total_lessons = obj.total_lessons or Lesson.objects.filter(section__course=obj, is_published=True).count()
-        lesson_views = obj.sections.filter(
-            lessons__lesson_progress__first_accessed_at__isnull=False
-        ).values("lessons__lesson_progress").distinct().count()
-        enrollment_views = obj.enrollments.filter(last_accessed_at__isnull=False).count()
-        real_views = max(lesson_views, enrollment_views)
+
+        # These used to be one field. It took the larger of "lessons opened"
+        # and "enrolments touched" and called the result "views", which put
+        # "4 enrolled, 24 engaged" on a teacher's dashboard — impossible, and a
+        # sign the two had been conflated because neither was clearly what was
+        # wanted. They are different questions, so they are two fields now.
+        lesson_opens = (
+            obj.sections.filter(lessons__lesson_progress__first_accessed_at__isnull=False)
+            .values("lessons__lesson_progress")
+            .distinct()
+            .count()
+        )
+        engaged = obj.enrollments.filter(lesson_progress__isnull=False).distinct().count()
 
         return {
-            "views": real_views,
+            "engaged": engaged,
+            "lessonOpens": lesson_opens,
             "enrollments": enrollments_count,
             "completionRate": completion_rate,
             "totalLessons": total_lessons,

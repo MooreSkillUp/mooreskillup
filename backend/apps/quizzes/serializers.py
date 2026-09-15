@@ -72,18 +72,33 @@ class TeacherChoiceSerializer(serializers.ModelSerializer):
         fields = ("id", "text", "isCorrect", "order")
 
 
+def _write_choices(question, choices):
+    """Create a question's choices, ordered by their position in the list.
+
+    Position is the order, so any `order` the client sent is discarded rather
+    than trusted — two sources for the same thing is how a list ends up
+    displaying in one sequence and scoring in another. Passing both also raised
+    a duplicate-keyword TypeError, which is how this was found.
+    """
+    for index, choice in enumerate(choices):
+        payload = {key: value for key, value in choice.items() if key != "order"}
+        Choice.objects.create(question=question, order=index, **payload)
+
+
 class TeacherQuestionSerializer(serializers.ModelSerializer):
     choices = TeacherChoiceSerializer(many=True, required=False)
 
     class Meta:
         model = Question
-        fields = ("id", "text", "explanation", "order", "choices")
+        # `quiz` must be listed, not just sent: DRF drops any field the
+        # serializer does not declare, so leaving it out meant every question
+        # was created with a null quiz_id and the write failed at the database.
+        fields = ("id", "quiz", "text", "explanation", "order", "choices")
 
     def create(self, validated_data):
         choices = validated_data.pop("choices", [])
         question = Question.objects.create(**validated_data)
-        for index, choice in enumerate(choices):
-            Choice.objects.create(question=question, order=index, **choice)
+        _write_choices(question, choices)
         return question
 
     def update(self, instance, validated_data):
@@ -97,8 +112,7 @@ class TeacherQuestionSerializer(serializers.ModelSerializer):
             # edited as a set, and matching them up by id invites half-applied
             # edits that leave a question with no correct answer.
             instance.choices.all().delete()
-            for index, choice in enumerate(choices):
-                Choice.objects.create(question=instance, order=index, **choice)
+            _write_choices(instance, choices)
         return instance
 
 

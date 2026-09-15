@@ -5,10 +5,15 @@ Everything written about this project lives here. The repository root keeps only
 [PROJECT_ROADMAP.md](../PROJECT_ROADMAP.md) — the three things you need before
 you know what you are looking for.
 
+**New here, or coming back after a while?** Start with
+[MOORESKILLUP.md](MOORESKILLUP.md) — what the platform is, what is built, what
+is not, and what to do next.
+
 ## I want to…
 
 | …do this | Go here |
 |---|---|
+| Understand the whole platform | [MOORESKILLUP.md](MOORESKILLUP.md) |
 | Get the app running locally | [setup/LOCAL_DEVELOPMENT.md](setup/LOCAL_DEVELOPMENT.md) |
 | Understand what's built and what's next | [../PROJECT_ROADMAP.md](../PROJECT_ROADMAP.md) |
 | Contribute a change | [../CONTRIBUTING.md](../CONTRIBUTING.md) |

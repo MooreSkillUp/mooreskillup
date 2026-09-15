@@ -211,14 +211,6 @@ export default function LessonPage() {
         <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
           <div className="space-y-5">
             <div className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
-              <div className="border-b border-border bg-background/70 px-5 py-4">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                    {lesson.type === "video" ? "Video content" : lesson.type === "resource" ? "Resources" : "Reading"}
-                  </span>
-                  <span>Use the controls below to keep your pace steady and save notes as you go.</span>
-                </div>
-              </div>
               <div className="p-5">
                 {lesson.type === "video" ? (
                   lesson.embedUrl && getVideoRenderMode(lesson.videoUrl) === "iframe" ? (
