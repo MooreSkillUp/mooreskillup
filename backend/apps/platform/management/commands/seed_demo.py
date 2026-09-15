@@ -106,6 +106,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             categories = self._seed_taxonomy()
             teacher = self._seed_teacher()
+            self._seed_admins()
             courses = self._seed_courses(categories, teacher)
             students = self._seed_students()
             self._seed_enrolments(students, courses)
@@ -204,6 +205,46 @@ class Command(BaseCommand):
             user=user, defaults={"program": "Web Development", "track": "Frontend Development"}
         )
         return profile
+
+    def _seed_admins(self):
+        """One admin per permission tier.
+
+        Without these the demo data could not sign you into the admin side at
+        all — you could seed a whole platform and then have no way to approve
+        the courses it created. Two tiers rather than one because the RBAC
+        matrix is the thing most worth testing: a moderator can approve a course
+        and must not be able to touch payments or other admins.
+        """
+        specs = [
+            ("admin", "super_admin", "Eric Moore", "demo_super_admin"),
+            ("moderator", "moderator", "Chidi Okeke", "demo_moderator"),
+        ]
+        created = []
+        for handle, admin_role, display_name, username in specs:
+            first, last = display_name.split(" ", 1)
+            user, is_new = User.objects.get_or_create(
+                email=f"{handle}@{DEMO_DOMAIN}",
+                defaults={
+                    "username": username,
+                    "display_name": display_name,
+                    "first_name": first,
+                    "last_name": last,
+                    "role": "admin",
+                    "admin_role": admin_role,
+                    "is_staff": True,
+                },
+            )
+            if is_new:
+                user.set_password(DEMO_PASSWORD)
+            # Demo admins skip the first-login password prompt: it is a real
+            # flow worth testing, but not on every reseed of a throwaway box.
+            user.must_change_password = False
+            user.admin_role = admin_role
+            user.is_staff = True
+            user.save()
+            created.append((handle, admin_role))
+        self.stdout.write(f"  admins: {len(created)}")
+        return created
 
     def _seed_courses(self, categories, teacher):
         courses = []
@@ -510,6 +551,12 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(f"  {'ROLE':<9} {'EMAIL':<34} STATE")
         self.stdout.write(f"  {'-' * 9} {'-' * 34} {'-' * 28}")
+        self.stdout.write(
+            f"  {'admin':<9} {f'admin@{DEMO_DOMAIN}':<34} super admin — every permission"
+        )
+        self.stdout.write(
+            f"  {'admin':<9} {f'moderator@{DEMO_DOMAIN}':<34} moderator — approvals and support only"
+        )
         self.stdout.write(f"  {'teacher':<9} {f'teacher@{DEMO_DOMAIN}':<34} owns every demo course")
         described = {
             "advanced": "4 courses, 1 certificate, 6-day streak",
