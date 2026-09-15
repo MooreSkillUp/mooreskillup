@@ -87,6 +87,8 @@ module "container_apps" {
   storage_account_key     = module.storage.primary_access_key
   brevo_api_key           = var.brevo_api_key
   default_from_email      = var.default_from_email
+  paystack_secret_key     = var.paystack_secret_key
+  paystack_public_key     = var.paystack_public_key
   min_replicas            = var.container_apps_min_replicas
   max_replicas            = var.container_apps_max_replicas
   tags                    = local.common_tags

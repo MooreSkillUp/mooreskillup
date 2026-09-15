@@ -109,6 +109,18 @@ resource "azurerm_container_app" "api" {
         name  = "DEFAULT_FROM_EMAIL"
         value = var.default_from_email
       }
+      # Never passed to the container before, so the API ran in Paystack's
+      # simulation mode: checkout reported success and enrolled the student
+      # without taking any money. The client now refuses to simulate unless
+      # DEBUG is on, so a missing key fails at checkout rather than silently.
+      env {
+        name  = "PAYSTACK_SECRET_KEY"
+        value = var.paystack_secret_key
+      }
+      env {
+        name  = "PAYSTACK_PUBLIC_KEY"
+        value = var.paystack_public_key
+      }
     }
   }
 }

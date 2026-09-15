@@ -17,6 +17,7 @@ from apps.courses.serializers import CourseSerializer, TeacherActivitySerializer
 from apps.enrollments.models import Enrollment
 from apps.notifications.models import Notification
 from apps.payments.models import Payment
+from apps.payments.paystack import is_live as paystack_is_live
 from common.permissions import IsStudentUserRole, IsTeacherUserRole
 from common.rbac import AdminAction
 
@@ -774,11 +775,15 @@ class AdminDashboardView(views.APIView):
                     "pendingReviews": Course.objects.filter(status="review").count(),
                     "failedPayments": Payment.objects.filter(status="failed").count(),
                     "inactiveTeachers": User.objects.filter(role="teacher", teacher_profile__status="inactive").count(),
-                    # False means mail is going to a log file, not to people.
-                    # Worth saying out loud on the screen where an admin creates
-                    # a teacher, because the invite carries their password and
-                    # nothing about the success response would reveal the loss.
+                    # Two integrations that fail silently and totally when
+                    # unconfigured, so they are reported rather than assumed.
+                    # False on emailDelivers means mail is going to a log file,
+                    # not to people — and a teacher invite carries their only
+                    # copy of a generated password. False on paymentsLive means
+                    # no key reached the server; checkout now refuses rather
+                    # than enrolling students into paid courses for nothing.
                     "emailDelivers": getattr(settings, "EMAIL_IS_DELIVERED", False),
+                    "paymentsLive": paystack_is_live(),
                 },
             }
         )

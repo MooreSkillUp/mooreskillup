@@ -119,3 +119,16 @@ variable "default_from_email" {
   default     = "mooreskillup@gmail.com"
   description = "From address on every transactional email."
 }
+
+variable "paystack_secret_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Paystack secret key (sk_test_… or sk_live_…). Empty means checkout refuses to take payments."
+}
+
+variable "paystack_public_key" {
+  type        = string
+  default     = ""
+  description = "Paystack public key (pk_test_… or pk_live_…)."
+}

@@ -147,6 +147,8 @@ jobs:
             -var="auth_return_refresh_in_body=${{ vars.AUTH_RETURN_REFRESH_IN_BODY }}" \
             -var="brevo_api_key=${{ secrets.BREVO_API_KEY }}" \
             -var="default_from_email=${{ vars.DEFAULT_FROM_EMAIL }}" \
+            -var="paystack_secret_key=${{ secrets.PAYSTACK_SECRET_KEY }}" \
+            -var="paystack_public_key=${{ vars.PAYSTACK_PUBLIC_KEY }}" \
             -var="api_image=${{ env.ACR_NAME }}.azurecr.io/api:${{ github.sha }}"
 
       - name: Read the API URL
