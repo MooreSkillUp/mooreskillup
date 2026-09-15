@@ -789,6 +789,8 @@ export function useTeacherPlatform(
             taskDetail: (id: string) => `/api/admin/tasks/${id}/`,
             createProject: (id: string) => `/api/admin/sections/${id}/projects/`,
             projectDetail: (id: string) => `/api/admin/projects/${id}/`,
+            reorderSections: (id: string) => `/api/admin/courses/${id}/sections/reorder/`,
+            reorderSectionChildren: (id: string) => `/api/admin/sections/${id}/reorder/`,
           }
         : {
             courseCollection: "/api/teacher/courses/",
@@ -802,6 +804,8 @@ export function useTeacherPlatform(
             taskDetail: (id: string) => `/api/teacher/tasks/${id}/`,
             createProject: (id: string) => `/api/teacher/sections/${id}/projects/`,
             projectDetail: (id: string) => `/api/teacher/projects/${id}/`,
+            reorderSections: (id: string) => `/api/teacher/courses/${id}/sections/reorder/`,
+            reorderSectionChildren: (id: string) => `/api/teacher/sections/${id}/reorder/`,
           },
     [isAdminOwnedMode],
   );
@@ -811,11 +815,14 @@ export function useTeacherPlatform(
     const existingSectionIds = new Set(previousSections.map((section) => section.id));
     const nextSectionIds = new Set<string>();
 
-    for (const [sectionIndex, section] of nextCourse.sections.entries()) {
+    // Rows are saved without positions; each parent is re-sequenced once, atomically,
+    // after every row exists. Writing `order` row by row collided with the unique
+    // constraint whenever a row moved into a slot another still held — a 500 on
+    // any reorder, and on every save of a course numbered from zero.
+    for (const section of nextCourse.sections) {
       const sectionPayload = {
         title: section.title,
         description: section.description,
-        order: sectionIndex + 1,
         access_type: section.accessType,
         is_published: true,
       };
@@ -855,7 +862,6 @@ export function useTeacherPlatform(
           text_content: lesson.contentType === "text" ? lesson.textContent : "",
           resourceLinks: lesson.contentType === "resource" ? lesson.resourceLinks : [],
           tags: lesson.tags,
-          order: lessonIndex + 1,
           is_previewable: lessonIndex === 0,
           is_published: true,
         };
@@ -882,7 +888,7 @@ export function useTeacherPlatform(
         }
       }
 
-      for (const [taskIndex, task] of section.tasks.entries()) {
+      for (const task of section.tasks) {
         const taskPayload = {
           title: task.title,
           instructions: task.instructions,
@@ -890,7 +896,6 @@ export function useTeacherPlatform(
           submissionUrl: task.submissionUrl,
           howToSubmit: task.howToSubmit,
           dueDate: task.dueDate || null,
-          order: taskIndex + 1,
           is_required: false,
         };
 
@@ -918,7 +923,7 @@ export function useTeacherPlatform(
 
       // Projects (only when the endpoint set supports them).
       if (endpoints.createProject && endpoints.projectDetail) {
-        for (const [projectIndex, project] of section.projects.entries()) {
+        for (const project of section.projects) {
           const projectPayload = {
             title: project.title,
             description: project.description,
@@ -926,15 +931,15 @@ export function useTeacherPlatform(
             deliverables: project.deliverables,
             submissionUrl: project.submissionUrl,
             howToSubmit: project.howToSubmit,
-            order: projectIndex + 1,
             is_required: false,
           };
 
           if (!previousProjectIds.has(project.id)) {
-            await authenticatedRequest(endpoints.createProject(savedSectionId), {
-              method: "POST",
-              body: JSON.stringify(projectPayload),
-            });
+            const createdProject = await authenticatedRequest<Record<string, unknown>>(
+              endpoints.createProject(savedSectionId),
+              { method: "POST", body: JSON.stringify(projectPayload) },
+            );
+            nextProjectIds.add(String(createdProject.id));
           } else {
             await authenticatedRequest(endpoints.projectDetail(project.id), {
               method: "PATCH",
@@ -950,6 +955,15 @@ export function useTeacherPlatform(
           }
         }
       }
+
+      await authenticatedRequest(endpoints.reorderSectionChildren(savedSectionId), {
+        method: "POST",
+        body: JSON.stringify({
+          lessons: [...nextLessonIds],
+          tasks: [...nextTaskIds],
+          projects: [...nextProjectIds],
+        }),
+      });
     }
 
     for (const previousSection of previousSections) {
@@ -957,6 +971,11 @@ export function useTeacherPlatform(
         await authenticatedRequest(endpoints.sectionDetail(previousSection.id), { method: "DELETE" });
       }
     }
+
+    await authenticatedRequest(endpoints.reorderSections(courseId), {
+      method: "POST",
+      body: JSON.stringify({ sections: [...nextSectionIds] }),
+    });
   }, [endpoints]);
 
   const saveCourse = useCallback(

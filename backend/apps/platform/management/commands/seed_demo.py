@@ -414,7 +414,7 @@ class Command(BaseCommand):
                 course=course,
                 title=f"Section {index + 1}: {LESSON_TITLES[index % len(LESSON_TITLES)]}",
                 description="What this section covers and what you will have built by the end.",
-                order=index,
+                order=index + 1,
                 access_type="free" if index == 0 else "paid",
                 is_published=True,
             )
@@ -426,7 +426,7 @@ class Command(BaseCommand):
                     video_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ" if lesson_index % 2 == 0 else "",
                     text_content="" if lesson_index % 2 == 0 else "Written notes for this lesson.",
                     duration_minutes=random.choice([6, 9, 12, 15, 18]),
-                    order=lesson_index,
+                    order=lesson_index + 1,
                     # One free preview on the opening section, so a signed-out
                     # or unenrolled student can see what they would be buying.
                     is_previewable=index == 0 and lesson_index == 0,

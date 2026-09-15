@@ -43,6 +43,8 @@ class LessonSerializer(serializers.ModelSerializer):
     durationMinutes = serializers.IntegerField(source="duration_minutes", read_only=True)
     isPreviewable = serializers.BooleanField(source="is_previewable", read_only=True)
     completed = serializers.SerializerMethodField()
+    # Position is written only on create and by the reorder endpoints (see ordering.py).
+    order = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Lesson
@@ -134,6 +136,8 @@ class TaskSerializer(serializers.ModelSerializer):
     submissionUrl = serializers.URLField(source="submission_url", read_only=True)
     howToSubmit = serializers.CharField(source="how_to_submit", read_only=True)
     dueDate = serializers.DateField(source="due_date", read_only=True)
+    # Position is written only on create and by the reorder endpoints (see ordering.py).
+    order = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Task
@@ -177,6 +181,8 @@ class TaskSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     submissionUrl = serializers.URLField(source="submission_url", read_only=True)
     howToSubmit = serializers.CharField(source="how_to_submit", read_only=True)
+    # Position is written only on create and by the reorder endpoints (see ordering.py).
+    order = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Project
@@ -213,6 +219,8 @@ class SectionSerializer(serializers.ModelSerializer):
     lessonCount = serializers.SerializerMethodField()
     durationMinutes = serializers.SerializerMethodField()
     completedCount = serializers.SerializerMethodField()
+    # Position is written only on create and by the reorder endpoints (see ordering.py).
+    order = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Section

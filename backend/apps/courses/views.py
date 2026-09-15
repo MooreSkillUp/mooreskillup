@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, response, status, viewsets
@@ -10,6 +11,7 @@ from common.rbac import AdminAction
 
 from .activity import prune_teacher_activity_logs
 from .models import Course, CourseReview, Lesson, Project, Section, Task, TeacherActivityLog
+from .ordering import OrderMismatch, apply_order, next_order
 from .serializers import (
     CourseReviewSerializer,
     CourseSerializer,
@@ -402,7 +404,7 @@ class TeacherCourseSectionCreateView(APIView):
         course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher_profile)
         serializer = SectionSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(course=course)
+        serializer.save(course=course, order=next_order(Section.objects.filter(course=course)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -413,7 +415,7 @@ class TeacherSectionLessonCreateView(APIView):
         section = get_object_or_404(Section, id=section_id, course__teacher=request.user.teacher_profile)
         serializer = LessonSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(section=section)
+        serializer.save(section=section, order=next_order(Lesson.objects.filter(section=section)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -424,7 +426,7 @@ class TeacherSectionTaskCreateView(APIView):
         section = get_object_or_404(Section, id=section_id, course__teacher=request.user.teacher_profile)
         serializer = TaskSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(section=section)
+        serializer.save(section=section, order=next_order(Task.objects.filter(section=section)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -435,8 +437,64 @@ class TeacherSectionProjectCreateView(APIView):
         section = get_object_or_404(Section, id=section_id, course__teacher=request.user.teacher_profile)
         serializer = ProjectSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(section=section)
+        serializer.save(section=section, order=next_order(Project.objects.filter(section=section)))
         return response.Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+def reorder_children(children, data):
+    """Re-sequence one parent's children from the id lists in `data`, all or nothing.
+
+    `children` maps a key in the request body to the queryset it orders, such as
+    {"lessons": ...}. A key the body leaves out is untouched; a key it includes
+    must list every child exactly once. Several lists arrive together because
+    they are one decision — a rejected task list must not leave a lesson
+    reorder half-applied.
+    """
+    lists = {}
+    for key in children:
+        if key not in data:
+            continue
+        if not isinstance(data[key], list):
+            return response.Response(
+                {key: ["Expected a list of ids."]}, status=status.HTTP_400_BAD_REQUEST
+            )
+        lists[key] = data[key]
+    if not lists:
+        return response.Response({"detail": "Nothing to reorder."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        with transaction.atomic():
+            for key, ids in lists.items():
+                try:
+                    apply_order(children[key], ids)
+                except OrderMismatch as mismatch:
+                    raise OrderMismatch(f"{key}: {mismatch}") from mismatch
+    except OrderMismatch as mismatch:
+        return response.Response({"detail": str(mismatch)}, status=status.HTTP_400_BAD_REQUEST)
+    return response.Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TeacherCourseSectionReorderView(APIView):
+    permission_classes = [IsTeacherUserRole]
+
+    def post(self, request, course_id):
+        course = get_object_or_404(Course, id=course_id, teacher=request.user.teacher_profile)
+        return reorder_children({"sections": Section.objects.filter(course=course)}, request.data)
+
+
+class TeacherSectionReorderView(APIView):
+    permission_classes = [IsTeacherUserRole]
+
+    def post(self, request, section_id):
+        section = get_object_or_404(Section, id=section_id, course__teacher=request.user.teacher_profile)
+        return reorder_children(
+            {
+                "lessons": Lesson.objects.filter(section=section),
+                "tasks": Task.objects.filter(section=section),
+                "projects": Project.objects.filter(section=section),
+            },
+            request.data,
+        )
 
 
 class TeacherCoursePricingView(APIView):
