@@ -10,7 +10,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import response, status, views
 
-from apps.accounts.models import User
+from apps.accounts.models import StudentProfile, User
 from apps.courses.activity import prune_teacher_activity_logs
 from apps.courses.models import Course, Lesson, TeacherActivityLog
 from apps.courses.serializers import CourseSerializer, TeacherActivitySerializer
@@ -746,7 +746,10 @@ class AdminDashboardView(views.APIView):
                 "totals": {
                     "users": User.objects.count(),
                     "teachers": User.objects.filter(role="teacher").count(),
-                    "students": User.objects.filter(role="student").count(),
+                    # Profiles, not user rows: a sign-up that never got a profile is
+                    # not a student, and the Students page counts profiles. The two
+                    # disagreed — 17 here, 15 there.
+                    "students": StudentProfile.objects.count(),
                     "courses": Course.objects.count(),
                     "payments": successful_payments.count(),
                     "transactions": successful_payments.count(),

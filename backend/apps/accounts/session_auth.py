@@ -4,6 +4,7 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.auth.models import update_last_login
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
@@ -110,6 +111,10 @@ def create_user_session(user, request=None):
         ip_address=request.META.get("REMOTE_ADDR") if request else None,
         expires_at=timezone.now() + get_refresh_lifetime(user),
     )
+    # A new session is a sign-in. Tokens never touched last_login, so every
+    # account read "Never signed in" on the admin team page — including the
+    # admin reading it. Refresh rotation is not a sign-in and doesn't stamp.
+    update_last_login(None, user)
     refresh.set_exp(lifetime=get_refresh_lifetime(user))
     access = refresh.access_token
     access["sid"] = session_key
