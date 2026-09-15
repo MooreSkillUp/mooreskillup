@@ -3,6 +3,7 @@ import csv
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
@@ -773,6 +774,11 @@ class AdminDashboardView(views.APIView):
                     "pendingReviews": Course.objects.filter(status="review").count(),
                     "failedPayments": Payment.objects.filter(status="failed").count(),
                     "inactiveTeachers": User.objects.filter(role="teacher", teacher_profile__status="inactive").count(),
-                }
+                    # False means mail is going to a log file, not to people.
+                    # Worth saying out loud on the screen where an admin creates
+                    # a teacher, because the invite carries their password and
+                    # nothing about the success response would reveal the loss.
+                    "emailDelivers": getattr(settings, "EMAIL_IS_DELIVERED", False),
+                },
             }
         )

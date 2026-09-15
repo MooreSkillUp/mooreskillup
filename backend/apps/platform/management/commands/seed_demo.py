@@ -483,7 +483,11 @@ class Command(BaseCommand):
             ("Workshop: debugging like a professional", "workshop", 6, None),
         ]
         for title, kind, days, course in specs:
-            Event.objects.get_or_create(
+            # update_or_create, so re-seeding moves the dates forward. With
+            # get_or_create the defaults were skipped for a row that already
+            # existed, and the demo schedule slid into the past a day at a time
+            # until every "upcoming" session had already happened.
+            Event.objects.update_or_create(
                 title=title,
                 defaults={
                     "description": "Join on time — a recording is not guaranteed.",

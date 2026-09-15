@@ -114,3 +114,16 @@ variable "auth_return_refresh_in_body" {
     cookie cannot be read by scripts, and this can.
   EOT
 }
+
+variable "brevo_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Brevo API key. Empty means the API sends no mail at all — teacher invites and password resets included."
+}
+
+variable "default_from_email" {
+  type        = string
+  default     = "mooreskillup@gmail.com"
+  description = "From address on every transactional email."
+}

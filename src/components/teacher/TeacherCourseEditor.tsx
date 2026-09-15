@@ -631,7 +631,18 @@ export function TeacherCourseEditor({
   const lessonCount = course.sections.reduce((sum, section) => sum + section.lessons.length, 0);
   const assignmentCount = course.sections.reduce((sum, section) => sum + section.tasks.length, 0);
   const projectCount = course.sections.reduce((sum, section) => sum + section.projects.length, 0);
-  const progressLabel = `${course.sections.length} section${course.sections.length === 1 ? "" : "s"} | ${lessonCount} lessons | ${assignmentCount} assignments | ${projectCount} projects`;
+  const plural = (count: number, word: string) =>
+    `${count} ${word}${count === 1 ? "" : "s"}`;
+  // Assignments and projects are optional, so they are only named once a course
+  // actually has some — a row of zeros reads as work left undone.
+  const progressLabel = [
+    plural(course.sections.length, "section"),
+    plural(lessonCount, "lesson"),
+    assignmentCount ? plural(assignmentCount, "assignment") : "",
+    projectCount ? plural(projectCount, "project") : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const publishActionLabel =
     platformMode === "admin-owned"
@@ -651,26 +662,38 @@ export function TeacherCourseEditor({
     platformMode === "admin-owned" ||
     (course.status !== "published" && course.status !== "archived" && !publishBlockedLabel);
 
+  // Submitting an empty course fails server-side validation, which teaches a
+  // new teacher that the button is broken rather than that the course is not
+  // finished. Say which step is still open instead, and point at it.
+  const firstUnfinishedStep = stepProgress.find(
+    (entry) => entry.total > 0 && entry.done < entry.total,
+  );
+  const readyForReview = !firstUnfinishedStep && lessonCount > 0;
+
   return (
     <div className="space-y-8">
-      <section className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
-        <div className="bg-gradient-to-r from-primary/10 via-background to-accent-soft px-6 py-6">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-                {mode === "create" ? "Create course" : "Edit course"}
+      <section className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="px-5 py-5 sm:px-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-wide text-accent">
+                {mode === "create" ? "New course" : "Editing"}
               </div>
-              <h1 className="mt-2 font-display text-4xl font-bold">
+              <h1 className="mt-1 font-display text-2xl font-bold sm:text-3xl">
                 {mode === "create"
-                  ? "Teacher course studio"
+                  ? "Course studio"
                   : course.title || "Untitled course"}
               </h1>
-              <p className="mt-2 max-w-3xl text-muted-foreground">
-                Build a complete instructor-ready LMS course with sections, lessons, tasks,
-                preview mode, scoped categories, and protected publishing rules.
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                {/* The first sentence a new teacher reads. It used to list the
+                    feature set — sections, tasks, scoped categories, protected
+                    publishing rules — which describes the software rather than
+                    telling them what to do. */}
+                Work through the six steps on the left. Everything saves as you go, and
+                nothing reaches students until an admin has reviewed it.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={saveDraft} loading={activeAction === "draft"} loadingText="Saving draft...">
                 <Save className="h-4 w-4" /> Save as Draft
               </Button>
@@ -690,11 +713,25 @@ export function TeacherCourseEditor({
                   {publishBlockedLabel}
                 </Button>
               ) : canSubmitForReview ? (
-                <Button variant="accent" onClick={publish} loading={activeAction === "publish"} loadingText={platformMode === "admin-owned" ? "Publishing..." : "Submitting..."}>
+                <Button
+                  variant={readyForReview ? "accent" : "outline"}
+                  onClick={publish}
+                  disabled={!readyForReview}
+                  title={
+                    readyForReview
+                      ? undefined
+                      : firstUnfinishedStep
+                        ? `Finish ${firstUnfinishedStep.label} first`
+                        : "Add at least one lesson first"
+                  }
+                  loading={activeAction === "publish"}
+                  loadingText={platformMode === "admin-owned" ? "Publishing…" : "Submitting…"}
+                >
                   <Upload className="h-4 w-4" /> {publishActionLabel}
                 </Button>
               ) : null}
-              {course.status !== "archived" && (
+              {/* Nothing to archive before the course has been saved once. */}
+              {mode !== "create" && course.status !== "archived" && (
                 <Button variant="outline" onClick={archive} loading={activeAction === "archive"} loadingText="Archiving...">
                   Archive
                 </Button>
@@ -702,12 +739,31 @@ export function TeacherCourseEditor({
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-            <span>Status: {course.status}</span>
-            <span>Visibility: {course.visibility}</span>
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+            <span className="rounded-full bg-muted px-2.5 py-1 font-medium capitalize text-foreground">
+              {course.status}
+            </span>
             <span>{progressLabel}</span>
-            <span>Auto-save: {autosaveMessage}</span>
+            <span aria-hidden>·</span>
+            <span>{autosaveMessage}</span>
           </div>
+
+          {/* One line saying what stands between this course and review. It
+              replaces finding out by pressing Submit and reading a 400. */}
+          {canSubmitForReview && !readyForReview && (
+            <button
+              type="button"
+              onClick={() => firstUnfinishedStep && setStep(firstUnfinishedStep.id)}
+              className="mt-3 flex w-full items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-accent/50"
+            >
+              <span className="text-muted-foreground">
+                {firstUnfinishedStep
+                  ? `Next: ${firstUnfinishedStep.label}`
+                  : "Next: add at least one lesson"}
+              </span>
+              <span className="ml-auto shrink-0 text-xs font-medium text-accent">Go →</span>
+            </button>
+          )}
           {manualMessage && (
             <div
               className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${

@@ -52,12 +52,10 @@ export default function TeacherSupportPage() {
     <AppShell allowedRoles={["teacher", "admin"]}>
       <div className="space-y-6">
         <div>
-          <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
-            Support
-          </div>
-          <h1 className="mt-2 font-display text-4xl font-bold">Teacher support tickets</h1>
-          <p className="mt-2 max-w-3xl text-muted-foreground">
-            Report platform issues, technical bugs, payment concerns, or student problems directly to the admin workspace.
+          <h1 className="font-display text-2xl font-bold sm:text-3xl">Support</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Something broken, a payment question, or a problem with a student? Raise it here
+            and an admin picks it up.
           </p>
         </div>
 

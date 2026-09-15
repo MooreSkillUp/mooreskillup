@@ -85,6 +85,8 @@ module "container_apps" {
   postgres_admin_password = var.db_admin_password
   storage_account_name    = module.storage.name
   storage_account_key     = module.storage.primary_access_key
+  brevo_api_key           = var.brevo_api_key
+  default_from_email      = var.default_from_email
   min_replicas            = var.container_apps_min_replicas
   max_replicas            = var.container_apps_max_replicas
   tags                    = local.common_tags

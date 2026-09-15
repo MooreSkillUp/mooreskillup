@@ -41,10 +41,9 @@ export default function TeacherAnnouncementsPage() {
     <AppShell allowedRoles={["teacher"]}>
       <div className="space-y-6">
         <div>
-          <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Announcements</div>
-          <h1 className="mt-2 font-display text-4xl font-bold">Message your students</h1>
-          <p className="mt-2 max-w-3xl text-muted-foreground">
-            Send an in-app notification to students enrolled in your courses.
+          <h1 className="font-display text-2xl font-bold sm:text-3xl">Announcements</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Send an in-app notification to everyone enrolled in your courses.
           </p>
         </div>
 
