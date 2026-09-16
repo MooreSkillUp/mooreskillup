@@ -12,12 +12,33 @@ from .audit import record_audit
 from .models import AuditLog, AuthenticationSettings, PlatformSettings
 from .serializers import AuditLogSerializer, AuthenticationSettingsSerializer, PlatformSettingsSerializer
 
+PRUNE_THROTTLE_KEY = "audit-logs-pruned-recently"
+PRUNE_EVERY_SECONDS = 24 * 60 * 60
+
 
 def prune_expired_logs():
-    """Delete logs older than the configured retention window."""
+    """Delete logs older than the retention window. Returns how many went."""
     retention_days = PlatformSettings.get_solo().audit_retention_days
     cutoff = timezone.now() - timedelta(days=retention_days)
-    AuditLog.objects.filter(created_at__lt=cutoff).delete()
+    deleted, _ = AuditLog.objects.filter(created_at__lt=cutoff).delete()
+    return deleted
+
+
+def prune_expired_logs_daily():
+    """Enforce retention at most once a day, not on every request.
+
+    This ran on every list and every export, so each page load issued a DELETE
+    across the table. Worse, lowering the retention number destroyed everything
+    past the new window the moment the next admin opened the page, with nothing
+    said — the Settings page now says how many entries a shorter window throws
+    away, and asks, before saving it.
+    """
+    from django.core.cache import cache
+
+    if cache.get(PRUNE_THROTTLE_KEY):
+        return 0
+    cache.set(PRUNE_THROTTLE_KEY, True, PRUNE_EVERY_SECONDS)
+    return prune_expired_logs()
 
 
 def filtered_logs(request):
@@ -48,6 +69,13 @@ def filtered_logs(request):
         queryset = queryset.filter(created_at__date__gte=date_from)
     if date_to:
         queryset = queryset.filter(created_at__date__lte=date_to)
+
+    # "How much would a shorter retention window throw away?" — asked by the
+    # Settings page before saving a smaller number, so the count it warns with
+    # is the real one rather than an estimate.
+    to_days_ago = request.query_params.get("to_days_ago", "").strip()
+    if to_days_ago.isdigit():
+        queryset = queryset.filter(created_at__lt=timezone.now() - timedelta(days=int(to_days_ago)))
     return queryset
 
 
@@ -61,7 +89,11 @@ class AdminAuditLogListView(AdminActionsPerMethod, views.APIView):
     admin_actions = {"GET": ("activity-logs:view",)}
 
     def get(self, request):
-        prune_expired_logs()
+        # A `to_days_ago` request is the Settings page asking what a shorter
+        # window would throw away. Asking the question must not answer it by
+        # deleting the evidence first.
+        if not request.query_params.get("to_days_ago"):
+            prune_expired_logs_daily()
         queryset = filtered_logs(request)
         paginator = AuditLogPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
@@ -72,7 +104,6 @@ class AdminAuditLogExportView(AdminActionsPerMethod, views.APIView):
     admin_actions = {"GET": ("activity-logs:export",)}
 
     def get(self, request):
-        prune_expired_logs()
         queryset = filtered_logs(request)[:10000]
         http_response = HttpResponse(content_type="text/csv")
         http_response["Content-Disposition"] = 'attachment; filename="audit-logs.csv"'

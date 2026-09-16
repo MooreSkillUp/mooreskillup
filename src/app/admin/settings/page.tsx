@@ -7,8 +7,17 @@ import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
 import { hasUserPermission } from "@/lib/admin-rbac";
+import { authenticatedRequest } from "@/lib/authenticated-api";
 import { useFeedback } from "@/lib/feedback";
 import { useAdminSettings } from "@/lib/platform-admin";
 
@@ -78,6 +87,10 @@ export default function AdminSettingsPage() {
     refundMaxProgressPercent: 30,
   });
   const [saving, setSaving] = useState(false);
+  const [retentionWarning, setRetentionWarning] = useState<{
+    count: number | null;
+    days: number;
+  } | null>(null);
   const [togglingTwoFactor, setTogglingTwoFactor] = useState(false);
   const [logoutAllBusy, setLogoutAllBusy] = useState(false);
 
@@ -108,10 +121,11 @@ export default function AdminSettingsPage() {
     }
   }, [settings]);
 
-  const onSave = async () => {
+  const save = async () => {
     try {
       setSaving(true);
       await saveSettings(form);
+      setRetentionWarning(null);
       notifySuccess("Settings saved");
     } catch (saveError) {
       notifyError(
@@ -121,6 +135,32 @@ export default function AdminSettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  /**
+   * Shortening the retention window means entries get deleted — by the daily
+   * cleanup, not on the spot, but deleted all the same. It used to happen with
+   * nothing said, so this asks first, with the real count.
+   */
+  const onSave = async () => {
+    const shortened =
+      settings != null && form.auditRetentionDays < settings.auditRetentionDays;
+    if (shortened) {
+      try {
+        const affected = await authenticatedRequest<{ count: number }>(
+          `/api/admin/audit-logs/?to_days_ago=${form.auditRetentionDays}&pageSize=1`,
+        );
+        if (affected.count > 0) {
+          setRetentionWarning({ count: affected.count, days: form.auditRetentionDays });
+          return;
+        }
+      } catch {
+        // If the count can't be fetched, still ask rather than deleting quietly.
+        setRetentionWarning({ count: null, days: form.auditRetentionDays });
+        return;
+      }
+    }
+    await save();
   };
 
   const onToggleTwoFactor = async () => {
@@ -287,7 +327,8 @@ export default function AdminSettingsPage() {
                   }
                 />
                 <p className="text-sm text-muted-foreground">
-                  Logs older than this are deleted automatically so storage never piles up.
+                  A daily cleanup removes entries older than this. Shortening the window deletes
+                  history — you&apos;ll be told how much before it happens.
                 </p>
               </div>
             </div>
@@ -478,6 +519,47 @@ export default function AdminSettingsPage() {
           </div>
         )}
       </div>
+
+      <Dialog
+        open={!!retentionWarning}
+        onOpenChange={(open) => !open && !saving && setRetentionWarning(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>This deletes activity history</DialogTitle>
+            <DialogDescription>
+              {retentionWarning?.count === null ? (
+                <>
+                  Keeping logs for {retentionWarning?.days} days means anything older is removed by
+                  the next daily cleanup. We couldn&apos;t count how many entries that is.
+                </>
+              ) : (
+                <>
+                  <strong>
+                    {retentionWarning?.count.toLocaleString("en-NG")}{" "}
+                    {retentionWarning?.count === 1 ? "entry" : "entries"}
+                  </strong>{" "}
+                  are older than {retentionWarning?.days} days. The next daily cleanup removes them,
+                  and that can&apos;t be undone.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={saving} onClick={() => setRetentionWarning(null)}>
+              Keep the history
+            </Button>
+            <Button
+              variant="accent"
+              loading={saving}
+              loadingText="Saving…"
+              onClick={() => void save()}
+            >
+              Save anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

@@ -953,6 +953,12 @@ class RecommendedCoursesView(APIView):
     def get(self, request):
         from django.db.models import Count, Q
 
+        from apps.platform.models import PlatformSettings
+
+        # The Settings switch for this read nothing, on either side.
+        if not PlatformSettings.get_solo().feature_recommendations_enabled:
+            return response.Response([])
+
         student = request.user.student_profile
         tracks = student.selected_tracks or ([student.selected_track] if student.selected_track else [])
         published = (

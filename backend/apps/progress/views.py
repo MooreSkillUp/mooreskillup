@@ -156,14 +156,22 @@ def send_course_completed_email(enrollment, certificate=None):
 
 
 def issue_certificate(enrollment):
-    """Issue an MSU certificate for a completed, certificate-enabled course."""
+    """Issue an MSU certificate for a completed, certificate-enabled course.
+
+    Two switches, and both must be on: the course's own, and the platform-wide
+    one on Settings. That second one only hid the Certificates link — courses
+    kept issuing certificates while it was off, which is what it says it stops.
+    """
     import secrets
 
     from django.conf import settings as django_settings
 
     from apps.certificates.models import Certificate
+    from apps.platform.models import PlatformSettings
 
     if not enrollment.course.certificate_enabled:
+        return None
+    if not PlatformSettings.get_solo().feature_certificates_enabled:
         return None
 
     certificate = Certificate.objects.filter(enrollment=enrollment).first()
