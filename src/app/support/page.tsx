@@ -7,6 +7,7 @@ import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth";
+import { usePlatformStatus } from "@/lib/feature-flags";
 import { useFeedback } from "@/lib/feedback";
 import { createSupportTicket, SUPPORT_CATEGORIES, useStudentTickets } from "@/lib/student";
 
@@ -19,6 +20,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function StudentSupportPage() {
   const { user } = useAuth();
+  const { status } = usePlatformStatus();
   const { notifyError, notifySuccess } = useFeedback();
   const { tickets, isLoading, refresh } = useStudentTickets(user?.role === "student");
 
@@ -50,7 +52,13 @@ export default function StudentSupportPage() {
         <div>
           <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">Support</div>
           <h1 className="mt-2 font-display text-4xl font-bold">Need a hand?</h1>
-          <p className="mt-2 text-muted-foreground">Raise a ticket and our team will help you out.</p>
+          <p className="mt-2 text-muted-foreground">
+            {/* The reply target the Super Admin set. Saying nothing left people
+                guessing whether anyone had seen their ticket at all. */}
+            {status.supportResponseHours > 0
+              ? `Raise a ticket and we'll reply within ${status.supportResponseHours} hours.`
+              : "Raise a ticket and our team will help you out."}
+          </p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">

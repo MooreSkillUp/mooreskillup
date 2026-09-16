@@ -232,6 +232,10 @@ export interface AdminSupportTicket {
   assignedToName: string | null;
   assignedToId: string | null;
   assignedAt: string | null;
+  /** Hours until the first reply, or until now if nobody has replied. */
+  hoursWaiting: number;
+  /** Unanswered past the reply target the Super Admin set. */
+  isOverdue: boolean;
   created_at: string;
   updated_at: string;
   createdBy: string;

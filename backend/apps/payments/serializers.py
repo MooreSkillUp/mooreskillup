@@ -62,6 +62,14 @@ class PaymentInitializeSerializer(serializers.Serializer):
     callback_url = serializers.URLField(required=False, allow_blank=True)
 
     def validate(self, attrs):
+        from apps.platform.models import PlatformSettings
+
+        # A switch for taking money at all, separate from whether Paystack is
+        # configured — for an outage, or a price that went out wrong.
+        if not PlatformSettings.get_solo().payments_enabled:
+            raise serializers.ValidationError(
+                {"detail": "Course purchases are paused right now. Please try again later."}
+            )
         course = Course.objects.filter(id=attrs["course_id"], status="published", visibility="visible").first()
         if not course:
             raise serializers.ValidationError({"course_id": "Course not available for purchase."})

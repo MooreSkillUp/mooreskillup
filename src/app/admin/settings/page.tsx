@@ -88,6 +88,9 @@ export default function AdminSettingsPage() {
     featureQuizEnabled: false,
     refundWindowDays: 14,
     refundMaxProgressPercent: 30,
+    requireAdminTwoFactor: false,
+    paymentsEnabled: true,
+    supportResponseHours: 24,
   });
   const [saving, setSaving] = useState(false);
   const [retentionWarning, setRetentionWarning] = useState<{
@@ -153,6 +156,9 @@ export default function AdminSettingsPage() {
         featureAchievementsEnabled: settings.featureAchievementsEnabled,
         featureLeaderboardEnabled: settings.featureLeaderboardEnabled,
         featureQuizEnabled: settings.featureQuizEnabled,
+        requireAdminTwoFactor: settings.requireAdminTwoFactor,
+        paymentsEnabled: settings.paymentsEnabled,
+        supportResponseHours: settings.supportResponseHours,
         refundWindowDays: settings.refundWindowDays,
         refundMaxProgressPercent: settings.refundMaxProgressPercent,
       });
@@ -285,18 +291,24 @@ export default function AdminSettingsPage() {
                     <div>
                       <div className="font-medium">Two-factor authentication (email OTP)</div>
                       <div className="mt-1 text-sm text-muted-foreground">
-                        {user?.twoFactorEnabled
-                          ? "Active — you'll receive a one-time code by email each time you log in."
-                          : "Off — enable this to require an email code every time you sign in."}
+                        {form.requireAdminTwoFactor
+                          ? "Required for every admin account — a code is emailed at each sign-in, whether or not you switch this on."
+                          : user?.twoFactorEnabled
+                            ? "Active — you'll receive a one-time code by email each time you log in."
+                            : "Off — enable this to require an email code every time you sign in."}
                       </div>
-                      {user?.twoFactorEnabled && (
+                      {(user?.twoFactorEnabled || form.requireAdminTwoFactor) && (
                         <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-                          <ShieldCheck className="h-3 w-3" /> Enabled
+                          <ShieldCheck className="h-3 w-3" />
+                          {form.requireAdminTwoFactor ? "Required" : "Enabled"}
                         </div>
                       )}
                     </div>
                     <Button
                       variant={user?.twoFactorEnabled ? "outline" : "accent"}
+                      // Switching your own off is refused while it's required
+                      // of every admin; the button says so rather than failing.
+                      disabled={form.requireAdminTwoFactor && Boolean(user?.twoFactorEnabled)}
                       loading={togglingTwoFactor}
                       loadingText={user?.twoFactorEnabled ? "Disabling…" : "Enabling…"}
                       onClick={() => void onToggleTwoFactor()}
@@ -408,6 +420,40 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
+            {/* ── Taking money, and answering people ── */}
+            <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+              <h2 className="flex items-center gap-2 font-display text-2xl font-bold">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Payments &amp; support
+              </h2>
+              <div className="mt-4 space-y-4">
+                <Toggle
+                  checked={form.paymentsEnabled}
+                  disabled={!canEdit || isLoading}
+                  onChange={(next) => setForm((c) => ({ ...c, paymentsEnabled: next }))}
+                  label="Course purchases are open"
+                  description="Off pauses checkout and tells students why, without touching the Paystack key. Refunds still work, and free courses are unaffected."
+                />
+                <div className="rounded-3xl border border-border bg-background p-5">
+                  <Input
+                    label="Reply to support within (hours)"
+                    type="number"
+                    min={0}
+                    max={336}
+                    value={String(form.supportResponseHours)}
+                    disabled={!canEdit || isLoading}
+                    onChange={(e) =>
+                      setForm((c) => ({ ...c, supportResponseHours: Number(e.target.value) || 0 }))
+                    }
+                  />
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Shown to anyone raising a ticket, and the line after which a ticket is flagged
+                    as overdue on the Support page. Set 0 to promise nothing.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* ── Course approval & announcements ── */}
             <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
               <h2 className="flex items-center gap-2 font-display text-2xl font-bold">
@@ -415,6 +461,13 @@ export default function AdminSettingsPage() {
                 Course approval &amp; announcements
               </h2>
               <div className="mt-4 space-y-4">
+                <Toggle
+                  checked={form.requireAdminTwoFactor}
+                  disabled={!canEdit || isLoading}
+                  onChange={(next) => setForm((c) => ({ ...c, requireAdminTwoFactor: next }))}
+                  label="Require two-factor for every admin"
+                  description="A code is emailed at each admin sign-in, whether or not they switched it on themselves — and they can't switch it off while this is set."
+                />
                 <Toggle
                   checked={form.requireAdminSecondApproval}
                   disabled={!canEdit || isLoading}

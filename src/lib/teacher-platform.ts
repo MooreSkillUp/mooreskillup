@@ -429,6 +429,10 @@ export function useTeacherPlatform(
       setIsLoading(false);
       return;
     }
+    // Wait for the signed-in user before asking for their data. This fired once
+    // before authentication had resolved and again after, so every teacher page
+    // fetched its courses, dashboard, categories and activity twice.
+    if (!user?.email) return;
 
     setIsLoading(true);
     setError("");

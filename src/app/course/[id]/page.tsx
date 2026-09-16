@@ -20,6 +20,7 @@ import { CourseBanner, CourseBannerHighlight } from "@/components/course/CourseB
 import { CurriculumAccordion } from "@/components/course/CurriculumAccordion";
 import { formatNaira } from "@/lib/commerce";
 import { useAuth } from "@/lib/auth";
+import { usePlatformStatus } from "@/lib/feature-flags";
 import { useFeedback } from "@/lib/feedback";
 import { enrollFree, submitReview, useCourse, useCourseReviews } from "@/lib/student";
 
@@ -30,6 +31,7 @@ export default function CoursePage() {
   const router = useRouter();
   const courseId = params.id as string;
   const { user, toggleWishlist } = useAuth();
+  const { status } = usePlatformStatus();
   const { notifyError, notifySuccess } = useFeedback();
   const { course, isLoading, error, refresh } = useCourse(courseId);
   const { reviews, refresh: refreshReviews } = useCourseReviews(courseId);
@@ -91,7 +93,16 @@ export default function CoursePage() {
     }
   };
 
-  const ctaLabel = course.isOwned ? "Go to course" : isFree ? "Enroll for free" : "Buy this course";
+  // Checkout can be paused platform-wide. Saying so on the button beats a Buy
+  // that fails the moment it's pressed.
+  const purchasePaused = !course.isOwned && !isFree && !status.paymentsEnabled;
+  const ctaLabel = course.isOwned
+    ? "Go to course"
+    : isFree
+      ? "Enroll for free"
+      : purchasePaused
+        ? "Purchases are paused"
+        : "Buy this course";
 
   return (
     <AppShell allowedRoles={["student"]}>
@@ -178,12 +189,18 @@ export default function CoursePage() {
                 variant="accent"
                 size="lg"
                 className="mt-4 w-full"
+                disabled={purchasePaused}
                 onClick={() => void onEnroll()}
                 loading={enrolling}
                 loadingText="Enrolling..."
               >
                 {ctaLabel}
               </Button>
+              {purchasePaused && (
+                <p className="mt-2 text-center text-sm text-muted-foreground">
+                  We&apos;ve paused course purchases for a moment. Please check back shortly.
+                </p>
+              )}
               {user?.role === "student" && (
                 <Button variant="outline" className="mt-2 w-full" onClick={() => void toggleWishlist(course.id)}>
                   <Heart className={`h-4 w-4 ${course.isInWatchlist ? "fill-current" : ""}`} />

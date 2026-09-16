@@ -60,6 +60,8 @@ class SupportTicketSerializer(serializers.ModelSerializer):
     assignedToName = serializers.CharField(source="assigned_to.display_name", read_only=True, default=None)
     assignedToId = serializers.CharField(source="assigned_to_id", read_only=True, default=None)
     assignedAt = serializers.DateTimeField(source="assigned_at", read_only=True)
+    hoursWaiting = serializers.SerializerMethodField()
+    isOverdue = serializers.SerializerMethodField()
 
     class Meta:
         model = SupportTicket
@@ -74,11 +76,39 @@ class SupportTicketSerializer(serializers.ModelSerializer):
             "assignedToName",
             "assignedToId",
             "assignedAt",
+            "hoursWaiting",
+            "isOverdue",
             "created_at",
             "updated_at",
             "createdBy",
             "createdByRole",
         )
+
+    def _first_reply(self, obj):
+        """The first message actually sent to the person who raised the ticket.
+
+        A note between admins doesn't count: talking among ourselves is not
+        answering someone who is waiting.
+        """
+        return next((message for message in obj.messages.all() if not message.is_internal), None)
+
+    def get_hoursWaiting(self, obj):
+        from django.utils import timezone
+
+        reply = self._first_reply(obj)
+        until = reply.created_at if reply else timezone.now()
+        return round((until - obj.created_at).total_seconds() / 3600, 1)
+
+    def get_isOverdue(self, obj):
+        """Still unanswered, and past the reply target the Super Admin set."""
+        from apps.platform.models import PlatformSettings
+
+        target = PlatformSettings.get_solo().support_response_hours
+        if not target or obj.status in {"resolved", "closed"}:
+            return False
+        if self._first_reply(obj):
+            return False
+        return self.get_hoursWaiting(obj) > target
 
     def get_messages(self, obj):
         """Replies always; notes only for the people handling the ticket.
