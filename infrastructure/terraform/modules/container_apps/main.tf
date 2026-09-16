@@ -121,6 +121,14 @@ resource "azurerm_container_app" "api" {
         name  = "PAYSTACK_PUBLIC_KEY"
         value = var.paystack_public_key
       }
+      # Read by the public admin sign-up page. It was never passed here, so that
+      # page refused every attempt ("Admin registration is not configured on this
+      # server") — which is the right failure, but meant the setting could be
+      # filled in on GitHub and still do nothing. Empty keeps the page closed.
+      env {
+        name  = "ADMIN_REGISTRATION_TOKEN"
+        value = var.admin_registration_token
+      }
     }
   }
 }
