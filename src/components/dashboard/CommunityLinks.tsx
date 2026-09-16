@@ -46,13 +46,6 @@ export function CommunityLinks() {
           rel="noopener noreferrer"
           className="group relative flex items-center gap-4 overflow-hidden rounded-2xl border border-border bg-card p-5 transition-colors hover:border-accent/40"
         >
-          {/* A wash keyed to the accent, so it reads as an invitation without
-              becoming a second orange block competing with the banner. */}
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_50%,var(--color-accent)/8%,transparent_60%)]"
-          />
-
           <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
             <MessagesSquare className="h-6 w-6" />
           </span>

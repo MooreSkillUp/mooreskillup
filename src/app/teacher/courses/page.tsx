@@ -177,15 +177,11 @@ function TeacherCoursesView() {
                 >
                   {/* The student's own artwork, so a teacher never has to guess
                       which course a row refers to — or how it looks in the
-                      catalog. Same component the catalog card uses, with the
-                      title left off: the banner clamps it to two lines, and
-                      this list is where a teacher needs to read it in full. */}
+                      catalog. Same component the catalog card uses. */}
                   <div className="relative">
                     <CourseBanner
                       title=""
                       category={category}
-                      certificateEnabled={course.certificateEnabled}
-                      dense
                       bannerImage={course.bannerImage}
                       bannerTheme={course.bannerTheme}
                       className="min-h-[88px] rounded-none"

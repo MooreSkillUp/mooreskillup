@@ -69,8 +69,6 @@ export function ContinueLearningCard({
               <CourseBanner
                 title={course.title}
                 category={course.program}
-                certificateEnabled={course.certificateEnabled}
-                dense
                 bannerImage={course.bannerImage ?? undefined}
                 bannerTheme={course.bannerTheme ?? "default"}
                 categoryAccentColor={course.categoryAccentColor}

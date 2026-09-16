@@ -27,7 +27,7 @@ export function UserAvatar({
     return (
       <div
         style={dimension}
-        className={`flex items-center justify-center rounded-full bg-gradient-to-br ${avatar.gradient} ${className}`}
+        className={`flex items-center justify-center rounded-full ${avatar.color} ${className}`}
         aria-label={avatar.label}
       >
         <span style={{ fontSize: size * 0.5 }}>{avatar.emoji}</span>
@@ -38,7 +38,7 @@ export function UserAvatar({
   return (
     <div
       style={dimension}
-      className={`flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent font-semibold text-primary-foreground ${className}`}
+      className={`flex items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground ${className}`}
     >
       {initials}
     </div>

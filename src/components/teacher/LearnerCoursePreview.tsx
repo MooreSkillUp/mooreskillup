@@ -89,7 +89,7 @@ export function LearnerCoursePreview({ course }: { course: TeacherCourse }) {
             }`}
           >
             <section className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
-              <div className="bg-gradient-to-r from-primary/10 via-background to-accent-soft p-6">
+              <div className="bg-muted/40 p-6">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em]">
                   <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">
                     {LEVEL_LABELS[course.level]}

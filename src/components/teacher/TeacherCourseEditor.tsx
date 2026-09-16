@@ -1006,14 +1006,7 @@ export function TeacherCourseEditor({
                     <div className="overflow-hidden rounded-[1.25rem] border border-border">
                       <CourseBanner
                         title={course.title || "Untitled course"}
-                        subtitle={course.subtitle || "Your course subtitle will show here."}
                         category={course.program || profile?.program || "MooreSkillUp"}
-                        track={course.track || "Sample Track"}
-                        level={course.level ? (course.level.charAt(0).toUpperCase() + course.level.slice(1)) : "Beginner"}
-                        durationLabel={`${course.sections.reduce((sum, s) => sum + s.lessons.length, 0)} lessons`}
-                        priceLabel={course.price === 0 ? "Free" : (course.discountPrice !== null && course.discountPrice < course.price ? formatNaira(course.discountPrice) : formatNaira(course.price))}
-                        certificateEnabled={course.certificateEnabled}
-                        compact
                         bannerImage={course.bannerImage}
                         bannerTheme={course.bannerTheme || "default"}
                         categoryAccentColor={previewAccentColor}

@@ -15,7 +15,7 @@ export function ProgressBar({ value, label }: { value: number; label?: string })
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.9, ease: "easeOut" }}
-          className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
+          className="h-full rounded-full bg-primary"
         />
       </div>
     </div>
