@@ -14,6 +14,25 @@ from django.template.loader import render_to_string
 logger = logging.getLogger(__name__)
 
 
+def platform_name():
+    """What to call ourselves in an email.
+
+    The Settings page has a "Platform name" field that nothing read: emails took
+    the name from an environment variable instead, so renaming the platform
+    renamed it nowhere. The setting wins now, with the old value as the fallback
+    if the settings row can't be reached.
+    """
+    try:
+        from apps.platform.models import PlatformSettings
+
+        name = PlatformSettings.get_solo().site_name
+        if name:
+            return name
+    except Exception:  # pragma: no cover - defensive: email must not break
+        logger.exception("Could not read the platform name")
+    return getattr(settings, "EMAIL_SITE_NAME", "MooreSkillUp")
+
+
 def send_transactional_email(
     *,
     to_email,
@@ -35,7 +54,7 @@ def send_transactional_email(
         return False
 
     context = {
-        "site_name": getattr(settings, "EMAIL_SITE_NAME", "MooreSkillUp"),
+        "site_name": platform_name(),
         "heading": heading,
         "greeting": greeting,
         "intro": intro,
