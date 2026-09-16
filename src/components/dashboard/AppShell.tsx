@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { AppLoader } from "@/components/shared/AppLoader";
@@ -20,6 +20,7 @@ export function AppShell({
 }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -58,7 +59,11 @@ export function AppShell({
         <TopNavbar onMenu={() => setSidebarOpen(true)} />
         <motion.main
           id="tour-content"
-          key={typeof window !== "undefined" ? window.location.pathname : "page"}
+          // The route, from the router rather than `window`. Reading
+          // `window.location` during render is a server/client branch: the
+          // server rendered "page" and the browser rendered the path, so every
+          // signed-in page hydrated with a mismatch React refuses to patch up.
+          key={pathname}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}

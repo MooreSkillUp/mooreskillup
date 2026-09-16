@@ -72,11 +72,25 @@ def accessible_section_ids(enrollment) -> set:
 
     completed_ids = _completed_lesson_ids(enrollment)
     unlocked = set()
+    reached_the_edge = False
     for section in sections:
-        unlocked.add(section.id)
-        if not section_is_complete(enrollment, section, completed_ids=completed_ids):
-            # This is the section they are on; nothing past it opens yet.
-            break
+        if not reached_the_edge:
+            unlocked.add(section.id)
+            if not section_is_complete(enrollment, section, completed_ids=completed_ids):
+                # This is the section they are on; nothing past it opens on
+                # account of position alone.
+                reached_the_edge = True
+            continue
+
+        # Past that edge, a section still opens if its own lessons are done.
+        # This is what the paragraph above promises and the loop used not to do:
+        # a teacher adding a section quiz to a live course re-locked every later
+        # section for students who had finished those lessons long ago.
+        lesson_ids = set(
+            Lesson.objects.filter(section=section, is_published=True).values_list("id", flat=True)
+        )
+        if lesson_ids and lesson_ids.issubset(completed_ids):
+            unlocked.add(section.id)
     return unlocked
 
 
