@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, TruncMonth
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import response, status, views
@@ -189,7 +189,13 @@ class LessonProgressUpdateView(views.APIView):
 
     def post(self, request, lesson_id):
         lesson = Lesson.objects.select_related("section__course").get(id=lesson_id)
-        enrollment = Enrollment.objects.get(student=request.user.student_profile, course=lesson.section.course)
+        enrollment = Enrollment.objects.with_access().filter(
+            student=request.user.student_profile, course=lesson.section.course
+        ).first()
+        if not enrollment:
+            return response.Response(
+                {"detail": "You don't have access to this course."}, status=status.HTTP_403_FORBIDDEN
+            )
         progress, _ = LessonProgress.objects.get_or_create(
             enrollment=enrollment,
             lesson=lesson,
@@ -233,7 +239,13 @@ class CourseProgressDetailView(views.APIView):
     permission_classes = [IsStudentUserRole]
 
     def get(self, request, course_id):
-        enrollment = Enrollment.objects.get(student=request.user.student_profile, course_id=course_id)
+        enrollment = Enrollment.objects.with_access().filter(
+            student=request.user.student_profile, course_id=course_id
+        ).first()
+        if not enrollment:
+            return response.Response(
+                {"detail": "You don't have access to this course."}, status=status.HTTP_403_FORBIDDEN
+            )
         progress = refresh_course_progress(enrollment)
         return response.Response(CourseProgressSerializer(progress).data)
 
@@ -326,7 +338,7 @@ class StudentDashboardView(views.APIView):
 
         student = request.user.student_profile
         enrollments = (
-            Enrollment.objects.filter(student=student)
+            Enrollment.objects.with_access().filter(student=student)
             .select_related("course", "last_lesson", "course_progress")
             .order_by("-last_accessed_at", "-created_at")
         )
@@ -655,6 +667,11 @@ class AdminDashboardView(views.APIView):
         start_of_week = now - timedelta(days=6)
         start_of_month = now - timedelta(days=29)
         successful_payments = Payment.objects.filter(status="successful")
+        # Revenue is live money only. A Paystack test key and simulation both
+        # report success with nobody charged; counting them put test checkouts
+        # on the dashboard as takings. They are reported separately instead.
+        live_payments = successful_payments.filter(mode="live")
+        not_real = successful_payments.exclude(mode="live")
         enrollments = Enrollment.objects.select_related("course", "student__user")
         published_courses = Course.objects.filter(status="published", visibility="visible")
         completed_enrollments = enrollments.filter(status="completed").count()
@@ -672,22 +689,32 @@ class AdminDashboardView(views.APIView):
                 }
             )
 
-        revenue_series = []
-        for offset in range(5, -1, -1):
-            month_anchor = now.replace(day=1) - timedelta(days=offset * 30)
-            amount = sum(
-                successful_payments.filter(
-                    created_at__year=month_anchor.year,
-                    created_at__month=month_anchor.month,
-                ).values_list("amount", flat=True),
-                start=Decimal("0.00"),
+        # Six calendar months, stepped by month rather than by 30 days (which
+        # skips or repeats a month depending on the date), bucketed by when the
+        # money arrived rather than when checkout was opened.
+        months = []
+        year, month = now.year, now.month
+        for _ in range(6):
+            months.append((year, month))
+            year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+        months.reverse()
+        first_year, first_month = months[0]
+        by_month = {
+            (row["month"].year, row["month"].month): row["total"]
+            for row in live_payments.filter(
+                paid_at__gte=now.replace(year=first_year, month=first_month, day=1, hour=0, minute=0, second=0, microsecond=0)
             )
-            revenue_series.append(
-                {
-                    "label": month_anchor.strftime("%b"),
-                    "revenue": float(amount),
-                }
-            )
+            .annotate(month=TruncMonth("paid_at"))
+            .values("month")
+            .annotate(total=models.Sum("amount"))
+        }
+        revenue_series = [
+            {
+                "label": timezone.datetime(year, month, 1).strftime("%b"),
+                "revenue": float(by_month.get((year, month), 0)),
+            }
+            for year, month in months
+        ]
 
         engagement = [
             {
@@ -723,9 +750,12 @@ class AdminDashboardView(views.APIView):
         ] + [
             {
                 "id": f"payment-{payment.id}",
-                "title": "Payment received",
-                "message": f"{payment.student.user.display_name} paid for {payment.course.title}.",
-                "timestamp": payment.created_at,
+                "title": "Payment received" if payment.mode == "live" else "Test payment",
+                "message": f"{payment.student.user.display_name} paid for {payment.course.title}."
+                if payment.mode == "live"
+                else f"{payment.student.user.display_name} went through checkout for {payment.course.title} "
+                "— no money was taken.",
+                "timestamp": payment.paid_at or payment.created_at,
                 "type": "payment",
             }
             for payment in successful_payments.select_related("student__user", "course").order_by("-created_at")[:4]
@@ -751,18 +781,20 @@ class AdminDashboardView(views.APIView):
                     # disagreed — 17 here, 15 there.
                     "students": StudentProfile.objects.count(),
                     "courses": Course.objects.count(),
-                    "payments": successful_payments.count(),
-                    "transactions": successful_payments.count(),
-                    "payingStudents": successful_payments.values("student_id").distinct().count(),
-                    "revenue": str(
-                        sum(successful_payments.values_list("amount", flat=True), start=Decimal("0.00"))
-                    ),
+                    "payments": live_payments.count(),
+                    "transactions": live_payments.count(),
+                    "payingStudents": live_payments.values("student_id").distinct().count(),
+                    "revenue": str(live_payments.aggregate(total=Coalesce(models.Sum("amount"), Decimal("0.00")))["total"]),
+                    "testPayments": not_real.count(),
+                    "testRevenue": str(not_real.aggregate(total=Coalesce(models.Sum("amount"), Decimal("0.00")))["total"]),
                     "publishedCourses": published_courses.count(),
                     "pendingCourses": Course.objects.filter(status="review").count(),
                     "activeEnrollments": enrollments.filter(status="active").count(),
                     "completedEnrollments": completed_enrollments,
                     "monthlyRevenue": str(
-                        sum(successful_payments.filter(created_at__gte=start_of_month).values_list("amount", flat=True), start=Decimal("0.00"))
+                        live_payments.filter(paid_at__gte=start_of_month).aggregate(
+                            total=Coalesce(models.Sum("amount"), Decimal("0.00"))
+                        )["total"]
                     ),
                     "courseCompletionRate": completion_rate,
                     "activeUsersToday": enrollments.filter(last_accessed_at__date=now.date()).values("student_id").distinct().count(),

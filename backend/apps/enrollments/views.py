@@ -16,7 +16,7 @@ class MyCoursesView(ListAPIView):
 
     def get_queryset(self):
         return (
-            Enrollment.objects.filter(student=self.request.user.student_profile)
+            Enrollment.objects.with_access().filter(student=self.request.user.student_profile)
             .select_related(
                 "course__teacher__user", "course__category", "course__subcategory",
                 "last_lesson", "course_progress",
@@ -34,7 +34,7 @@ class EnrollFreeView(views.APIView):
         course = get_object_or_404(Course, id=course_id, status="published", visibility="visible")
         student = request.user.student_profile
 
-        existing = Enrollment.objects.filter(student=student, course=course).first()
+        existing = Enrollment.objects.with_access().filter(student=student, course=course).first()
         if existing:
             return response.Response(EnrollmentSerializer(existing, context={"request": request}).data)
         if course.price and course.price > 0:
@@ -42,8 +42,8 @@ class EnrollFreeView(views.APIView):
                 {"detail": "This is a paid course. Please complete checkout to enroll."},
                 status=status.HTTP_402_PAYMENT_REQUIRED,
             )
-        enrollment = Enrollment.objects.create(
-            student=student, course=course, access_source="free", status="active"
+        enrollment, _ = Enrollment.objects.update_or_create(
+            student=student, course=course, defaults={"access_source": "free", "status": "active"}
         )
 
         from common.email import frontend_url, send_transactional_email

@@ -154,7 +154,7 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
             # open courses so nothing gates that shouldn't.
             from apps.enrollments.models import Enrollment
 
-            enrollment = Enrollment.objects.filter(
+            enrollment = Enrollment.objects.with_access().filter(
                 student=request.user.student_profile, course_id=self.kwargs.get("pk")
             ).select_related("course").first()
             if enrollment and enrollment.course.progression_mode == "sequential":
@@ -715,7 +715,7 @@ def student_can_review(student, course):
     """Eligible if enrolled AND completed or >= 50% progress."""
     from apps.enrollments.models import Enrollment
 
-    enrollment = Enrollment.objects.filter(student=student, course=course).select_related(
+    enrollment = Enrollment.objects.with_access().filter(student=student, course=course).select_related(
         "course_progress"
     ).first()
     if not enrollment:
@@ -803,7 +803,7 @@ class StudentLessonView(APIView):
         if is_student:
             from apps.enrollments.models import Enrollment
 
-            enrollment = Enrollment.objects.filter(student=user.student_profile, course=course).first()
+            enrollment = Enrollment.objects.with_access().filter(student=user.student_profile, course=course).first()
 
         # Two separate gates, and both must open.
         #

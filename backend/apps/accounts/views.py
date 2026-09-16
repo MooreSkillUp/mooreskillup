@@ -876,7 +876,11 @@ class AdminStudentGrantAccessView(AdminActionsPerMethod, APIView):
             course=course,
             defaults={"access_source": "admin_grant", "status": "active"},
         )
-        if not created:
+        if not created and enrollment.status == "revoked":
+            enrollment.status = "active"
+            enrollment.access_source = "admin_grant"
+            enrollment.save(update_fields=["status", "access_source", "updated_at"])
+        elif not created:
             return response.Response(
                 {"detail": f"{student.user.display_name} already has access to this course."},
                 status=status.HTTP_200_OK,

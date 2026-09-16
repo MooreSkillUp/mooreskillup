@@ -223,7 +223,7 @@ class UserSerializer(serializers.ModelSerializer):
         student_profile = self._get_student_profile(obj)
         if student_profile:
             return list(
-                Enrollment.objects.filter(student=student_profile).values_list("course_id", flat=True)
+                Enrollment.objects.with_access().filter(student=student_profile).values_list("course_id", flat=True)
             )
         return []
 
