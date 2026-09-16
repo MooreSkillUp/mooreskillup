@@ -30,7 +30,9 @@ export interface AdminTeamMember {
   status: "active" | "disabled";
   dateJoined?: string;
   lastLogin?: string | null;
+  /** Only on the creating response, and only when email couldn't deliver it. */
   temporaryPassword?: string | null;
+  emailDelivered?: boolean;
   permissions?: string[];
   permissionOverrides?: AdminPermissionOverrides;
   twoFactorEnabled?: boolean;
@@ -98,7 +100,7 @@ export function useAdminTeam() {
   );
 
   const resendCredentials = useCallback(async (adminId: string) => {
-    return authenticatedRequest<{ detail: string }>(
+    return authenticatedRequest<{ detail: string; emailDelivered: boolean; temporaryPassword: string | null }>(
       `/api/admin/admins/${adminId}/resend-credentials/`,
       { method: "POST" },
     );

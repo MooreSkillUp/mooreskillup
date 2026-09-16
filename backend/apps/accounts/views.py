@@ -653,6 +653,10 @@ class AdminTeacherUpdateView(AdminActionsPerMethod, APIView):
             teacher.status = request.data["status"]
             teacher.user.is_active = request.data["status"] == "active"
             teacher.user.save(update_fields=["is_active"])
+            if not teacher.user.is_active:
+                from .session_auth import revoke_all_sessions
+
+                revoke_all_sessions(teacher.user)
         if "program" in request.data:
             teacher.program = request.data["program"]
         if "track" in request.data:
@@ -729,9 +733,32 @@ class AdminStudentListView(AdminActionsPerMethod, APIView):
     admin_actions = {"GET": ("students:view",)}
 
     def get(self, request):
+        from django.db.models import Count, Max, Q
+        from django.db.models.functions import Coalesce
+
         from .models import StudentProfile
 
-        students = StudentProfile.objects.select_related("user").prefetch_related("enrollments", "payments")
+        # Counted in the database. The serializer used to run three queries per
+        # student — 56 for fifteen — because .filter() and .order_by() bypass a
+        # prefetch. "Last studied" comes from lesson progress, the evidence, not
+        # the copied Enrollment.last_accessed_at: ordering that field descending
+        # puts empty values first in Postgres, so one never-opened enrolment made
+        # an active student read "No recent activity".
+        students = (
+            StudentProfile.objects.select_related("user")
+            .annotate(
+                enrolled_count=Count("enrollments", distinct=True),
+                completed_count=Count(
+                    "enrollments", filter=Q(enrollments__status="completed"), distinct=True
+                ),
+                paid_count=Count("payments", filter=Q(payments__status="successful"), distinct=True),
+                last_studied=Coalesce(
+                    Max("enrollments__lesson_progress__last_accessed_at"),
+                    Max("enrollments__lesson_progress__completed_at"),
+                ),
+            )
+            .order_by("-user__created_at")
+        )
         return response.Response(AdminStudentSerializer(students, many=True).data)
 
 
@@ -763,6 +790,11 @@ class AdminStudentUpdateView(AdminActionsPerMethod, APIView):
                 student.selected_track = tracks[0]
         student.user.save()
         student.save()
+        if not student.user.is_active:
+            # Suspending has to end their sessions, not just the next sign-in.
+            from .session_auth import revoke_all_sessions
+
+            revoke_all_sessions(student.user)
         record_audit(
             request,
             "student.update",
@@ -777,6 +809,37 @@ class AdminStudentUpdateView(AdminActionsPerMethod, APIView):
         from .models import StudentProfile
 
         student = get_object_or_404(StudentProfile.objects.select_related("user"), id=student_id)
+
+        # A student's payments, certificates, enrolments and progress all
+        # cascade from their profile. Deleting a paying student erased their
+        # payment history, and deleting a certified one made a certificate that
+        # someone else might be verifying simply stop existing. Those records
+        # outlive the account; suspending keeps them.
+        from apps.certificates.models import Certificate
+        from apps.payments.models import Payment
+
+        payments = Payment.objects.filter(student=student, status__in=["successful", "refunded"]).count()
+        certificates = Certificate.objects.filter(student=student).count()
+        if payments or certificates:
+            held = " and ".join(
+                part
+                for part in (
+                    f"{payments} payment record{'s' if payments != 1 else ''}" if payments else "",
+                    f"{certificates} certificate{'s' if certificates != 1 else ''}" if certificates else "",
+                )
+                if part
+            )
+            return response.Response(
+                {
+                    "detail": f"{student.user.display_name} has {held}. Deleting the account would "
+                    "erase those records, so it isn't allowed. Suspend the account instead — they won't be "
+                    "able to sign in, and the records stay.",
+                    "payments": payments,
+                    "certificates": certificates,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         student_name = student.user.display_name
         record_audit(
             request,
@@ -983,7 +1046,16 @@ class AdminAccountResendCredentialsView(AdminActionsPerMethod, APIView):
             resource_name=admin.display_name,
             metadata={"email": admin.email},
         )
-        return response.Response({"detail": f"New sign-in details emailed to {admin.email}."})
+        # Same handoff as teachers: resetting a password and emailing it into a
+        # backend that delivers nothing locked the admin out.
+        handoff = _credentials_handoff(temp_password)
+        detail = (
+            f"New sign-in details emailed to {admin.email}."
+            if handoff["emailDelivered"]
+            else "Email isn't being delivered, so the new password is shown here. "
+            "Pass it on securely — the previous one no longer works."
+        )
+        return response.Response({"detail": detail, **handoff})
 
 
 class AdminUserLockView(APIView):

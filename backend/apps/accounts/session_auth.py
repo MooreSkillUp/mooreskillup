@@ -215,6 +215,12 @@ def refresh_session_from_token(refresh_token: str):
     session = UserSession.objects.select_related("user").filter(session_key=session_key, is_active=True).first()
     if not session or session.is_expired():
         raise TokenError("Session expired.")
+    # A deactivated account kept refreshing: the session was checked, the
+    # person was not. Close the session as well as refusing, so reactivating
+    # the account later does not bring old devices straight back in.
+    if not session.user.is_active:
+        revoke_session(session)
+        raise TokenError("Account is inactive.")
     if str(old_refresh["jti"]) != session.refresh_jti:
         raise TokenError("Refresh token has been rotated.")
     # Blacklisting is best-effort: a token already blacklisted (or a backend

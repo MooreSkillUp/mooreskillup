@@ -44,7 +44,10 @@ export interface AdminStudent {
   selectedTracks: string[];
   plan: string;
   status: "active" | "disabled";
+  /** When a lesson was last opened or finished — from lesson progress. */
   lastActiveAt?: string | null;
+  /** Empty means no sign-in since sign-ins started being recorded, not "never". */
+  lastSignedInAt?: string | null;
   enrolledCourses: number;
   completedCourses: number;
   totalPayments: number;
@@ -467,15 +470,22 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     );
     const normalized = normalizeStudentPayload([student])[0] ?? student;
     setStudents((current) => current.map((item) => (item.id === studentId ? normalized : item)));
-    await load();
+    // The response is the updated row. This used to reload all eight admin
+    // endpoints too, so suspending ten students reloaded everything ten times.
     return normalized;
-  }, [load, runAction]);
+  }, [runAction]);
 
   const deleteStudent = useCallback(async (studentId: string) => {
     await runAction(() => authenticatedRequest(`/api/admin/students/${studentId}/`, { method: "DELETE" }));
     setStudents((current) => current.filter((student) => student.id !== studentId));
-    await load();
-  }, [load, runAction]);
+  }, [runAction]);
+
+  // Granting access changes one student's enrolment count and nothing else on
+  // the page, so only the student list is refetched.
+  const refreshStudents = useCallback(async () => {
+    const payload = await authenticatedRequest("/api/admin/students/");
+    setStudents(normalizeStudentPayload(payload));
+  }, []);
 
   const grantStudentAccess = useCallback(
     async (studentId: string, courseId: string) => {
@@ -485,10 +495,10 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
           body: JSON.stringify({ courseId }),
         }),
       );
-      await load();
+      await refreshStudents();
       return result;
     },
-    [load, runAction],
+    [refreshStudents, runAction],
   );
 
   const addCategory = useCallback(async (input: { name: string; description?: string; accentColor?: string; bannerTheme?: string }) => {
