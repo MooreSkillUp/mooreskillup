@@ -176,3 +176,43 @@ def test_cooldown_applies_after_a_failure_but_not_after_a_pass(course_with_secti
         quiz=quiz, student=data["student"], passed=True, submitted_at=timezone.now()
     )
     assert cooldown_remaining_seconds(data["student"], quiz) == 0
+
+
+class TestMaterialAlreadyCovered:
+    """A quiz added to a live course must not shut students out of work they did.
+
+    `accessible_section_ids` said in its own docstring that sections a student
+    has already completed "stay open regardless", and then stopped at the first
+    unfinished section anyway. A teacher adding a section quiz to a running
+    course re-locked every later section for students who had finished the
+    lessons months ago — including students the platform already called
+    "completed".
+    """
+
+    def test_finished_sections_stay_open_when_a_quiz_appears_later(self, course_with_sections):
+        enrollment = course_with_sections["enrollment"]
+        sections = course_with_sections["sections"]
+        for section in sections:
+            complete_lessons(enrollment, section)
+
+        # The teacher adds a quiz to section 1 after the fact.
+        build_quiz(course_with_sections["course"], section=sections[0])
+
+        open_ids = accessible_section_ids(enrollment)
+
+        assert sections[0].id in open_ids
+        assert sections[1].id in open_ids, "a section whose lessons are all done was locked"
+        assert sections[2].id in open_ids
+
+    def test_a_student_midway_is_still_gated(self, course_with_sections):
+        """The gate itself stays: only what they have actually finished opens."""
+        enrollment = course_with_sections["enrollment"]
+        sections = course_with_sections["sections"]
+        complete_lessons(enrollment, sections[0])
+        build_quiz(course_with_sections["course"], section=sections[0])
+
+        open_ids = accessible_section_ids(enrollment)
+
+        assert sections[0].id in open_ids
+        assert sections[1].id not in open_ids
+        assert sections[2].id not in open_ids
