@@ -170,6 +170,12 @@ async function parseJsonSafely(response: Response) {
   }
 }
 
+/** "firstName" → "First name", so an error can say what it is about. */
+function fieldLabel(key: string) {
+  const spaced = key.replace(/([A-Z])/g, " $1").replace(/[_-]+/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
+}
+
 function extractErrorMessage(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object") return fallback;
 
@@ -177,10 +183,14 @@ function extractErrorMessage(payload: unknown, fallback: string) {
     return payload.detail;
   }
 
+  // Name the field. A bare "This field is required." sent people back to a form
+  // with nothing marked, guessing which of eight boxes the server meant.
   const entries = Object.entries(payload as Record<string, unknown>);
-  for (const [, value] of entries) {
-    if (typeof value === "string") return value;
-    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  for (const [key, value] of entries) {
+    const message =
+      typeof value === "string" ? value : Array.isArray(value) && typeof value[0] === "string" ? value[0] : null;
+    if (!message) continue;
+    return key === "non_field_errors" ? message : `${fieldLabel(key)}: ${message}`;
   }
 
   return fallback;
@@ -502,6 +512,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: payload.email,
           username: payload.username,
           displayName: payload.displayName,
+          // The API requires these — a certificate prints a real name, never a
+          // handle. They were collected on the form, passed to this function,
+          // and then left out of the request, so every public sign-up was
+          // refused with "This field is required" and no field named.
+          firstName: payload.firstName,
+          lastName: payload.lastName,
           password: payload.password,
           role: "student",
           interests: payload.interests,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, ArrowRight, ArrowLeft, X, Check } from "lucide-react";
 import { Button } from "@/components/ui-kit/Button";
@@ -43,18 +44,31 @@ const STEPS: TourStep[] = [
 
 export function OnboardingTour() {
   const { user, completeOnboarding } = useAuth();
+  const pathname = usePathname();
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [visible, setVisible] = useState(false);
 
-  // Only show the tour for students who haven't completed onboarding
+  // Only on the dashboard, and only for a student who hasn't been shown it.
+  //
+  // It used to run on whatever page a new student happened to be on. Its steps
+  // describe the dashboard, the sidebar and the header, and its dimmer swallows
+  // clicks — so a student who went straight to a course found the page covered
+  // and the "Enrol for free" button dead, with an explanation of a screen they
+  // weren't looking at. Somewhere else means: not now, catch them next time
+  // they're home.
+  const onDashboard = pathname === "/dashboard";
   useEffect(() => {
+    if (!onDashboard) {
+      setVisible(false);
+      return;
+    }
     if (user?.role === "student" && !user?.isOnboarded) {
       // Delay slightly to allow the page to fully render and measure targets
       const timer = setTimeout(() => setVisible(true), 1500);
       return () => clearTimeout(timer);
     }
-  }, [user]);
+  }, [user, onDashboard]);
 
   // Sidebar auto open/close for mobile
   useEffect(() => {
