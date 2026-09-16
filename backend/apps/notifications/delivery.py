@@ -44,8 +44,9 @@ def fan_out_broadcast(broadcast):
     )
     broadcast.status = "sent"
     broadcast.sent_at = timezone.now()
-    broadcast.save(update_fields=["status", "sent_at", "updated_at"])
-    return recipients.count()
+    broadcast.recipient_count = recipients.count()
+    broadcast.save(update_fields=["status", "sent_at", "recipient_count", "updated_at"])
+    return broadcast.recipient_count
 
 
 def deliver_due_broadcasts():

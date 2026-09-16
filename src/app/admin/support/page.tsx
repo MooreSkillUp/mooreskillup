@@ -5,6 +5,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock3,
+  EyeOff,
   LifeBuoy,
   MessageSquare,
   Send,
@@ -45,7 +46,7 @@ function Badge({ label, style }: { label: string; style: string }) {
 }
 
 export default function AdminSupportPage() {
-  const { supportTickets, updateSupportTicket, deleteSupportTicket, isLoading, error } =
+  const { supportTickets, updateSupportTicket, addTicketMessage, assignTicket, deleteSupportTicket, isLoading, error } =
     useAdminPlatform();
   const { user } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
@@ -57,7 +58,6 @@ export default function AdminSupportPage() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [adminNotes, setAdminNotes] = useState("");
   const [replyText, setReplyText] = useState("");
   const [isInternal, setIsInternal] = useState(false);
   const [actionKey, setActionKey] = useState<string | null>(null);
@@ -94,7 +94,6 @@ export default function AdminSupportPage() {
   useEffect(() => {
     if (!filtered.length) {
       setSelectedId(null);
-      setAdminNotes("");
       return;
     }
     if (!selectedId || !filtered.some((t) => t.id === selectedId)) {
@@ -103,9 +102,9 @@ export default function AdminSupportPage() {
   }, [filtered, selectedId]);
 
   useEffect(() => {
-    setAdminNotes(selected?.admin_notes ?? "");
     setReplyText("");
-  }, [selected?.id, selected?.admin_notes]);
+    setIsInternal(false);
+  }, [selected?.id]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   async function handleUpdate(field: Record<string, unknown>) {
@@ -122,16 +121,12 @@ export default function AdminSupportPage() {
     }
   }
 
-  async function handleAssignToMe() {
-    if (!selected || !user) return;
+  async function handleAssign(take: boolean) {
+    if (!selected) return;
     setActionKey(`${selected.id}:assign`);
     try {
-      await updateSupportTicket(selected.id, {
-        assigned_to: user.displayName,
-        assigned_to_email: user.email,
-        status: "in_progress",
-      });
-      notifySuccess("Ticket assigned to you");
+      await assignTicket(selected.id, take);
+      notifySuccess(take ? "You're handling this ticket" : "Ticket handed back");
     } catch (err) {
       notifyError("Unable to assign ticket", err instanceof Error ? err.message : "Request failed.");
     } finally {
@@ -143,14 +138,13 @@ export default function AdminSupportPage() {
     if (!selected || !replyText.trim()) return;
     setActionKey(`${selected.id}:reply`);
     try {
-      await updateSupportTicket(selected.id, {
-        comment: replyText.trim(),
-        is_internal: isInternal,
-      });
-      notifySuccess(isInternal ? "Internal note added" : "Reply sent");
+      await addTicketMessage(selected.id, replyText.trim(), isInternal);
+      notifySuccess(
+        isInternal ? "Note saved — only admins can see it" : `Reply sent to ${selected.createdBy}`,
+      );
       setReplyText("");
     } catch (err) {
-      notifyError("Unable to send reply", err instanceof Error ? err.message : "Request failed.");
+      notifyError("Unable to send", err instanceof Error ? err.message : "Request failed.");
     } finally {
       setActionKey(null);
     }
@@ -356,8 +350,8 @@ export default function AdminSupportPage() {
                   />
                   <MetaCard label="Category" value={selected.category} />
                   <MetaCard
-                    label="Assigned to"
-                    value={selected.assigned_to ?? "Unassigned"}
+                    label="Handled by"
+                    value={selected.assignedToName ?? "No one yet"}
                   />
                   <MetaCard
                     label="Created"
@@ -414,75 +408,119 @@ export default function AdminSupportPage() {
                       className="w-full"
                       disabled={!canAssignTickets}
                       loading={actionKey === `${selected.id}:assign`}
-                      loadingText="Assigning…"
-                      onClick={() => void handleAssignToMe()}
+                      loadingText="Saving…"
+                      onClick={() => void handleAssign(selected.assignedToId !== (user?.id ?? ""))}
                     >
-                      <UserCheck className="h-4 w-4" /> Assign to me
+                      <UserCheck className="h-4 w-4" />
+                      {selected.assignedToId === (user?.id ?? "") ? "Hand it back" : "I'll handle this"}
                     </Button>
                   </div>
                 </div>
 
-                {/* Admin notes */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Admin notes (internal)</label>
-                  <Textarea
-                    value={adminNotes}
-                    onChange={(e) => setAdminNotes(e.target.value)}
-                    className="min-h-24 bg-background"
-                    placeholder="Internal notes visible only to admins…"
-                  />
-                  <Button
-                    variant="outline"
-                    loading={actionKey === `${selected.id}:admin_notes`}
-                    loadingText="Saving…"
-                    onClick={() => void handleUpdate({ admin_notes: adminNotes })}
-                  >
-                    Save notes
-                  </Button>
-                </div>
-
-                {/* Reply box */}
-                <div className="rounded-3xl border border-border bg-background p-5 space-y-3">
+                {/* Thread: replies and notes, in the order they were written */}
+                <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4 text-primary" />
                     <span className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">
-                      Reply to ticket
+                      Thread
                     </span>
+                  </div>
+                  {selected.messages.length ? (
+                    <ul className="space-y-2">
+                      {selected.messages.map((message) => (
+                        <li
+                          key={message.id}
+                          className={`rounded-2xl border p-4 ${
+                            message.isInternal
+                              ? "border-warning/40 bg-warning/10"
+                              : "border-border bg-background"
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="font-semibold">{message.authorName || "Support"}</span>
+                            <span className="text-muted-foreground">
+                              {new Date(message.createdAt).toLocaleString("en-NG")}
+                            </span>
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${
+                                message.isInternal
+                                  ? "bg-warning/20 text-foreground"
+                                  : "bg-success/10 text-success"
+                              }`}
+                            >
+                              {message.isInternal ? (
+                                <>
+                                  <EyeOff className="h-3 w-3" /> Admins only
+                                </>
+                              ) : (
+                                <>
+                                  <Send className="h-3 w-3" /> Sent to {selected.createdBy}
+                                </>
+                              )}
+                            </span>
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap text-sm">{message.body}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                      Nothing written yet.
+                    </p>
+                  )}
+                </div>
+
+                {/* Composer — the choice is made before writing, and the button says
+                    which one it is, because one of these leaves the building. */}
+                <div className="space-y-3 rounded-3xl border border-border bg-background p-5">
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: false, label: "Reply to them", hint: `${selected.createdBy} gets an email` },
+                      { value: true, label: "Note for admins", hint: "They never see it" },
+                    ].map((option) => (
+                      <button
+                        key={String(option.value)}
+                        type="button"
+                        onClick={() => setIsInternal(option.value)}
+                        aria-pressed={isInternal === option.value}
+                        className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
+                          isInternal === option.value
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/30"
+                        }`}
+                      >
+                        <span className="block font-semibold">{option.label}</span>
+                        <span className="block text-xs text-muted-foreground">{option.hint}</span>
+                      </button>
+                    ))}
                   </div>
                   <Textarea
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
                     className="min-h-24 bg-card"
-                    placeholder="Write a reply visible to the user, or toggle internal note…"
+                    placeholder={
+                      isInternal
+                        ? "Context for whoever picks this up next…"
+                        : `Write to ${selected.createdBy}…`
+                    }
                   />
-                  <div className="flex items-center justify-between gap-3">
-                    {/* Internal toggle */}
-                    <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground select-none">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isInternal}
-                        onClick={() => setIsInternal((v) => !v)}
-                        className={`relative h-6 w-10 rounded-full transition-colors ${
-                          isInternal ? "bg-amber-500" : "bg-muted"
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
-                            isInternal ? "left-4" : "left-0.5"
-                          }`}
-                        />
-                      </button>
-                      {isInternal ? "Internal note (admins only)" : "Visible to user"}
-                    </label>
+                  <div className="flex justify-end">
                     <Button
                       variant="accent"
                       disabled={!replyText.trim()}
                       loading={actionKey === `${selected.id}:reply`}
-                      loadingText="Sending…"
+                      loadingText={isInternal ? "Saving…" : "Sending…"}
                       onClick={() => void handleReply()}
                     >
-                      <Send className="h-4 w-4" /> Send reply
+                      {isInternal ? (
+                        <>
+                          <EyeOff className="h-4 w-4" /> Save note
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4" /> Send reply
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>

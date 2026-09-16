@@ -16,7 +16,8 @@ type SupportTicket = {
   description: string;
   status: string;
   priority: string;
-  admin_notes: string;
+  /** Replies from support. Notes admins keep between themselves aren't here. */
+  messages: { id: string; body: string; authorName: string; createdAt: string }[];
   created_at: string;
 };
 
@@ -136,10 +137,18 @@ export default function TeacherSupportPage() {
                     <div className="font-medium">{ticket.title}</div>
                     <div className="mt-1 text-sm text-muted-foreground">{ticket.category} | {ticket.status}</div>
                     <div className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{ticket.description}</div>
-                    {ticket.admin_notes ? (
-                      <div className="mt-3 rounded-2xl bg-card p-3 text-sm text-muted-foreground">
-                        Admin notes: {ticket.admin_notes}
-                      </div>
+                    {ticket.messages?.length ? (
+                      <ul className="mt-3 space-y-2">
+                        {ticket.messages.map((message) => (
+                          <li key={message.id} className="rounded-2xl bg-card p-3 text-sm">
+                            <div className="text-xs text-muted-foreground">
+                              {message.authorName || "Support"} ·{" "}
+                              {new Date(message.createdAt).toLocaleString("en-NG")}
+                            </div>
+                            <p className="mt-1 whitespace-pre-wrap">{message.body}</p>
+                          </li>
+                        ))}
+                      </ul>
                     ) : null}
                   </div>
                 ))

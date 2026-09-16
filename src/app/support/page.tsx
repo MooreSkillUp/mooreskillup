@@ -110,14 +110,25 @@ export default function StudentSupportPage() {
                       </span>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{ticket.description}</p>
-                    {ticket.adminNotes && (
-                      <div className="mt-3 rounded-xl bg-primary/5 p-3 text-sm">
-                        <div className="flex items-center gap-1 font-medium text-primary">
-                          {ticket.status === "resolved" ? <CheckCircle2 className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
-                          Support reply
-                        </div>
-                        <p className="mt-1 text-muted-foreground">{ticket.adminNotes}</p>
-                      </div>
+                    {ticket.replies.length > 0 && (
+                      <ul className="mt-3 space-y-2">
+                        {ticket.replies.map((reply) => (
+                          <li key={reply.id} className="rounded-xl bg-primary/5 p-3 text-sm">
+                            <div className="flex items-center gap-1 font-medium text-primary">
+                              {ticket.status === "resolved" ? (
+                                <CheckCircle2 className="h-4 w-4" />
+                              ) : (
+                                <Clock3 className="h-4 w-4" />
+                              )}
+                              {reply.authorName || "Support"}
+                              <span className="font-normal text-muted-foreground">
+                                · {new Date(reply.createdAt).toLocaleDateString("en-NG")}
+                              </span>
+                            </div>
+                            <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{reply.body}</p>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
                 ))

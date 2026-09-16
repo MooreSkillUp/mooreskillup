@@ -120,17 +120,13 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       items: [
         { href: "/admin/dashboard", label: "Dashboard", icon: Shield, permission: "dashboard:view" },
         { href: "/admin/analytics", label: "Analytics", icon: BarChart3, permission: "analytics:view" },
-        {
-          href: "/admin/notifications",
-          label: "Notifications",
-          icon: Bell,
-          permission: "notifications:view",
-        },
+        // One entry, not two: "Notifications" and "Broadcasts" were the same
+        // history, with a send box on one of them.
         {
           href: "/admin/broadcast-notifications",
           label: "Broadcasts",
           icon: BellRing,
-          permission: "notifications:broadcast",
+          permission: "notifications:view",
         },
       ],
     },
