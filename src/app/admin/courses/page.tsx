@@ -167,7 +167,7 @@ export default function AdminCoursesPage() {
     <AppShell allowedRoles={["admin"]}>
       <div className="space-y-6">
         <section className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
-          <div className="bg-gradient-to-r from-primary/10 via-background to-accent-soft px-6 py-6">
+          <div className="bg-muted/40 px-6 py-6">
             <div className="text-sm font-semibold uppercase tracking-[0.25em] text-primary">
               Course structure
             </div>

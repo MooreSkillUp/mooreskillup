@@ -82,7 +82,7 @@ export default function PaymentPage() {
         </Link>
 
         <div className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
-          <div className="bg-gradient-to-r from-primary/10 via-background to-accent-soft p-6">
+          <div className="bg-muted/40 p-6">
             <div className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">Checkout</div>
             <h1 className="mt-2 font-display text-3xl font-bold">{course.title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{course.subtitle}</p>

@@ -43,8 +43,6 @@ export function StudentCourseCard({
         <CourseBanner
           title={course.title || "Untitled course"}
           category={course.program}
-          certificateEnabled={course.certificateEnabled}
-          dense
           bannerImage={course.bannerImage ?? undefined}
           bannerTheme={course.bannerTheme ?? "default"}
           categoryAccentColor={course.categoryAccentColor}

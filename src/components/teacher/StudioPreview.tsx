@@ -113,8 +113,6 @@ export function StudioPreview({
             <CourseBanner
               title={title || "Untitled course"}
               category={program}
-              certificateEnabled={certificateEnabled}
-              dense
               bannerImage={bannerImage ?? undefined}
               bannerTheme={bannerTheme ?? "default"}
               categoryAccentColor={categoryAccentColor}

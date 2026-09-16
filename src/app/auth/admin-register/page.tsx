@@ -68,7 +68,7 @@ export default function AdminRegisterPage() {
 
   return (
     <div className="grid min-h-screen bg-background lg:grid-cols-2">
-      <div className="relative hidden overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(11,100,244,0.25),transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(245,130,32,0.22),transparent_24%)] p-10 text-foreground lg:flex lg:flex-col lg:justify-between">
+      <div className="relative hidden overflow-hidden bg-muted/40 p-10 text-foreground lg:flex lg:flex-col lg:justify-between">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
           <BrandLogo href="/" />

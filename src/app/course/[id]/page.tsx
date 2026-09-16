@@ -101,8 +101,6 @@ export default function CoursePage() {
             <CourseBanner
               title={course.title}
               category={course.program}
-              certificateEnabled={course.certificateEnabled}
-              dense
               bannerImage={course.bannerImage}
               bannerTheme={course.bannerTheme ?? "default"}
               categoryAccentColor={course.categoryAccentColor}

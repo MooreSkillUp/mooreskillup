@@ -96,7 +96,7 @@ export default function TeacherSettingsPage() {
 
           <div className="mt-5 flex items-center gap-5 rounded-2xl border border-border bg-background p-4">
             <div
-              className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-3xl shadow-inner ${currentAvatar.gradient}`}
+              className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-3xl shadow-inner ${currentAvatar.color}`}
               aria-label={currentAvatar.label}
             >
               {currentAvatar.emoji}
@@ -117,7 +117,7 @@ export default function TeacherSettingsPage() {
                   key={avatar.id}
                   type="button"
                   onClick={() => setSelectedAvatarId(avatar.id)}
-                  className={`relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br text-2xl transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${avatar.gradient} ${
+                  className={`relative flex h-14 w-14 items-center justify-center rounded-2xl text-2xl transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${avatar.color} ${
                     active ? "ring-2 ring-primary ring-offset-2 ring-offset-card" : "opacity-60 hover:opacity-90"
                   }`}
                   aria-label={avatar.label}

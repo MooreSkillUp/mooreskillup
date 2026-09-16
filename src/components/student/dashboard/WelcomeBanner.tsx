@@ -65,14 +65,7 @@ export function WelcomeBanner({
   ];
 
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-accent via-accent to-[#e0560a] text-white">
-      {/* Two soft highlights so the fill reads as depth rather than a flat
-          block of orange. Purely decorative. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_88%_-10%,rgba(255,255,255,0.28),transparent_45%),radial-gradient(circle_at_0%_110%,rgba(0,0,0,0.18),transparent_50%)]"
-      />
-
+    <section className="relative overflow-hidden rounded-2xl bg-accent text-white">
       <div className="relative p-5 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
