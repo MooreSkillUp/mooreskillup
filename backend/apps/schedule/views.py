@@ -24,7 +24,7 @@ def _visible_events_for(student_profile, *, now=None, days=UPCOMING_WINDOW_DAYS)
     are platform-wide and reach everyone.
     """
     now = now or timezone.now()
-    enrolled_course_ids = Enrollment.objects.filter(student=student_profile).values_list(
+    enrolled_course_ids = Enrollment.objects.with_access().filter(student=student_profile).values_list(
         "course_id", flat=True
     )
 
@@ -68,7 +68,7 @@ def upcoming_for_student(student_profile, *, limit=5, now=None):
         for event in _visible_events_for(student_profile, now=now)[:limit]
     ]
 
-    enrolled_course_ids = Enrollment.objects.filter(student=student_profile).values_list(
+    enrolled_course_ids = Enrollment.objects.with_access().filter(student=student_profile).values_list(
         "course_id", flat=True
     )
     # Task.due_date is a DateField, so compare against local dates rather than

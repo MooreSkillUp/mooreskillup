@@ -135,7 +135,10 @@ export interface AdminTotals {
   payments: number;
   transactions: number;
   payingStudents: number;
+  /** Live money only. Test-key and simulated checkouts are in testRevenue. */
   revenue: string;
+  testPayments?: number;
+  testRevenue?: string;
   publishedCourses?: number;
   pendingCourses?: number;
   activeEnrollments?: number;
@@ -177,22 +180,32 @@ export interface AdminActivityEvent {
   type: string;
 }
 
+/** How a payment was taken. Only "live" is money anyone was charged. */
+export type PaymentMode = "live" | "test" | "simulated";
+
+/**
+ * What happened to a purchase. "abandoned" is a checkout left pending for more
+ * than a day; "awaiting" is one opened recently that may still complete.
+ */
+export type PaymentState = "paid" | "refunded" | "failed" | "cancelled" | "awaiting" | "abandoned";
+
+/** One purchase — not one Paystack transaction, of which a purchase can have several. */
 export interface AdminTransaction {
-  id: string;
-  provider: string;
-  reference: string;
-  provider_status: string;
-  amount: string | number;
+  paymentId: string;
+  reference: string | null;
+  mode: PaymentMode;
+  state: PaymentState;
+  amount: string;
   currency: string;
-  verified_at?: string | null;
-  created_at?: string;
-  payment_id?: string;
-  payment__status?: string;
-  payment__course__title?: string;
-  payment__student__user__display_name?: string;
-  payment__student__user__email?: string;
-  refundEligible?: boolean;
-  refundReason?: string;
+  createdAt: string;
+  paidAt: string | null;
+  course: { id: string; title: string };
+  student: { id: string; name: string; email: string };
+  /** Present only on paid purchases. */
+  refund: { eligible: boolean; reason: string } | null;
+  refundedAt: string | null;
+  refundedByName: string | null;
+  refundReason: string;
 }
 
 export interface AdminSupportTicket {

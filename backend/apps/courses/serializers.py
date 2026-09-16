@@ -93,7 +93,7 @@ class LessonSerializer(serializers.ModelSerializer):
             return "unlocked"
 
         student_profile = request.user.student_profile
-        enrollment = Enrollment.objects.filter(student=student_profile, course=obj.section.course).first()
+        enrollment = Enrollment.objects.with_access().filter(student=student_profile, course=obj.section.course).first()
         if not enrollment:
             if obj.section.access_type == "free" or obj.is_previewable or obj.section.course.price == 0:
                 return "unlocked"
@@ -327,7 +327,7 @@ class SectionSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated or request.user.role != "student":
             return None
-        return Enrollment.objects.filter(student=request.user.student_profile, course=obj.course).first()
+        return Enrollment.objects.with_access().filter(student=request.user.student_profile, course=obj.course).first()
 
     def get_isFree(self, obj):
         return obj.course.price == 0 or obj.access_type == "free"
@@ -350,7 +350,7 @@ class SectionSerializer(serializers.ModelSerializer):
 
         if obj.course.price == 0 or obj.access_type == "free":
             return False
-        return not Enrollment.objects.filter(
+        return not Enrollment.objects.with_access().filter(
             student=request.user.student_profile, course=obj.course
         ).exists()
 
@@ -523,7 +523,7 @@ class CourseSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated or request.user.role != "student":
             return False
-        return Enrollment.objects.filter(student=request.user.student_profile, course=obj).exists()
+        return Enrollment.objects.with_access().filter(student=request.user.student_profile, course=obj).exists()
 
     def get_isInWatchlist(self, obj):
         request = self.context.get("request")

@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import transaction as db_transaction
 from django.utils import timezone
 from rest_framework import permissions, response, status, views
@@ -28,11 +30,17 @@ def fulfill_payment(payment, transaction):
         payment.paid_at = timezone.now()
         payment.save(update_fields=["status", "paid_at", "updated_at"])
 
-        Enrollment.objects.get_or_create(
-            student=payment.student,
-            course=payment.course,
-            defaults={"access_source": "payment", "status": "active"},
-        )
+        # update_or_create, not get_or_create: after a refund the revoked
+        # enrolment is still there, and buying again has to reopen it.
+        enrollment = Enrollment.objects.filter(student=payment.student, course=payment.course).first()
+        if enrollment is None:
+            Enrollment.objects.create(
+                student=payment.student, course=payment.course, access_source="payment", status="active"
+            )
+        elif enrollment.status == "revoked":
+            enrollment.status = "active"
+            enrollment.access_source = "payment"
+            enrollment.save(update_fields=["status", "access_source", "updated_at"])
         Notification.objects.get_or_create(
             user=payment.student.user,
             title="Course unlocked",
@@ -218,40 +226,95 @@ class PaymentWebhookView(views.APIView):
         return response.Response({"detail": "ok"})
 
 
+# A checkout left pending this long was walked away from. Paystack can still
+# confirm a late payment, which fulfils it as normal; until then it is not a
+# payment anyone is waiting on.
+ABANDONED_AFTER = timedelta(hours=24)
+
+
+def payment_state(payment, now):
+    if payment.status == "successful":
+        return "paid"
+    if payment.status == "pending":
+        return "abandoned" if now - payment.created_at > ABANDONED_AFTER else "awaiting"
+    return payment.status
+
+
 class AdminTransactionListView(views.APIView):
+    """One row per purchase, saying what actually happened to it.
+
+    This listed Paystack transactions, so a student who opened checkout twice
+    appeared as two purchases. It also ran the refund policy per row, a query
+    each, and could not say whether a payment was real money.
+    """
+
     permission_classes = [AdminAction("payments:view")]
 
     def get(self, request):
-        transactions = (
-            Transaction.objects.select_related(
-                "payment__course", "payment__student__user", "payment__student"
+        from django.db.models import Prefetch
+
+        from apps.platform.models import PlatformSettings
+
+        payments = list(
+            Payment.objects.select_related("course", "student__user", "refunded_by")
+            .prefetch_related(
+                Prefetch("transactions", queryset=Transaction.objects.order_by("-created_at"))
             )
             .order_by("-created_at")
         )
-        data = []
-        for txn in transactions:
-            payment = txn.payment
-            eligible, reason = refund_eligibility(payment)
-            data.append(
-                {
-                    "id": str(txn.id),
-                    "provider": txn.provider,
-                    "reference": txn.reference,
-                    "provider_status": txn.provider_status,
-                    "amount": str(txn.amount),
-                    "currency": txn.currency,
-                    "verified_at": txn.verified_at.isoformat() if txn.verified_at else None,
-                    "created_at": txn.created_at.isoformat(),
-                    "payment_id": str(payment.id),
-                    "payment__status": payment.status,
-                    "payment__course__title": payment.course.title,
-                    "payment__student__user__display_name": payment.student.user.display_name,
-                    "payment__student__user__email": payment.student.user.email,
-                    "refundEligible": eligible,
-                    "refundReason": reason,
-                }
-            )
-        return response.Response(data)
+        paid = [payment for payment in payments if payment.status == "successful"]
+        progress = {
+            (student_id, course_id): percent
+            for student_id, course_id, percent in Enrollment.objects.filter(
+                student_id__in={payment.student_id for payment in paid},
+                course_id__in={payment.course_id for payment in paid},
+            ).values_list("student_id", "course_id", "course_progress__progress_percent")
+        }
+        policy = PlatformSettings.get_solo()
+        now = timezone.now()
+
+        rows = []
+        for payment in payments:
+            transactions = list(payment.transactions.all())
+            row = {
+                "paymentId": str(payment.id),
+                "reference": transactions[0].reference if transactions else None,
+                "mode": payment.mode,
+                "state": payment_state(payment, now),
+                "amount": str(payment.amount),
+                "currency": payment.currency,
+                "createdAt": payment.created_at.isoformat(),
+                "paidAt": payment.paid_at.isoformat() if payment.paid_at else None,
+                "course": {"id": str(payment.course_id), "title": payment.course.title},
+                "student": {
+                    "id": str(payment.student_id),
+                    "name": payment.student.user.display_name,
+                    "email": payment.student.user.email,
+                },
+                "refund": None,
+                "refundedAt": payment.refunded_at.isoformat() if payment.refunded_at else None,
+                "refundedByName": payment.refunded_by.display_name if payment.refunded_by else None,
+                "refundReason": payment.refund_reason,
+            }
+            if payment.status == "successful":
+                eligible, reason = policy_allows_refund(
+                    payment, progress.get((payment.student_id, payment.course_id)), policy, now
+                )
+                row["refund"] = {"eligible": eligible, "reason": reason}
+            rows.append(row)
+        return response.Response(rows)
+
+
+def policy_allows_refund(payment, progress_percent, policy, now):
+    """The refund policy, from facts already fetched — no queries of its own."""
+    window_days = policy.refund_window_days
+    max_progress = policy.refund_max_progress_percent
+    paid_at = payment.paid_at or payment.created_at
+    if window_days and paid_at and (now - paid_at) > timedelta(days=window_days):
+        return False, f"Paid more than {window_days} days ago — outside the refund window."
+    if progress_percent is not None and progress_percent >= max_progress:
+        return False, f"The student is {progress_percent}% through (refunds stop at {max_progress}%)."
+    return True, ""
 
 
 class AdminTransactionExportView(views.APIView):
@@ -270,20 +333,34 @@ class AdminTransactionExportView(views.APIView):
         if date_to:
             payments = payments.filter(created_at__date__lte=date_to)
 
+        payments = payments.select_related("refunded_by").prefetch_related("transactions")
+        now = timezone.now()
+
         http_response = HttpResponse(content_type="text/csv")
-        http_response["Content-Disposition"] = 'attachment; filename="revenue.csv"'
+        http_response["Content-Disposition"] = 'attachment; filename="payments.csv"'
         writer = csv.writer(http_response)
-        writer.writerow(["Date", "Student", "Course", "Amount", "Currency", "Status", "Paid at"])
+        # "Money" is what an accountant needs first: a test or simulated payment
+        # in a revenue export is a number nobody was charged.
+        writer.writerow(
+            ["Started", "Reference", "Student", "Email", "Course", "Amount", "Currency",
+             "State", "Money", "Paid at", "Refunded at", "Refund reason"]
+        )
         for payment in payments:
+            latest = max(payment.transactions.all(), key=lambda txn: txn.created_at, default=None)
             writer.writerow(
                 [
                     payment.created_at.isoformat(),
+                    latest.reference if latest else "",
                     payment.student.user.display_name,
+                    payment.student.user.email,
                     payment.course.title,
                     payment.amount,
                     payment.currency,
-                    payment.status,
+                    payment_state(payment, now),
+                    "Real" if payment.mode == "live" else payment.get_mode_display(),
                     payment.paid_at.isoformat() if payment.paid_at else "",
+                    payment.refunded_at.isoformat() if payment.refunded_at else "",
+                    payment.refund_reason,
                 ]
             )
         return http_response
@@ -314,26 +391,45 @@ class AdminPaymentRefundView(views.APIView):
                 {"detail": "A refund reason is required."}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        transaction = payment.transactions.order_by("-created_at").first()
-        result = paystack.create_refund(transaction.reference if transaction else "")
-        if not result["success"]:
-            return response.Response(
-                {"detail": result.get("message") or "Refund failed at Paystack."},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+        # Only live payments have money at Paystack to send back. A test-key or
+        # simulated payment exists only here, and asking Paystack to refund a
+        # reference it never charged fails — leaving an admin unable to reverse
+        # a purchase the platform itself recorded.
+        if payment.mode == "live":
+            transaction = payment.transactions.order_by("-created_at").first()
+            result = paystack.create_refund(transaction.reference if transaction else "")
+            if not result["success"]:
+                return response.Response(
+                    {"detail": result.get("message") or "Paystack could not refund this payment."},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
 
-        payment.status = "refunded"
-        payment.save(update_fields=["status", "updated_at"])
-        # Revoke access so a refunded student loses the course.
-        Enrollment.objects.filter(student=payment.student, course=payment.course).update(
-            status="revoked", updated_at=timezone.now()
-        )
-        Notification.objects.create(
-            user=payment.student.user,
-            title="Payment refunded",
-            body=f"Your payment for {payment.course.title} was refunded.",
-            kind="payment",
-        )
+        from apps.certificates.models import Certificate
+
+        now = timezone.now()
+        with db_transaction.atomic():
+            payment.status = "refunded"
+            payment.refunded_at = now
+            payment.refunded_by = request.user
+            payment.refund_reason = refund_reason
+            payment.save(update_fields=["status", "refunded_at", "refunded_by", "refund_reason", "updated_at"])
+            # Access checks read Enrollment.objects.with_access(), which leaves
+            # this out; the row stays so progress survives buying again.
+            Enrollment.objects.filter(student=payment.student, course=payment.course).update(
+                status="revoked", updated_at=now
+            )
+            # A certificate for a course the student was refunded for would
+            # still verify publicly as earned.
+            Certificate.objects.filter(
+                student=payment.student, course=payment.course, is_revoked=False
+            ).update(is_revoked=True, revoked_at=now, updated_at=now)
+            Notification.objects.create(
+                user=payment.student.user,
+                title="Payment refunded",
+                body=f"Your payment for {payment.course.title} was refunded, and the course has been "
+                "removed from My Courses. If you buy it again, your progress will still be there.",
+                kind="payment",
+            )
         record_audit(
             request,
             "payment.refund",

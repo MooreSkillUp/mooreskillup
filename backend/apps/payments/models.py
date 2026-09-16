@@ -19,8 +19,19 @@ class Payment(UUIDPrimaryKeyModel, TimeStampedModel):
     currency = models.CharField(max_length=10, default="NGN")
     payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    # How the money was taken. Only "live" is money the business has: a Paystack
+    # test key and simulation both report success without anyone being charged,
+    # and nothing used to record which, so test checkouts showed up as revenue.
+    MODE_CHOICES = (("live", "Live"), ("test", "Paystack test mode"), ("simulated", "Simulated"))
+
     description = models.CharField(max_length=255)
     paid_at = models.DateTimeField(null=True, blank=True)
+    mode = models.CharField(max_length=10, choices=MODE_CHOICES, default="live")
+    refunded_at = models.DateTimeField(null=True, blank=True)
+    refunded_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    refund_reason = models.TextField(blank=True)
 
 
 class Transaction(UUIDPrimaryKeyModel, TimeStampedModel):

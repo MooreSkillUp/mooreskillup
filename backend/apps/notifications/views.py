@@ -245,7 +245,7 @@ class TeacherAnnouncementView(views.APIView):
             )
 
         teacher = request.user.teacher_profile
-        enrollments = Enrollment.objects.filter(course__teacher=teacher)
+        enrollments = Enrollment.objects.with_access().filter(course__teacher=teacher)
         course_id = request.data.get("courseId")
         if course_id:
             enrollments = enrollments.filter(course_id=course_id)

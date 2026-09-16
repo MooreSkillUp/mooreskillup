@@ -6,20 +6,35 @@ import { formatNaira } from "@/lib/commerce";
 import { useAuth } from "@/lib/auth";
 import { useMyPayments } from "@/lib/student";
 
-const STATUS_STYLES: Record<string, string> = {
-  successful: "bg-success/10 text-success",
-  pending: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200",
+/**
+ * A checkout the student walked away from read "pending" forever, as if their
+ * money were still on its way. Each state now says what actually happened.
+ */
+const STATE_LABELS: Record<string, string> = {
+  paid: "Paid",
+  refunded: "Refunded",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  awaiting: "Waiting for payment",
+  abandoned: "Not completed",
+};
+
+const STATE_STYLES: Record<string, string> = {
+  paid: "bg-success/10 text-success",
+  awaiting: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200",
   failed: "bg-destructive/10 text-destructive",
   refunded: "bg-muted text-muted-foreground",
   cancelled: "bg-muted text-muted-foreground",
+  abandoned: "bg-muted text-muted-foreground",
 };
 
 export default function DashboardPaymentsPage() {
   const { user } = useAuth();
   const { payments, isLoading } = useMyPayments(user?.role === "student");
   const totalSpent = payments
-    .filter((p) => p.status === "successful")
-    .reduce((sum, p) => sum + p.amount, 0);
+    .filter((payment) => payment.state === "paid")
+    .reduce((sum, payment) => sum + payment.amount, 0);
+  const purchases = payments.filter((payment) => payment.state === "paid" || payment.state === "refunded");
 
   return (
     <AppShell allowedRoles={["student"]}>
@@ -38,8 +53,8 @@ export default function DashboardPaymentsPage() {
             <div className="mt-2 font-display text-3xl font-bold">{formatNaira(totalSpent)}</div>
           </div>
           <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-            <div className="text-sm text-muted-foreground">Transactions</div>
-            <div className="mt-2 font-display text-3xl font-bold">{payments.length}</div>
+            <div className="text-sm text-muted-foreground">Courses bought</div>
+            <div className="mt-2 font-display text-3xl font-bold">{purchases.length}</div>
           </div>
         </div>
 
@@ -66,11 +81,20 @@ export default function DashboardPaymentsPage() {
                       {payment.reference ? `Ref ${payment.reference} · ` : ""}
                       {new Date(payment.paidAt ?? payment.createdAt).toLocaleString("en-NG")}
                     </div>
+                    {payment.state === "refunded" && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Refunded
+                        {payment.refundedAt
+                          ? ` on ${new Date(payment.refundedAt).toLocaleDateString("en-NG")}`
+                          : ""}
+                        . The course was removed from My Courses, but your progress is kept.
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-semibold">{formatNaira(payment.amount)}</span>
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${STATUS_STYLES[payment.status] ?? "bg-muted text-muted-foreground"}`}>
-                      {payment.status}
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATE_STYLES[payment.state] ?? "bg-muted text-muted-foreground"}`}>
+                      {STATE_LABELS[payment.state] ?? payment.state}
                     </span>
                   </div>
                 </div>
