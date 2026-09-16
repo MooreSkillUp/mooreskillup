@@ -66,6 +66,11 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
     refundMaxProgressPercent = serializers.IntegerField(
         source="refund_max_progress_percent", required=False, min_value=0, max_value=100
     )
+    requireAdminTwoFactor = serializers.BooleanField(source="require_admin_two_factor", required=False)
+    paymentsEnabled = serializers.BooleanField(source="payments_enabled", required=False)
+    supportResponseHours = serializers.IntegerField(
+        source="support_response_hours", required=False, min_value=0, max_value=336
+    )
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
 
     class Meta:
@@ -90,6 +95,9 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
             "defaultCourseBannerTextColor",
             "refundWindowDays",
             "refundMaxProgressPercent",
+            "requireAdminTwoFactor",
+            "paymentsEnabled",
+            "supportResponseHours",
             "updatedAt",
         )
 

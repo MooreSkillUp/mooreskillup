@@ -74,6 +74,17 @@ class PlatformSettings(models.Model):
     # Refund policy: refundable only within N days AND under X% course progress.
     refund_window_days = models.PositiveIntegerField(default=14)
     refund_max_progress_percent = models.PositiveIntegerField(default=30)
+    # Two-factor was a personal choice each admin made for themselves, so it
+    # could not be required of anyone — on accounts that can refund money,
+    # delete a student and message the whole platform.
+    require_admin_two_factor = models.BooleanField(default=False)
+    # A switch for taking money, separate from whether Paystack is configured.
+    # Stopping checkout otherwise meant removing the key and redeploying, which
+    # is no use during an outage or a pricing mistake.
+    payments_enabled = models.BooleanField(default=True)
+    # What we tell someone raising a ticket, and the line after which a ticket
+    # counts as overdue. 0 means we promise nothing.
+    support_response_hours = models.PositiveIntegerField(default=24)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

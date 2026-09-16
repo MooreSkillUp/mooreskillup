@@ -42,14 +42,17 @@ export function BrandLogo({
 
   const mark = (
     <>
+      {/* Both dimensions left to the image's own ratio, with a cap on height.
+          Constraining only the height told the browser to letterbox the
+          wordmark, and Next warned the aspect ratio could come out wrong. */}
       <Image
         src="/msu-logo.svg"
         alt="MooreSkillUp"
         width={width}
         height={height}
         priority={priority}
-        className="block h-auto w-auto dark:hidden"
-        style={{ maxHeight: height }}
+        className="block dark:hidden"
+        style={{ width: "auto", height: "auto", maxHeight: height }}
       />
       <Image
         src="/msu-logo-white.svg"
@@ -57,8 +60,8 @@ export function BrandLogo({
         width={width}
         height={height}
         priority={priority}
-        className="hidden h-auto w-auto dark:block"
-        style={{ maxHeight: height }}
+        className="hidden dark:block"
+        style={{ width: "auto", height: "auto", maxHeight: height }}
       />
       {tagline && (
         <span

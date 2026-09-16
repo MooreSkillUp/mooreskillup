@@ -248,7 +248,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-sidebar-border px-4">
-          <BrandLogo href={homeHref} size="sm" className="[&_span]:text-sidebar-foreground/50" />
+          {/* Above the fold on every signed-in page, and the largest thing
+              painted — so it loads first rather than after everything else. */}
+          <BrandLogo
+            href={homeHref}
+            size="sm"
+            priority
+            className="[&_span]:text-sidebar-foreground/50"
+          />
           <button
             onClick={onClose}
             className="rounded-lg p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground lg:hidden"

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
+import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/lib/feedback";
 import { getVideoRenderMode } from "@/lib/video";
 import { CurriculumSidebar } from "@/components/course/CurriculumSidebar";
@@ -34,7 +35,10 @@ export default function LessonPage() {
   const router = useRouter();
   const lessonId = params.id as string;
   const { notifySuccess, notifyError } = useFeedback();
-  const { data, isLoading, error, refresh } = usePlayer(lessonId);
+  // Not until sign-in has settled: asked too early, the lesson comes back as
+  // it looks to a stranger — nothing completed, later sections locked.
+  const { isLoading: authLoading } = useAuth();
+  const { data, isLoading, error, refresh } = usePlayer(lessonId, !authLoading);
 
   const [completing, setCompleting] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);

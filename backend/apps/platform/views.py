@@ -180,6 +180,10 @@ class PublicPlatformStatusView(views.APIView):
                 "maintenanceMode": settings_row.maintenance_mode,
                 "maintenanceMessage": settings_row.maintenance_message,
                 "studentRegistrationOpen": settings_row.student_registration_open,
+                # Said before someone tries: a Buy button that fails on click
+                # is worse than one that explains itself.
+                "paymentsEnabled": settings_row.payments_enabled,
+                "supportResponseHours": settings_row.support_response_hours,
                 "features": {
                     "reviews": settings_row.feature_reviews_enabled,
                     "certificates": settings_row.feature_certificates_enabled,

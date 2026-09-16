@@ -117,6 +117,9 @@ export interface PlatformSettingsData {
   featureQuizEnabled: boolean;
   refundWindowDays: number;
   refundMaxProgressPercent: number;
+  requireAdminTwoFactor: boolean;
+  paymentsEnabled: boolean;
+  supportResponseHours: number;
   updatedAt?: string;
 }
 

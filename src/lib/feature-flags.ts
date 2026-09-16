@@ -24,6 +24,10 @@ export interface PlatformStatus {
   maintenanceMode: boolean;
   maintenanceMessage: string;
   studentRegistrationOpen: boolean;
+  /** False means course purchases are paused — said before someone clicks Buy. */
+  paymentsEnabled: boolean;
+  /** Hours we tell people to expect a support reply within. 0 promises nothing. */
+  supportResponseHours: number;
   features: FeatureFlags;
 }
 
@@ -32,6 +36,8 @@ const DEFAULT_STATUS: PlatformStatus = {
   maintenanceMode: false,
   maintenanceMessage: "",
   studentRegistrationOpen: true,
+  paymentsEnabled: true,
+  supportResponseHours: 24,
   features: DEFAULT_FLAGS,
 };
 
@@ -62,6 +68,8 @@ export function usePlatformStatus() {
           maintenanceMode: Boolean(data.maintenanceMode),
           maintenanceMessage: data.maintenanceMessage || "",
           studentRegistrationOpen: data.studentRegistrationOpen ?? true,
+          paymentsEnabled: data.paymentsEnabled ?? true,
+          supportResponseHours: data.supportResponseHours ?? 0,
           features: { ...DEFAULT_FLAGS, ...(data.features ?? {}) },
         });
       })

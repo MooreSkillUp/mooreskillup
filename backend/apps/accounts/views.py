@@ -342,6 +342,23 @@ def _send_login_otp(user):
     )
 
 
+def two_factor_required_for_admins():
+    from apps.platform.models import PlatformSettings
+
+    return PlatformSettings.get_solo().require_admin_two_factor
+
+
+def two_factor_applies(user):
+    """Whether this sign-in needs an emailed code.
+
+    Either the person turned it on, or the Super Admin requires it of every
+    admin. It used to be the first alone, so it could not be required.
+    """
+    if user.two_factor_enabled:
+        return True
+    return user.role == "admin" and two_factor_required_for_admins()
+
+
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_classes = [ScopedRateThrottle]
@@ -360,7 +377,7 @@ class LoginView(APIView):
                 register_failed_login(user)
             raise
         user = serializer.validated_data["user"]
-        if user.two_factor_enabled:
+        if two_factor_applies(user):
             _send_login_otp(user)
             return response.Response(
                 {
@@ -414,6 +431,14 @@ class TwoFactorToggleView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         enabled = bool(request.data.get("enabled"))
+        if not enabled and two_factor_required_for_admins():
+            return response.Response(
+                {
+                    "detail": "Two-factor sign-in is required for every admin account. "
+                    "Only the Super Admin can lift that, in Settings."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         request.user.two_factor_enabled = enabled
         request.user.save(update_fields=["two_factor_enabled"])
         return response.Response({"twoFactorEnabled": enabled})

@@ -541,12 +541,23 @@ export interface PlayerData {
   nextLessonId: string | null;
 }
 
-export function usePlayer(lessonId: string) {
+/**
+ * The lesson, as the person viewing it should see it.
+ *
+ * `ready` must be false until sign-in has settled. This endpoint serves anyone
+ * — that's how a preview lesson works — so asking before the token exists
+ * returns the signed-out view and no 401 to retry on. A student opening a
+ * lesson directly, or refreshing one, got exactly that: every lesson shown as
+ * not started, and every later section shown as locked, in a course they had
+ * already finished.
+ */
+export function usePlayer(lessonId: string, ready = true) {
   const [data, setData] = useState<PlayerData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
+    if (!ready) return;
     setIsLoading(true);
     setError("");
     try {
@@ -562,13 +573,13 @@ export function usePlayer(lessonId: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [lessonId]);
+  }, [lessonId, ready]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  return { data, isLoading, error, refresh };
+  return { data, isLoading: isLoading || !ready, error, refresh };
 }
 
 export async function saveLessonProgress(

@@ -68,9 +68,9 @@ export default function AdminSupportPage() {
   const resolvedCount = supportTickets.filter(
     (t) => t.status === "resolved" || t.status === "closed",
   ).length;
-  const urgentCount = supportTickets.filter(
-    (t) => t.priority === "urgent" || t.priority === "high",
-  ).length;
+  // Nobody has answered these and the reply target has passed. Priority is
+  // already a filter chip; how long someone has been waiting was nowhere.
+  const overdueCount = supportTickets.filter((t) => t.isOverdue).length;
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -184,7 +184,7 @@ export default function AdminSupportPage() {
           <MetricCard icon={AlertCircle} label="Open" value={`${openCount}`} />
           <MetricCard icon={Clock3} label="In progress" value={`${inProgressCount}`} />
           <MetricCard icon={CheckCircle2} label="Resolved / closed" value={`${resolvedCount}`} />
-          <MetricCard icon={Zap} label="High / urgent" value={`${urgentCount}`} />
+          <MetricCard icon={Zap} label="Waiting too long" value={`${overdueCount}`} />
         </div>
 
         {/* Main layout */}
@@ -285,13 +285,17 @@ export default function AdminSupportPage() {
                         : ""}{" "}
                       · {ticket.category}
                     </div>
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Badge
                         label={ticket.status}
                         style={STATUS_STYLES[ticket.status] ?? "bg-muted text-muted-foreground"}
                       />
+                      {ticket.isOverdue && (
+                        <Badge label="No reply yet" style="bg-destructive/10 text-destructive" />
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {new Date(ticket.created_at).toLocaleDateString("en-NG")}
+                        {ticket.isOverdue ? ` · waiting ${Math.round(ticket.hoursWaiting)}h` : ""}
                       </span>
                     </div>
                   </button>
