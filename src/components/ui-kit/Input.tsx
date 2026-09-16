@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes } from "react";
+import { forwardRef, useId, type InputHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 interface Props extends InputHTMLAttributes<HTMLInputElement> {
@@ -8,7 +8,12 @@ interface Props extends InputHTMLAttributes<HTMLInputElement> {
 
 export const Input = forwardRef<HTMLInputElement, Props>(
   ({ label, hint, id, className, ...props }, ref) => {
-    const inputId = id || props.name;
+    // A generated id when the caller gives neither `id` nor `name`. Without it
+    // the label pointed at nothing: the field had no accessible name, so a
+    // screen reader announced an unlabelled box, and clicking the label did
+    // not focus the input.
+    const generatedId = useId();
+    const inputId = id || props.name || generatedId;
     return (
       <div className="space-y-1.5">
         {label && (

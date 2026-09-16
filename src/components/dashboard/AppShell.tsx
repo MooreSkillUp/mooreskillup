@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { AppLoader } from "@/components/shared/AppLoader";
+import { MaintenanceNotice } from "@/components/shared/MaintenanceNotice";
 import { Sidebar } from "./Sidebar";
 import { TopNavbar } from "./TopNavbar";
 import { getHomeRouteForUser, useAuth } from "../../lib/auth";
@@ -61,9 +62,13 @@ export function AppShell({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="flex-1 overflow-y-auto px-4 py-6 lg:px-8 lg:py-8"
+          className="flex-1 overflow-y-auto"
         >
-          {children}
+          {/* In maintenance the page itself is replaced for students and
+              teachers — every request behind it would fail anyway. */}
+          <MaintenanceNotice>
+            <div className="px-4 py-6 lg:px-8 lg:py-8">{children}</div>
+          </MaintenanceNotice>
         </motion.main>
       </div>
       <OnboardingTour />

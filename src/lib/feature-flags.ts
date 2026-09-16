@@ -19,22 +19,51 @@ const DEFAULT_FLAGS: FeatureFlags = {
   quiz: false,
 };
 
+export interface PlatformStatus {
+  siteName: string;
+  maintenanceMode: boolean;
+  maintenanceMessage: string;
+  studentRegistrationOpen: boolean;
+  features: FeatureFlags;
+}
+
+const DEFAULT_STATUS: PlatformStatus = {
+  siteName: "MooreSkillUp",
+  maintenanceMode: false,
+  maintenanceMessage: "",
+  studentRegistrationOpen: true,
+  features: DEFAULT_FLAGS,
+};
+
 /**
- * Reads platform feature flags from the public status endpoint (no auth).
- * Student pages use this to show real features vs "Coming soon".
+ * The public status of the platform: its name, whether it's in maintenance, and
+ * which features are on. No auth — it's what the app needs before anyone signs
+ * in.
+ *
+ * The endpoint always carried the maintenance message; nothing read it, so
+ * turning maintenance on gave students failed requests instead of an
+ * explanation.
  */
-export function useFeatureFlags() {
-  const [flags, setFlags] = useState<FeatureFlags>(DEFAULT_FLAGS);
+export function usePlatformStatus() {
+  const [status, setStatus] = useState<PlatformStatus>(DEFAULT_STATUS);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    fetch(buildApiUrl("/api/platform/status/"))
+    // Never from cache: when maintenance goes on, a stale "we're fine" answer
+    // means students keep hitting an API that is refusing them.
+    fetch(buildApiUrl("/api/platform/status/"), { cache: "no-store" })
       .then(parseJsonSafely)
       .then((payload) => {
-        if (active && payload?.features) {
-          setFlags({ ...DEFAULT_FLAGS, ...payload.features });
-        }
+        if (!active || !payload) return;
+        const data = payload as Partial<PlatformStatus>;
+        setStatus({
+          siteName: data.siteName || DEFAULT_STATUS.siteName,
+          maintenanceMode: Boolean(data.maintenanceMode),
+          maintenanceMessage: data.maintenanceMessage || "",
+          studentRegistrationOpen: data.studentRegistrationOpen ?? true,
+          features: { ...DEFAULT_FLAGS, ...(data.features ?? {}) },
+        });
       })
       .catch(() => {})
       .finally(() => {
@@ -45,5 +74,14 @@ export function useFeatureFlags() {
     };
   }, []);
 
-  return { flags, isLoading };
+  return { status, isLoading };
+}
+
+/**
+ * Just the feature flags, for pages that only care about those.
+ * Student pages use this to show real features vs "Coming soon".
+ */
+export function useFeatureFlags() {
+  const { status, isLoading } = usePlatformStatus();
+  return { flags: status.features, isLoading };
 }

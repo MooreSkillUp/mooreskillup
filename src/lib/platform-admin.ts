@@ -153,3 +153,56 @@ export function useAdminSettings() {
 
   return { settings, isLoading, error, refresh, saveSettings };
 }
+
+export interface DeviceLimits {
+  maxStudentDevices: number;
+  maxTeacherDevices: number;
+  maxAdminDevices: number;
+  updatedAt?: string;
+}
+
+/**
+ * How many devices each kind of account can stay signed in on.
+ *
+ * Enforced on every sign-in — the oldest session is closed once the limit is
+ * passed — but there was no way to set it outside the Django admin, so the
+ * numbers were effectively fixed. Super Admin only (`permissions:manage`).
+ */
+export function useDeviceLimits(enabled = true) {
+  const [limits, setLimits] = useState<DeviceLimits | null>(null);
+  const [isLoading, setIsLoading] = useState(enabled);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!enabled) {
+      setIsLoading(false);
+      return;
+    }
+    let active = true;
+    authenticatedRequest<DeviceLimits>("/api/admin/auth-settings/")
+      .then((payload) => {
+        if (active) setLimits(payload);
+      })
+      .catch((requestError: unknown) => {
+        if (active)
+          setError(requestError instanceof Error ? requestError.message : "Unable to load limits.");
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [enabled]);
+
+  const saveLimits = useCallback(async (patch: Partial<DeviceLimits>) => {
+    const payload = await authenticatedRequest<DeviceLimits>("/api/admin/auth-settings/", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+    setLimits(payload);
+    return payload;
+  }, []);
+
+  return { limits, isLoading, error, saveLimits };
+}

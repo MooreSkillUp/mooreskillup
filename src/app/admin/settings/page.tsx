@@ -19,7 +19,7 @@ import { useAuth } from "@/lib/auth";
 import { hasUserPermission } from "@/lib/admin-rbac";
 import { authenticatedRequest } from "@/lib/authenticated-api";
 import { useFeedback } from "@/lib/feedback";
-import { useAdminSettings } from "@/lib/platform-admin";
+import { useAdminSettings, useDeviceLimits } from "@/lib/platform-admin";
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({
@@ -44,6 +44,9 @@ function Toggle({
       <button
         type="button"
         role="switch"
+        // Without this the switch has no name: a screen reader announced
+        // "switch, on" with no clue which setting it belonged to.
+        aria-label={label}
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
@@ -97,6 +100,41 @@ export default function AdminSettingsPage() {
   const canEdit = hasUserPermission(user?.permissions, "admin-settings:edit");
   const canView = hasUserPermission(user?.permissions, "admin-settings:view");
   const isAdmin = user?.role === "admin";
+  // Device limits are Super Admin territory — a separate endpoint with its own
+  // permission, which is why they have their own save button.
+  const canManageDevices = hasUserPermission(user?.permissions, "permissions:manage");
+  const { limits, saveLimits } = useDeviceLimits(canManageDevices);
+  const [deviceForm, setDeviceForm] = useState({
+    maxStudentDevices: 5,
+    maxTeacherDevices: 3,
+    maxAdminDevices: 1,
+  });
+  const [savingDevices, setSavingDevices] = useState(false);
+
+  useEffect(() => {
+    if (limits) {
+      setDeviceForm({
+        maxStudentDevices: limits.maxStudentDevices,
+        maxTeacherDevices: limits.maxTeacherDevices,
+        maxAdminDevices: limits.maxAdminDevices,
+      });
+    }
+  }, [limits]);
+
+  const onSaveDevices = async () => {
+    try {
+      setSavingDevices(true);
+      await saveLimits(deviceForm);
+      notifySuccess("Device limits saved", "It applies the next time someone signs in.");
+    } catch (saveError) {
+      notifyError(
+        "Unable to save device limits",
+        saveError instanceof Error ? saveError.message : "Request failed.",
+      );
+    } finally {
+      setSavingDevices(false);
+    }
+  };
 
   useEffect(() => {
     if (settings) {
@@ -503,6 +541,51 @@ export default function AdminSettingsPage() {
                 />
               </div>
             </div>
+
+            {canManageDevices && (
+              <div className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+                <h2 className="flex items-center gap-2 font-display text-2xl font-bold">
+                  <KeyRound className="h-5 w-5 text-primary" />
+                  Signed-in devices
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  How many devices one account can stay signed in on. Past the limit, the oldest
+                  session is closed. Students genuinely use a phone, a laptop and a tablet — the
+                  limit is there so one shared password can&apos;t serve a whole class.
+                </p>
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  {[
+                    { key: "maxStudentDevices" as const, label: "Students" },
+                    { key: "maxTeacherDevices" as const, label: "Teachers" },
+                    { key: "maxAdminDevices" as const, label: "Admins" },
+                  ].map(({ key, label }) => (
+                    <Input
+                      key={key}
+                      label={label}
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={String(deviceForm[key])}
+                      onChange={(e) =>
+                        setDeviceForm((current) => ({
+                          ...current,
+                          [key]: Number(e.target.value) || current[key],
+                        }))
+                      }
+                    />
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  loading={savingDevices}
+                  loadingText="Saving…"
+                  onClick={() => void onSaveDevices()}
+                >
+                  Save device limits
+                </Button>
+              </div>
+            )}
 
             {canEdit && (
               <Button
