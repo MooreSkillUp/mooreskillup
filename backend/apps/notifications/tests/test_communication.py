@@ -67,20 +67,25 @@ class TestStudentSupport:
         assert listing.json()[0]["title"] == "Cannot play video"
 
     def test_admin_reply_notifies_and_emails_student(self, db):
+        """A reply is deliberate now — it used to ride along with any edit.
+
+        See test_support_privacy: the same box also held notes meant to stay
+        between admins, and those were sent too.
+        """
         student = make_student()
         ticket = SupportTicket.objects.create(
             created_by=student.user, category="technical", title="Help", description="x", status="open"
         )
         admin = make_admin()
         mail.outbox.clear()
-        res = client_for(admin).patch(
-            f"/api/admin/support-tickets/{ticket.id}/",
-            {"status": "resolved", "admin_notes": "Fixed — please refresh."},
+        res = client_for(admin).post(
+            f"/api/admin/support-tickets/{ticket.id}/messages/",
+            {"body": "Fixed — please refresh.", "isInternal": False},
             format="json",
         )
-        assert res.status_code == 200
+        assert res.status_code == 201
         # In-app notification to the student
-        assert Notification.objects.filter(user=student.user, title__icontains="support ticket").exists()
+        assert Notification.objects.filter(user=student.user, body__icontains="please refresh").exists()
         # Email to the student
         assert any(student.user.email in m.to for m in mail.outbox)
 

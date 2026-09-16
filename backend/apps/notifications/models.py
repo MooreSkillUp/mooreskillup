@@ -32,6 +32,9 @@ class BroadcastNotification(UUIDPrimaryKeyModel, TimeStampedModel):
     scheduled_at = models.DateTimeField(null=True, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
+    # How many people it actually reached. The history could say who sent it and
+    # when, but never how many were told.
+    recipient_count = models.PositiveIntegerField(default=0)
 
 
 class SupportTicket(UUIDPrimaryKeyModel, TimeStampedModel):
@@ -61,7 +64,33 @@ class SupportTicket(UUIDPrimaryKeyModel, TimeStampedModel):
     description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="open")
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default="medium")
-    admin_notes = models.TextField(blank=True)
+    # "Assign to me" sent a field the model never had, so every ticket stayed
+    # unowned however many times it was clicked.
+    assigned_to = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="assigned_tickets"
+    )
+    assigned_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("-created_at",)
+
+
+class SupportTicketMessage(UUIDPrimaryKeyModel, TimeStampedModel):
+    """One entry in a ticket's thread — either a reply or a note kept back.
+
+    This replaces a single `admin_notes` box that the admin screen labelled
+    "internal" while the backend emailed its contents to the person who raised
+    the ticket and printed them on their own page under "Support reply".
+    """
+
+    ticket = models.ForeignKey(SupportTicket, on_delete=models.CASCADE, related_name="messages")
+    # The note outlives the admin who wrote it, so the name is kept alongside.
+    author = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="support_messages"
+    )
+    author_name = models.CharField(max_length=255, blank=True)
+    body = models.TextField()
+    is_internal = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("created_at",)

@@ -125,6 +125,10 @@ export interface AdminBroadcast {
   status: string;
   sentAt?: string;
   scheduledAt?: string | null;
+  expiresAt?: string | null;
+  /** Who announced it — the history lists every admin's, not just your own. */
+  sentByName?: string;
+  recipientCount?: number;
 }
 
 export interface AdminTotals {
@@ -208,6 +212,15 @@ export interface AdminTransaction {
   refundReason: string;
 }
 
+export interface SupportTicketMessage {
+  id: string;
+  body: string;
+  /** True means it stays between admins — the person who asked never sees it. */
+  isInternal: boolean;
+  authorName: string;
+  createdAt: string;
+}
+
 export interface AdminSupportTicket {
   id: string;
   category: string;
@@ -215,12 +228,14 @@ export interface AdminSupportTicket {
   description: string;
   status: string;
   priority: string;
-  admin_notes: string;
+  messages: SupportTicketMessage[];
+  assignedToName: string | null;
+  assignedToId: string | null;
+  assignedAt: string | null;
   created_at: string;
   updated_at: string;
   createdBy: string;
   createdByRole: string;
-  assigned_to?: string;
 }
 
 
@@ -631,6 +646,7 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
       description: string;
       audience: "students" | "teachers" | "admins" | "moderators" | "all";
       scheduledAt?: string | null;
+      expiresAt?: string | null;
     }) => {
       const broadcast = await runAction(() =>
         authenticatedRequest<AdminBroadcast>("/api/admin/broadcasts/", {
@@ -644,10 +660,9 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     [runAction],
   );
 
-  const clearBroadcastHistory = useCallback(async () => {
-    await runAction(() => authenticatedRequest("/api/admin/broadcasts/", { method: "DELETE" }));
-    setBroadcasts([]);
-  }, [runAction]);
+  // No clearBroadcastHistory. It deleted the record of what had been announced
+  // — the one place to check what people were already told — behind a button
+  // with no confirmation. Entries can still be removed one at a time.
 
   const deleteBroadcast = useCallback(async (broadcastId: string) => {
     await runAction(() => authenticatedRequest(`/api/admin/broadcasts/${broadcastId}/`, { method: "DELETE" }));
@@ -664,6 +679,45 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     setSupportTickets((current) => current.map((item) => (item.id === ticketId ? ticket : item)));
     return ticket;
   }, [runAction]);
+
+  /**
+   * Add to a ticket's thread. An internal note is kept between admins; a reply
+   * is emailed to the person and lands in their notifications.
+   *
+   * The page used to PATCH `comment` and `is_internal`, neither of which the
+   * API has — so the typed text went nowhere and "Reply sent" was untrue.
+   */
+  const addTicketMessage = useCallback(
+    async (ticketId: string, body: string, isInternal: boolean) => {
+      const message = await runAction(() =>
+        authenticatedRequest<SupportTicketMessage>(`/api/admin/support-tickets/${ticketId}/messages/`, {
+          method: "POST",
+          body: JSON.stringify({ body, isInternal }),
+        }),
+      );
+      setSupportTickets((current) =>
+        current.map((ticket) =>
+          ticket.id === ticketId ? { ...ticket, messages: [...ticket.messages, message] } : ticket,
+        ),
+      );
+      return message;
+    },
+    [runAction],
+  );
+
+  const assignTicket = useCallback(
+    async (ticketId: string, assign: boolean) => {
+      const ticket = await runAction(() =>
+        authenticatedRequest<AdminSupportTicket>(`/api/admin/support-tickets/${ticketId}/assign/`, {
+          method: "POST",
+          body: JSON.stringify({ assign }),
+        }),
+      );
+      setSupportTickets((current) => current.map((item) => (item.id === ticketId ? ticket : item)));
+      return ticket;
+    },
+    [runAction],
+  );
 
   const deleteSupportTicket = useCallback(async (ticketId: string) => {
     await runAction(() => authenticatedRequest(`/api/admin/support-tickets/${ticketId}/`, { method: "DELETE" }));
@@ -765,9 +819,10 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     updateSubcategory,
     deleteSubcategory,
     createBroadcast,
-    clearBroadcastHistory,
     deleteBroadcast,
     updateSupportTicket,
+    addTicketMessage,
+    assignTicket,
     deleteSupportTicket,
     reassignCourse,
     deleteCourse,

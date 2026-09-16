@@ -786,6 +786,13 @@ export function useMyPayments(enabled = true) {
   return { payments, isLoading };
 }
 
+export interface SupportTicketReply {
+  id: string;
+  body: string;
+  authorName: string;
+  createdAt: string;
+}
+
 export interface SupportTicket {
   id: string;
   category: string;
@@ -793,7 +800,8 @@ export interface SupportTicket {
   description: string;
   status: string;
   priority: string;
-  adminNotes: string;
+  /** Replies from support. Notes kept between admins never appear here. */
+  replies: SupportTicketReply[];
   createdAt: string;
 }
 
@@ -828,7 +836,15 @@ export function useStudentTickets(enabled = true) {
             description: String(r.description ?? ""),
             status: String(r.status ?? "open"),
             priority: String(r.priority ?? "medium"),
-            adminNotes: String(r.admin_notes ?? ""),
+            replies: (Array.isArray(r.messages) ? r.messages : []).map((message) => {
+              const m = message as Record<string, unknown>;
+              return {
+                id: String(m.id ?? ""),
+                body: String(m.body ?? ""),
+                authorName: String(m.authorName ?? "Support"),
+                createdAt: String(m.createdAt ?? ""),
+              };
+            }),
             createdAt: String(r.created_at ?? ""),
           };
         }),
