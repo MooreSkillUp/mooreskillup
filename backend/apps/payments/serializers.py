@@ -1,4 +1,5 @@
 
+from django.db import transaction as db_transaction
 from rest_framework import serializers
 
 from apps.courses.models import Course
@@ -20,6 +21,10 @@ class PaymentSerializer(serializers.ModelSerializer):
     paymentMethod = serializers.CharField(source="payment_method", read_only=True)
     paidAt = serializers.DateTimeField(source="paid_at", read_only=True)
     reference = serializers.SerializerMethodField()
+    # "pending" was shown forever on a checkout the student walked away from,
+    # as if we were still waiting for their money.
+    state = serializers.SerializerMethodField()
+    refundedAt = serializers.DateTimeField(source="refunded_at", read_only=True)
 
     class Meta:
         model = Payment
@@ -31,11 +36,20 @@ class PaymentSerializer(serializers.ModelSerializer):
             "currency",
             "paymentMethod",
             "status",
+            "state",
             "description",
             "paidAt",
+            "refundedAt",
             "reference",
             "created_at",
         )
+
+    def get_state(self, obj):
+        from django.utils import timezone
+
+        from .views import payment_state
+
+        return payment_state(obj, timezone.now())
 
     def get_reference(self, obj):
         first_txn = obj.transactions.order_by("-created_at").first()
@@ -53,7 +67,9 @@ class PaymentInitializeSerializer(serializers.Serializer):
             raise serializers.ValidationError({"course_id": "Course not available for purchase."})
         if course.price <= 0:
             raise serializers.ValidationError({"course_id": "Free courses do not require payment."})
-        if Enrollment.objects.filter(student=self.context["request"].user.student_profile, course=course).exists():
+        if Enrollment.objects.with_access().filter(
+            student=self.context["request"].user.student_profile, course=course
+        ).exists():
             raise serializers.ValidationError({"course_id": "Course already unlocked."})
         attrs["course"] = course
         return attrs
@@ -64,32 +80,34 @@ class PaymentInitializeSerializer(serializers.Serializer):
         course = validated_data["course"]
         amount = effective_price(course)  # server-computed; never trust the client
         reference = paystack.new_reference()
-
-        payment = Payment.objects.create(
-            student=student,
-            course=course,
-            amount=amount,
-            currency="NGN",
-            payment_method="paystack",
-            status="pending",
-            description=f"{course.title} full course access",
-        )
         callback_url = validated_data.get("callback_url") or ""
 
-        init = paystack.initialize_transaction(
-            email=request.user.email,
-            amount_kobo=int(amount * 100),
-            reference=reference,
-            callback_url=callback_url,
-            metadata={"course_id": str(course.id), "student_id": str(student.id), "payment_id": str(payment.id)},
-        )
-
-        transaction = Transaction.objects.create(
-            payment=payment,
-            provider="paystack",
-            reference=init["reference"],
-            amount=amount,
-            currency="NGN",
-            authorization_url=init["authorization_url"],
-        )
+        # One unit: if Paystack refuses to start the checkout, no pending
+        # payment is left behind looking like a student who walked away.
+        with db_transaction.atomic():
+            payment = Payment.objects.create(
+                student=student,
+                course=course,
+                amount=amount,
+                currency="NGN",
+                payment_method="paystack",
+                status="pending",
+                description=f"{course.title} full course access",
+                mode=paystack.mode(),
+            )
+            init = paystack.initialize_transaction(
+                email=request.user.email,
+                amount_kobo=int(amount * 100),
+                reference=reference,
+                callback_url=callback_url,
+                metadata={"course_id": str(course.id), "student_id": str(student.id), "payment_id": str(payment.id)},
+            )
+            transaction = Transaction.objects.create(
+                payment=payment,
+                provider="paystack",
+                reference=init["reference"],
+                amount=amount,
+                currency="NGN",
+                authorization_url=init["authorization_url"],
+            )
         return {"payment": payment, "transaction": transaction}

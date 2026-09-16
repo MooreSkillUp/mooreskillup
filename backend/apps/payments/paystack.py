@@ -31,6 +31,16 @@ def is_live():
     return key.startswith("sk_")
 
 
+def mode():
+    """What a payment taken right now would be: live money, a test, or pretend."""
+    key = getattr(settings, "PAYSTACK_SECRET_KEY", "") or ""
+    if key.startswith("sk_live_"):
+        return "live"
+    if key.startswith("sk_"):
+        return "test"
+    return "simulated"
+
+
 def simulation_allowed():
     """Simulated payments are a development convenience, never a deployment.
 
@@ -158,8 +168,10 @@ def verify_signature(raw_body: bytes, signature: str) -> bool:
     if not signature:
         return False
     if not is_live():
-        # In simulation mode we don't receive real webhooks; accept for local testing.
-        return True
+        # Simulation receives no real webhooks, so locally any signature will do.
+        # A deployed server without a key must not: it would accept a forged
+        # charge.success from anyone.
+        return simulation_allowed()
     computed = hmac.new(_secret().encode(), raw_body, hashlib.sha512).hexdigest()
     return hmac.compare_digest(computed, signature)
 

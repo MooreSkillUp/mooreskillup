@@ -734,8 +734,11 @@ export interface StudentPayment {
   amount: number;
   currency: string;
   status: string;
+  /** What happened: paid, refunded, failed, cancelled, awaiting, abandoned. */
+  state: string;
   reference: string | null;
   paidAt: string | null;
+  refundedAt: string | null;
   createdAt: string;
 }
 
@@ -762,8 +765,10 @@ export function useMyPayments(enabled = true) {
               amount: Number(r.amount ?? 0),
               currency: String(r.currency ?? "NGN"),
               status: String(r.status ?? ""),
+              state: String(r.state ?? r.status ?? ""),
               reference: r.reference ? String(r.reference) : null,
               paidAt: r.paidAt ? String(r.paidAt) : null,
+              refundedAt: r.refundedAt ? String(r.refundedAt) : null,
               createdAt: String(r.created_at ?? ""),
             };
           }),

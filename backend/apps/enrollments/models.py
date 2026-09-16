@@ -3,6 +3,17 @@ from django.db import models
 from common.models import TimeStampedModel, UUIDPrimaryKeyModel
 
 
+class EnrollmentQuerySet(models.QuerySet):
+    def with_access(self):
+        """Enrolments that still open the course.
+
+        A refund marks the enrolment "revoked" rather than deleting it, so the
+        student's progress survives a later repurchase. Every check that asked
+        only whether an enrolment existed kept handing the refunded course over.
+        """
+        return self.exclude(status="revoked")
+
+
 class Enrollment(UUIDPrimaryKeyModel, TimeStampedModel):
     ACCESS_CHOICES = (("free", "Free"), ("payment", "Payment"), ("admin_grant", "Admin grant"))
     STATUS_CHOICES = (("active", "Active"), ("completed", "Completed"), ("revoked", "Revoked"))
@@ -15,6 +26,8 @@ class Enrollment(UUIDPrimaryKeyModel, TimeStampedModel):
     completed_at = models.DateTimeField(null=True, blank=True)
     last_accessed_at = models.DateTimeField(null=True, blank=True)
     last_lesson = models.ForeignKey("courses.Lesson", null=True, blank=True, on_delete=models.SET_NULL)
+
+    objects = EnrollmentQuerySet.as_manager()
 
     class Meta:
         unique_together = ("student", "course")

@@ -21,6 +21,7 @@ import {
 } from "recharts";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { useAdminPlatform } from "@/lib/admin-platform";
+import { formatNaira } from "@/lib/commerce";
 
 export default function AdminAnalyticsPage() {
   const { analytics, totals, teachers, students, courses, isLoading, error } = useAdminPlatform();
@@ -64,7 +65,11 @@ export default function AdminAnalyticsPage() {
           <MetricCard icon={GraduationCap} label="Courses" value={`${totals?.courses ?? courses.length}`} />
           <MetricCard icon={TrendingUp} label="Weekly enrollments" value={`${analytics?.weeklyEnrollments ?? 0}`} />
           <MetricCard icon={Activity} label="Average completion" value={`${averageCompletion}%`} />
-          <MetricCard icon={CreditCard} label="Monthly revenue" value={`NGN ${totals?.monthlyRevenue ?? "0.00"}`} />
+          <MetricCard
+            icon={CreditCard}
+            label="Revenue, last 30 days"
+            value={formatNaira(Number(totals?.monthlyRevenue ?? 0))}
+          />
         </div>
 
         {/* Insights strip */}

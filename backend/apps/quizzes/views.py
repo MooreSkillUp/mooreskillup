@@ -35,7 +35,7 @@ from .serializers import (
 def _enrollment_or_none(request, course):
     if not request.user.is_authenticated or getattr(request.user, "role", None) != "student":
         return None
-    return Enrollment.objects.filter(student=request.user.student_profile, course=course).first()
+    return Enrollment.objects.with_access().filter(student=request.user.student_profile, course=course).first()
 
 
 class StudentQuizDetailView(views.APIView):
@@ -116,7 +116,7 @@ class StudentQuizSubmitView(views.APIView):
         # client ask separately and risk showing a stale locked state.
         from apps.progress.views import refresh_course_progress
 
-        enrollment = Enrollment.objects.filter(
+        enrollment = Enrollment.objects.with_access().filter(
             student=attempt.student, course=attempt.quiz.course
         ).first()
         if enrollment:
@@ -138,7 +138,7 @@ class StudentCourseProgressionView(views.APIView):
     permission_classes = [IsStudentUserRole]
 
     def get(self, request, course_id):
-        enrollment = Enrollment.objects.filter(
+        enrollment = Enrollment.objects.with_access().filter(
             student=request.user.student_profile, course_id=course_id
         ).first()
         if not enrollment:

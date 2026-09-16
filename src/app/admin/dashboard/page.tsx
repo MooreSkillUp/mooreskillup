@@ -185,8 +185,13 @@ export default function AdminDashboardPage() {
       value: formatNaira(Number.isFinite(revenue) ? revenue : 0),
       href: "/admin/payments",
       permission: "payments:view",
-      // With no key on the server, every "successful" payment was simulated.
-      hint: systemAlerts.paymentsLive === false ? "Not real charges — payments aren't live" : undefined,
+      // Revenue is live money only; test-key and simulated checkouts are
+      // counted apart so a test purchase never reads as takings.
+      hint: totals?.testPayments
+        ? `Real money only · ${plural(totals.testPayments, "test payment")} not counted`
+        : systemAlerts.paymentsLive === false
+          ? "Payments aren't live yet"
+          : undefined,
     },
   ].filter((tile) => can(tile.permission));
 
