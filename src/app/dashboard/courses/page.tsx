@@ -7,6 +7,7 @@ import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { StudentCourseCard } from "@/components/student/StudentCourseCard";
 import { useAuth } from "@/lib/auth";
+import { useFeatureFlags } from "@/lib/feature-flags";
 import { useFeedback } from "@/lib/feedback";
 import {
   useCatalog,
@@ -79,6 +80,7 @@ export default function StudentCoursesPage() {
   const [tab, setTab] = useState<TabKey>("my-courses");
 
   const isStudent = user?.role === "student";
+  const { flags } = useFeatureFlags();
   const { enrollments, isLoading: myLoading } = useMyCourses(isStudent);
   const { courses: recommended, isLoading: recLoading } = useRecommended(isStudent);
   const {
@@ -151,7 +153,9 @@ export default function StudentCoursesPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {TABS.map(({ key, label, icon: Icon }) => (
+          {/* Recommendations can be switched off platform-wide; the tab used to
+              stay, and simply have nothing in it. */}
+          {TABS.filter(({ key }) => key !== "recommended" || flags.recommendations).map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               type="button"

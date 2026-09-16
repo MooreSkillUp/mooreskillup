@@ -94,9 +94,15 @@ class TestAuditTrail:
         assert res["Content-Type"] == "text/csv"
 
     def test_retention_prunes_old_logs(self, super_admin):
+        """Pruning is a scheduled job now, not something a page load does.
+
+        See test_settings_have_teeth: reading the log used to delete history.
+        """
+        from django.core.management import call_command
+
         old_log = AuditLog.objects.create(action="admin.create", actor_email="old@test.dev")
         AuditLog.objects.filter(id=old_log.id).update(created_at=timezone.now() - timedelta(days=400))
-        client_for(super_admin).get("/api/admin/audit-logs/")
+        call_command("prune_audit_logs")
         assert not AuditLog.objects.filter(id=old_log.id).exists()
 
     def test_audit_survives_actor_deletion(self, super_admin):

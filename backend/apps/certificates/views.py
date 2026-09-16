@@ -38,6 +38,13 @@ class CertificateGenerateView(views.APIView):
                 {"detail": "This course does not offer a certificate."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        from apps.platform.models import PlatformSettings
+
+        if not PlatformSettings.get_solo().feature_certificates_enabled:
+            return response.Response(
+                {"detail": "Certificates are turned off across MooreSkillUp at the moment."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         certificate = issue_certificate(enrollment)
         return response.Response(CertificateSerializer(certificate).data, status=status.HTTP_201_CREATED)
 

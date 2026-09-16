@@ -24,6 +24,56 @@ const RESOURCE_FILTERS = [
   { value: "settings", label: "Settings" },
 ];
 
+/**
+ * Plain words for what was done. The log printed its own internal codes —
+ * "settings.update", "support.note" — which read as a database dump rather
+ * than a record of who did what.
+ */
+const ACTION_LABELS: Record<string, string> = {
+  "admin.create": "Added an admin",
+  "admin.update": "Changed an admin",
+  "admin.delete": "Removed an admin",
+  "admin.role-change": "Changed an admin's rank",
+  "admin.deactivate": "Deactivated an admin",
+  "admin.credentials-resend": "Issued new sign-in details",
+  "audit-logs.export": "Exported the activity log",
+  "auth-settings.update": "Changed sign-in settings",
+  "category.create": "Added a category",
+  "category.update": "Changed a category",
+  "category.delete": "Deleted a category",
+  "certificate.revoke": "Revoked a certificate",
+  "certificate.restore": "Restored a certificate",
+  "course.approve": "Approved a course",
+  "course.decline": "Declined a course",
+  "course.publish": "Published a course",
+  "course.unpublish": "Unpublished a course",
+  "course.archive": "Archived a course",
+  "course.delete": "Deleted a course",
+  "course.reassign": "Moved a course to another teacher",
+  "notification.broadcast": "Sent a broadcast",
+  "notification.schedule": "Scheduled a broadcast",
+  "payment.refund": "Refunded a payment",
+  "review.moderate": "Moderated a review",
+  "settings.update": "Changed platform settings",
+  "student.grant_access": "Gave a student course access",
+  "student.suspend": "Suspended a student",
+  "student.delete": "Deleted a student",
+  "support.assign": "Took on a support ticket",
+  "support.unassign": "Handed back a support ticket",
+  "support.note": "Left a note for admins",
+  "support.reply": "Replied to a support ticket",
+  "support.update": "Updated a support ticket",
+  "support.delete": "Deleted a support ticket",
+  "teacher.create": "Added a teacher",
+  "teacher.update": "Changed a teacher",
+  "teacher.delete": "Removed a teacher",
+};
+
+/** Falls back to the raw code so a new action is never invisible. */
+function actionLabel(action: string) {
+  return ACTION_LABELS[action] ?? action;
+}
+
 function describeChanges(log: AuditLogEntry) {
   const entries = Object.entries(log.changes ?? {});
   if (!entries.length) return null;
@@ -175,7 +225,7 @@ export default function AdminActivityLogsPage() {
                       ) : (
                         <Waves className="h-4 w-4 text-primary" />
                       )}
-                      <span className="font-medium">{log.action}</span>
+                      <span className="font-medium">{actionLabel(log.action)}</span>
                       {log.resourceName && (
                         <span className="text-muted-foreground">· {log.resourceName}</span>
                       )}
