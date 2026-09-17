@@ -127,6 +127,12 @@ jobs:
       # variables, so changing a domain is a settings edit rather than a code
       # change.
       #
+      # The Paystack *public* key is read from either place. It is not secret,
+      # so it belongs in variables — but it was set as a secret, which this step
+      # silently read as empty, and nothing says which of the two a given name
+      # lives in. Accepting both removes a trap whose only symptom is a value
+      # that appears set and never arrives.
+      #
       # The image is pinned to this commit's SHA, which makes a deploy
       # reproducible and a rollback just re-running this workflow from an
       # earlier commit.
@@ -148,7 +154,7 @@ jobs:
             -var="brevo_api_key=${{ secrets.BREVO_API_KEY }}" \
             -var="default_from_email=${{ vars.DEFAULT_FROM_EMAIL }}" \
             -var="paystack_secret_key=${{ secrets.PAYSTACK_SECRET_KEY }}" \
-            -var="paystack_public_key=${{ vars.PAYSTACK_PUBLIC_KEY }}" \
+            -var="paystack_public_key=${{ secrets.PAYSTACK_PUBLIC_KEY || vars.PAYSTACK_PUBLIC_KEY }}" \
             -var="api_image=${{ env.ACR_NAME }}.azurecr.io/api:${{ github.sha }}"
 
       - name: Read the API URL
