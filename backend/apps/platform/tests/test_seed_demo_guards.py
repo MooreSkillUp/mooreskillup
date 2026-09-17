@@ -35,10 +35,21 @@ def test_a_live_site_with_nobody_on_it_can_be_seeded(db):
 
 def test_the_public_password_is_never_used_on_a_live_site(db):
     """It is in a public repository. It cannot be the way in to a real site."""
-    seed(allow_live=True)
+    output = seed(allow_live=True)
 
     demo_admin = User.objects.get(email="admin@demo.mooreskillup.test")
     assert not demo_admin.check_password(DEMO_PASSWORD)
+    # And it must not be *printed* either: the report used to end by echoing the
+    # constant, so a live seeding announced two passwords, one of which was the
+    # published one that no longer opens anything.
+    assert DEMO_PASSWORD not in output
+
+
+def test_the_password_it_prints_is_the_one_that_works(db):
+    output = seed(allow_live=True)
+
+    printed = output.split("Password for all of them:")[1].split("\n")[0].strip()
+    assert User.objects.get(email="admin@demo.mooreskillup.test").check_password(printed)
 
 
 def test_a_chosen_password_is_honoured(db):
