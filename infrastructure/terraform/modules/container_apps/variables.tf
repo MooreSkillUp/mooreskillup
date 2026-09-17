@@ -127,6 +127,13 @@ variable "paystack_secret_key" {
   description = "Paystack secret key (sk_test_… or sk_live_…). Empty means checkout refuses to take payments."
 }
 
+variable "admin_registration_token" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Shared secret for the public admin sign-up page. Empty keeps that page closed, which is the safe default."
+}
+
 variable "paystack_public_key" {
   type        = string
   default     = ""

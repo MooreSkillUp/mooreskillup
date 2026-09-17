@@ -25,6 +25,7 @@ Repository → Settings → Secrets and variables → Actions.
 |---|---|
 | `BREVO_API_KEY` | Brevo → SMTP & API → API keys → Create a new API key (v3) |
 | `PAYSTACK_SECRET_KEY` | Paystack → Settings → API Keys & Webhooks → **Secret key** |
+| `ADMIN_REGISTRATION_TOKEN` | Optional. A long random string you invent. See step 2 |
 
 **Variables** (visible):
 
@@ -103,8 +104,9 @@ redirected back. Without it, some payments stay "pending" until they return.
 
 ## 2. Create the first Super Admin
 
-There's no admin yet, and the public admin sign-up page can't work in production (it needs
-`ADMIN_REGISTRATION_TOKEN`, which the deploy doesn't pass). Use the bootstrap command.
+There's no admin yet. Two ways in — pick one.
+
+### Either: the command (nothing to leave lying around)
 
 Find the container app, then run it:
 
@@ -121,6 +123,24 @@ It prints a password **once**. Sign in with it; you'll be asked to change it.
 
 Running it again is safe: an existing account is promoted to Super Admin and its password
 is left alone.
+
+### Or: the admin sign-up page, with a token
+
+Set the `ADMIN_REGISTRATION_TOKEN` secret to a long random string, deploy, then go to
+`/auth/admin-register` and register with that token in the form.
+
+**What that token is:** a password for *becoming an admin*. Anyone who has it — anyone it
+gets forwarded to, anyone who sees it on a screen — can create an admin account on your
+platform, with no approval from you. It has no expiry and no audit trail of its own.
+
+So if you use it:
+
+- make it long and random (`openssl rand -base64 32`), never a phrase you'd recognise;
+- use it once, for yourself;
+- **then clear the secret and redeploy** — an empty value closes the page again;
+- add everyone else from Admin → Admin team, where every change is recorded against a name.
+
+Left empty (the default), that page refuses every attempt, which is the safe state.
 
 ---
 

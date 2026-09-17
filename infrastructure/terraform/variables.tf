@@ -140,3 +140,10 @@ variable "paystack_public_key" {
   default     = ""
   description = "Paystack public key (pk_test_… or pk_live_…)."
 }
+
+variable "admin_registration_token" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Shared secret for the public admin sign-up page. Empty keeps that page closed; anyone with this value can create an admin account."
+}

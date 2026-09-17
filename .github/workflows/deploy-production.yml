@@ -155,6 +155,7 @@ jobs:
             -var="default_from_email=${{ vars.DEFAULT_FROM_EMAIL }}" \
             -var="paystack_secret_key=${{ secrets.PAYSTACK_SECRET_KEY }}" \
             -var="paystack_public_key=${{ secrets.PAYSTACK_PUBLIC_KEY || vars.PAYSTACK_PUBLIC_KEY }}" \
+            -var="admin_registration_token=${{ secrets.ADMIN_REGISTRATION_TOKEN }}" \
             -var="api_image=${{ env.ACR_NAME }}.azurecr.io/api:${{ github.sha }}"
 
       - name: Read the API URL
