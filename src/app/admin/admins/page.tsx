@@ -2,9 +2,10 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { KeyRound, Mail, ScrollText, Shield, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { KeyRound, Mail, ScrollText, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { CredentialHandoff, type Handoff } from "@/components/admin/CredentialHandoff";
 import { AppShell } from "@/components/dashboard/AppShell";
+import { NoAccessPanel } from "@/components/shared/NoAccessPanel";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { PasswordInput } from "@/components/ui-kit/PasswordInput";
@@ -156,7 +157,11 @@ export default function AdminTeamPage() {
           <div>
             <h1 className="font-display text-2xl font-bold sm:text-3xl">Admin team</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {isLoading ? "Loading…" : `${admins.length} ${admins.length === 1 ? "member" : "members"}`}
+              {!canView
+                ? "Super Admins only"
+                : isLoading
+                  ? "Loading…"
+                  : `${admins.length} ${admins.length === 1 ? "member" : "members"}`}
             </p>
             {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
           </div>
@@ -168,10 +173,10 @@ export default function AdminTeamPage() {
         </header>
 
         {!canView ? (
-          <div className="rounded-2xl border border-border bg-card p-8 text-center">
-            <Shield className="mx-auto h-8 w-8 text-muted-foreground" />
-            <p className="mt-3 font-medium">Only a Super Admin manages the admin team</p>
-          </div>
+          <NoAccessPanel
+            title="Only a Super Admin manages the admin team"
+            detail="You can see everything else in the admin workspace; adding, editing and removing admins is kept to Super Admins."
+          />
         ) : (
           <>
             {handoff && <CredentialHandoff handoff={handoff} onDone={() => setHandoff(null)} />}

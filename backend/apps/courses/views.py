@@ -104,13 +104,19 @@ def transition_course_or_error(course, next_status, next_visibility, request):
             button_label="Open the course" if approved else "Edit your course",
             button_url=frontend_url(f"/teacher/courses/{course.id}/edit"),
         )
-        # Also drop an in-app notification so the teacher sees the reason in their bell.
-        if not approved:
-            _notify_course_owner(
-                course,
-                f"Course declined — {course.title}",
-                decline_reason or "Your course was sent back for changes. Please review and resubmit.",
-            )
+        # The bell too, either way. Approval used to be email-only, so a teacher
+        # who lives in the app — or whose mail went to spam — never learned their
+        # course had gone live. The email above is the only email: calling
+        # _notify_course_owner here would send a second, near-identical one.
+        _notify_course_owner_in_app(
+            course,
+            f"Course approved — {course.title}" if approved else f"Course declined — {course.title}",
+            (
+                f"“{course.title}” is approved and live for learners."
+                if approved
+                else decline_reason or "Your course was sent back for changes. Please review and resubmit."
+            ),
+        )
 
     return response.Response(
         CourseSerializer(course, context={"request": request}).data,
@@ -647,11 +653,18 @@ def notify_admins(title, body):
     )
 
 
-def _notify_course_owner(course, title, body):
+def _notify_course_owner_in_app(course, title, body):
+    """In-app notification only, for paths that send their own email."""
     from apps.notifications.models import Notification
 
     if course.teacher and course.teacher.user:
         Notification.objects.create(user=course.teacher.user, title=title, body=body, kind="course")
+
+
+def _notify_course_owner(course, title, body):
+    _notify_course_owner_in_app(course, title, body)
+
+    if course.teacher and course.teacher.user:
         from common.email import frontend_url, send_transactional_email
 
         send_transactional_email(

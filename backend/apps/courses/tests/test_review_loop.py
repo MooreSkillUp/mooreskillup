@@ -211,3 +211,56 @@ def test_the_admin_chrome_gets_its_counts_without_the_course_list(loop):
 def test_a_teacher_cannot_read_the_admin_alerts(loop):
     teacher_user, _, _ = loop
     assert client_for(teacher_user).get("/api/admin/alerts/").status_code in (401, 403)
+
+
+def approve(reviewer, course):
+    return client_for(reviewer).post(f"/api/admin/courses/{course.id}/approve/")
+
+
+def test_approving_reaches_the_teachers_bell(loop):
+    """Approval used to send an email and nothing else.
+
+    A teacher who works inside the app — or whose mail lands in spam — never
+    learned their course had gone live, while a decline always showed up. Good
+    news has to travel the same way bad news does.
+    """
+    from apps.notifications.models import Notification
+
+    teacher_user, course, admin = loop
+    submit(teacher_user, course)
+    Notification.objects.filter(user=teacher_user).delete()
+
+    response = approve(admin, course)
+    assert response.status_code == 200, response.data
+
+    notifications = Notification.objects.filter(user=teacher_user)
+    assert notifications.count() == 1
+    assert course.title in notifications.first().title
+
+
+def test_declining_emails_the_teacher_once(loop):
+    """The decline path sent two near-identical emails about one decline."""
+    from django.core import mail
+
+    teacher_user, course, admin = loop
+    submit(teacher_user, course)
+    mail.outbox.clear()
+
+    response = decline(admin, course, "Add a length to every lesson.")
+    assert response.status_code == 200, response.data
+
+    assert len(mail.outbox) == 1, [message.subject for message in mail.outbox]
+    assert "declined" in mail.outbox[0].subject.lower()
+
+
+def test_approving_emails_the_teacher_once(loop):
+    """The in-app notification must not have brought a second email with it."""
+    from django.core import mail
+
+    teacher_user, course, admin = loop
+    submit(teacher_user, course)
+    mail.outbox.clear()
+
+    assert approve(admin, course).status_code == 200
+    assert len(mail.outbox) == 1, [message.subject for message in mail.outbox]
+    assert "approved" in mail.outbox[0].subject.lower()

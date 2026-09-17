@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Download, GiftIcon, PencilLine, Search, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
+import { NoAccessPanel } from "@/components/shared/NoAccessPanel";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { hasUserPermission, type AdminResourceAction } from "@/lib/admin-rbac";
@@ -52,6 +53,10 @@ export default function AdminStudentsPage() {
   const [expanded, setExpanded] = useState<Expanded>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminStudent | null>(null);
+  // Suspending cuts a paying student off from everything they bought, and it
+  // sat one click away from Delete with nothing in between. Reactivating is
+  // harmless, so only suspension asks.
+  const [suspendTarget, setSuspendTarget] = useState<AdminStudent | null>(null);
 
   const canEdit = can("students:edit");
   // Bulk suspension is its own permission in the matrix (super admin only);
@@ -155,6 +160,16 @@ export default function AdminStudentsPage() {
 
   const pageIds = visible.map((student) => student.id);
   const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+
+  // Without this permission the data is never fetched, so the page used to
+  // render its empty state and report zeros that were not true.
+  if (!hasUserPermission(user?.permissions, "students:view")) {
+    return (
+      <AppShell allowedRoles={["admin"]}>
+        <NoAccessPanel title="You do not have access to students" detail="Student records are available to Admins and Super Admins." />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell allowedRoles={["admin"]}>
@@ -346,7 +361,9 @@ export default function AdminStudentsPage() {
                           loading={busy === `${student.id}:status`}
                           loadingText="Working…"
                           disabled={rowBusy}
-                          onClick={() => void setStatus(student, active ? "disabled" : "active")}
+                          onClick={() =>
+                            active ? setSuspendTarget(student) : void setStatus(student, "active")
+                          }
                         >
                           {active ? "Suspend" : "Reactivate"}
                         </Button>
@@ -423,6 +440,17 @@ export default function AdminStudentsPage() {
           )}
         </section>
       </div>
+
+      {suspendTarget && (
+        <SuspendStudentDialog
+          student={suspendTarget}
+          onCancel={() => setSuspendTarget(null)}
+          onConfirm={async () => {
+            await setStatus(suspendTarget, "disabled");
+            setSuspendTarget(null);
+          }}
+        />
+      )}
 
       {deleteTarget && (
         <DeleteStudentDialog
@@ -536,6 +564,59 @@ function GrantCourseForm({
         <Button variant="outline" size="sm" onClick={onCancel}>
           Cancel
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function SuspendStudentDialog({
+  student,
+  onConfirm,
+  onCancel,
+}: {
+  student: AdminStudent;
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [working, setWorking] = useState(false);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={() => !working && onCancel()}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="suspend-student-title"
+        className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2 id="suspend-student-title" className="font-display text-lg font-bold">
+          Suspend {student.displayName}?
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          They will be signed out and locked out of every course they are enrolled in, including
+          any they paid for. Their progress and certificates are kept, and you can reactivate them
+          at any time.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" disabled={working} onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            variant="accent"
+            loading={working}
+            loadingText="Suspending…"
+            autoFocus
+            onClick={() => {
+              setWorking(true);
+              void onConfirm().finally(() => setWorking(false));
+            }}
+          >
+            Suspend
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { BellRing, Search, Sparkles, Trash2, Users } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
+import { NoAccessPanel } from "@/components/shared/NoAccessPanel";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui-kit/Button";
 import {
@@ -137,6 +138,16 @@ export default function BroadcastNotificationsPage() {
       setBusy(false);
     }
   };
+
+  // Without this permission the data is never fetched, so the page used to
+  // render its empty state and report zeros that were not true.
+  if (!hasUserPermission(user?.permissions, "notifications:view")) {
+    return (
+      <AppShell allowedRoles={["admin"]}>
+        <NoAccessPanel title="You do not have access to broadcasts" detail="Announcements are sent by Admins and Super Admins." />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell allowedRoles={["admin"]}>
