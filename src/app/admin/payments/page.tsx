@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { AppShell } from "@/components/dashboard/AppShell";
+import { NoAccessPanel } from "@/components/shared/NoAccessPanel";
+import { hasUserPermission } from "@/lib/admin-rbac";
 import { Button } from "@/components/ui-kit/Button";
 import { authenticatedRequest, buildApiUrl, getAccessToken } from "@/lib/authenticated-api";
 import { formatNaira } from "@/lib/commerce";
@@ -139,6 +141,16 @@ export default function AdminPaymentsPage() {
     setter(value);
     setPage(1);
   };
+
+  // Without this permission the data is never fetched, so the page used to
+  // render its empty state and report zeros that were not true.
+  if (!hasUserPermission(user?.permissions, "payments:view")) {
+    return (
+      <AppShell allowedRoles={["admin"]}>
+        <NoAccessPanel title="You do not have access to payments" detail="Purchases and refunds are available to Admins and Super Admins." />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell allowedRoles={["admin"]}>

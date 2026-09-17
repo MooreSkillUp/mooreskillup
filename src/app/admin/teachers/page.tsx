@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { CredentialHandoff, type Handoff } from "@/components/admin/CredentialHandoff";
 import { AppShell } from "@/components/dashboard/AppShell";
+import { NoAccessPanel } from "@/components/shared/NoAccessPanel";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { PasswordInput } from "@/components/ui-kit/PasswordInput";
@@ -159,6 +160,16 @@ function TeachersView() {
       kind === "remove" ? "Could not delete teacher" : "Could not update teacher",
     );
   };
+
+  // Without this permission the data is never fetched, so the page used to
+  // render its empty state and report zeros that were not true.
+  if (!hasUserPermission(user?.permissions, "teachers:view")) {
+    return (
+      <AppShell allowedRoles={["admin"]}>
+        <NoAccessPanel title="You do not have access to teachers" detail="Teacher records are available to Admins and Super Admins." />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell allowedRoles={["admin"]}>
