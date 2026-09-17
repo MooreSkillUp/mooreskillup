@@ -37,6 +37,53 @@ Repository → Settings → Secrets and variables → Actions.
 when you're ready to take real money. Live keys need Paystack business verification, so
 start that paperwork early if it isn't done.
 
+### Getting the two email values out of Brevo
+
+**The API key** (not SMTP credentials — the API talks to Brevo over HTTP):
+
+1. Brevo → click your name, top right → **SMTP & API**
+2. **API keys** tab → **Generate a new API key**
+3. Name it something you'll recognise later, e.g. `mooreskillup-production`
+4. Copy it — it starts `xkeysib-` and is shown **once**
+5. GitHub → Settings → Secrets and variables → Actions → **New repository secret** → `BREVO_API_KEY`
+
+**The From address.** Brevo refuses to send from an address you haven't proved you own.
+
+*Now, before you have a domain:* Brevo → **Senders, Domains & Dedicated IPs** → **Senders** →
+**Add a sender** → your name and the address you already use (e.g. `mooreskillup@gmail.com`).
+Brevo emails that address a confirmation link; click it, and the sender is verified. Then set
+the variable:
+
+```
+DEFAULT_FROM_EMAIL = MooreSkillUp <mooreskillup@gmail.com>
+```
+
+That format — name, then the address in angle brackets — is what students see in their inbox.
+
+> **Expect some messages to land in spam while you send from a `@gmail.com` address.**
+> Gmail publishes rules saying only Google may send as `@gmail.com`; Brevo isn't Google, so
+> receiving servers treat it with suspicion. Fine for testing with your own team. Not fine
+> for real students.
+
+*Later, when the domain arrives:* Brevo → **Domains** → add it → Brevo gives you DNS records
+(DKIM, SPF, and a DMARC record) to paste at your registrar → verify. Then change
+`DEFAULT_FROM_EMAIL` to something like `MooreSkillUp <no-reply@yourdomain.com>` and redeploy.
+**That's a settings change, not a code change** — nothing else needs touching.
+
+### Check it actually arrives
+
+Settings are believable only after a message lands. Once deployed:
+
+```bash
+az containerapp exec \
+  --name mooreskillup-prod-api --resource-group rg-mooreskillup-prod \
+  --command "python manage.py send_test_email --to you@yourdomain"
+```
+
+It prints which backend and which From address it used, then sends one real message. Go and
+look — **check the spam folder too**, and note which one it landed in. If the backend still
+says `console`, the key didn't reach the container: check the secret name and redeploy.
+
 Then: **Actions → Deploy → Run workflow.** The variables are applied to the running
 container by that deploy, not before.
 

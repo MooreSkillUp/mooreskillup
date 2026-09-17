@@ -29,6 +29,18 @@ def choose_email_backend(explicit_backend: str, brevo_api_key: str) -> str:
     return CONSOLE
 
 
+def sender_address(configured: str, fallback: str) -> str:
+    """The From address, treating an empty setting as unset.
+
+    The deploy passes every variable explicitly, so an unset one arrives as an
+    empty string rather than being absent — and an empty environment variable
+    beats a `getenv` default. Production therefore ran with DEFAULT_FROM_EMAIL
+    set to "", which is invisible until the day a Brevo key is added and every
+    message is refused for having no sender.
+    """
+    return configured.strip() or fallback
+
+
 def backend_delivers(backend: str) -> bool:
     """Whether mail sent through this backend reaches a person.
 

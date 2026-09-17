@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from common.mail_backend import backend_delivers, choose_email_backend
+from common.mail_backend import backend_delivers, choose_email_backend, sender_address
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -180,7 +180,9 @@ PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
 PAYSTACK_PUBLIC_KEY = os.getenv("PAYSTACK_PUBLIC_KEY", "")
 PAYSTACK_BASE_URL = os.getenv("PAYSTACK_BASE_URL", "https://api.paystack.co")
 EMAIL_SITE_NAME = os.getenv("EMAIL_SITE_NAME", "MooreSkillUp")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "mooreskillup@gmail.com")
+DEFAULT_FROM_EMAIL = sender_address(
+    os.getenv("DEFAULT_FROM_EMAIL", ""), "mooreskillup@gmail.com"
+)
 
 ANYMAIL = {
     "BREVO_API_KEY": os.getenv("BREVO_API_KEY", ""),
