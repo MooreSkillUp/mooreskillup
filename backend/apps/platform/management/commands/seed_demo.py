@@ -15,6 +15,7 @@ can find them again without touching anything real.
 """
 
 import random
+import secrets
 from datetime import timedelta
 from decimal import Decimal
 
@@ -95,13 +96,38 @@ class Command(BaseCommand):
             action="store_true",
             help="Skip the DEBUG guard. The hostname and settings-module guards still apply.",
         )
+        parser.add_argument(
+            "--seed-a-live-site-before-launch",
+            action="store_true",
+            dest="allow_live",
+            help=(
+                "Seed a deployed site that has no real users yet, so a team can test it. "
+                "Refuses outright once any real student, teacher or payment exists, and "
+                "never uses the shared password."
+            ),
+        )
+        parser.add_argument(
+            "--password",
+            default="",
+            help="Password for every demo account. Generated when seeding a live site.",
+        )
 
     def handle(self, *args, **options):
-        self._refuse_if_production(force=options["force"])
+        self.allow_live = options["allow_live"]
+        if self.allow_live:
+            self._refuse_if_anyone_real_is_here()
+        else:
+            self._refuse_if_production(force=options["force"])
 
         if options["wipe"]:
             self._wipe()
             return
+
+        # The shared password is published in a public repository, so it can
+        # never be the way into a site that is reachable from the internet.
+        self.password = options["password"].strip() or (
+            secrets.token_urlsafe(9) if self.allow_live else DEMO_PASSWORD
+        )
 
         with transaction.atomic():
             categories = self._seed_taxonomy()
@@ -222,6 +248,33 @@ class Command(BaseCommand):
 
     # -- guards ---------------------------------------------------------------
 
+    def _refuse_if_anyone_real_is_here(self):
+        """The one condition under which seeding a deployed site is defensible.
+
+        Before launch a live site is just an empty shop: nothing to damage, and
+        a team cannot test a platform with no courses in it. After launch the
+        same command would drop fake students and fake progress in among real
+        ones, which is very hard to undo and impossible to explain.
+
+        So the test is not "which environment is this" — it is "is anybody
+        here". Admin accounts are ignored: the owner of the platform is exactly
+        who runs this.
+        """
+        from apps.payments.models import Payment
+
+        real_people = (
+            User.objects.exclude(email__endswith=f"@{DEMO_DOMAIN}")
+            .exclude(role="admin")
+            .count()
+        )
+        payments = Payment.objects.count()
+        if real_people or payments:
+            raise CommandError(
+                f"Refusing to seed: this database already has {real_people} real "
+                f"student/teacher account(s) and {payments} payment(s). Demo data belongs "
+                "only on a site nobody is using yet."
+            )
+
     def _refuse_if_production(self, *, force: bool):
         """Three independent checks. Any one of them stops the command.
 
@@ -315,7 +368,7 @@ class Command(BaseCommand):
             },
         )
         if created:
-            user.set_password(DEMO_PASSWORD)
+            user.set_password(self.password)
             user.save()
         profile, _ = TeacherProfile.objects.get_or_create(
             user=user, defaults={"program": "Web Development", "track": "Frontend Development"}
@@ -351,7 +404,7 @@ class Command(BaseCommand):
                 },
             )
             if is_new:
-                user.set_password(DEMO_PASSWORD)
+                user.set_password(self.password)
             # Demo admins skip the first-login password prompt: it is a real
             # flow worth testing, but not on every reseed of a throwaway box.
             user.must_change_password = False
@@ -504,7 +557,7 @@ class Command(BaseCommand):
                 },
             )
             if created:
-                user.set_password(DEMO_PASSWORD)
+                user.set_password(self.password)
                 user.save()
             profile, _ = StudentProfile.objects.get_or_create(
                 user=user,
@@ -686,6 +739,19 @@ class Command(BaseCommand):
         for profile, pace, _name in students:
             email = profile.user.email
             self.stdout.write(f"  {'student':<9} {email:<34} {described[pace]}")
+        self.stdout.write("")
+        self.stdout.write(f"  Password for all of them: {self.password}")
+        if self.allow_live:
+            self.stdout.write("")
+            self.stdout.write(
+                self.style.WARNING(
+                    "That password is shown once and exists nowhere else — keep it somewhere "
+                    "your testers can reach.\n"
+                    "These accounts are reachable from the internet. Remove them before real "
+                    "students arrive:\n"
+                    "  python manage.py seed_demo --wipe --seed-a-live-site-before-launch"
+                )
+            )
         self.stdout.write("")
         self.stdout.write(f"  Password for all of them: {DEMO_PASSWORD}")
         self.stdout.write("")
