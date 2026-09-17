@@ -753,6 +753,4 @@ class Command(BaseCommand):
                 )
             )
         self.stdout.write("")
-        self.stdout.write(f"  Password for all of them: {DEMO_PASSWORD}")
-        self.stdout.write("")
         self.stdout.write("  Remove it all again with:  python manage.py seed_demo --wipe")
