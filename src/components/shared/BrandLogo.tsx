@@ -10,7 +10,10 @@ const SIZES = {
   lg: { width: 200, height: 58, tagline: "text-xs tracking-[0.2em]" },
 } as const;
 
-export const BRAND_TAGLINE = "Learn • Build • Grow";
+// The one place the tagline lives. "Learn • Build • Grow" was retired in
+// September 2026: the team found it generic, and it said nothing about what
+// MooreSkillUp actually sells.
+export const BRAND_TAGLINE = "Skills Beyond the Classroom";
 
 /**
  * The MooreSkillUp wordmark — the one place the logo is drawn.
