@@ -17,6 +17,7 @@ import { Input } from "@/components/ui-kit/Input";
 import { useAuth } from "@/lib/auth";
 import { generateCertificatePdf } from "@/lib/certificate";
 import { useFeedback } from "@/lib/feedback";
+import { describeOutstanding, useProgression } from "@/lib/quizzes";
 import { useMyCertificates, useMyCourses } from "@/lib/student";
 import { cn } from "@/lib/utils";
 
@@ -172,20 +173,10 @@ export default function CertificatesPage() {
                 </h2>
                 <div className="grid gap-5 sm:grid-cols-2">
                   {inProgress.map((enrollment) => (
-                    <CertificateCard
+                    <LockedCertificate
                       key={enrollment.enrollmentId}
-                      locked
-                      title={enrollment.course.title}
-                      track={enrollment.course.program}
+                      enrollment={enrollment}
                       recipient={user?.fullName || ""}
-                      progressPercent={enrollment.progressPercent}
-                      actions={
-                        <Link href={`/course/${enrollment.course.id}`}>
-                          <Button variant="outline" size="sm">
-                            Continue course
-                          </Button>
-                        </Link>
-                      }
                     />
                   ))}
                 </div>
@@ -200,6 +191,52 @@ export default function CertificatesPage() {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * A certificate still being worked toward — and, crucially, what is left.
+ *
+ * This card used to blur the credential and print a percentage, which is how a
+ * student could finish every lesson, read "100% complete", and be left staring
+ * at a locked certificate with no idea that a final assessment stood in the
+ * way. Now it names the next thing and links straight to it.
+ */
+function LockedCertificate({
+  enrollment,
+  recipient,
+}: {
+  enrollment: { enrollmentId: string; progressPercent: number; course: { id: string; title: string; program?: string } };
+  recipient: string;
+}) {
+  const { state } = useProgression(enrollment.course.id);
+  const next = state?.outstanding?.[0];
+  const step = next ? describeOutstanding(next) : null;
+
+  return (
+    <CertificateCard
+      locked
+      title={enrollment.course.title}
+      track={enrollment.course.program}
+      recipient={recipient}
+      progressPercent={enrollment.progressPercent}
+      requirement={step?.text}
+      actions={
+        step?.href ? (
+          <Link href={step.href}>
+            <Button variant="accent" size="sm">
+              {next?.kind === "final" ? "Take the final assessment" : "Take the quiz"}
+            </Button>
+          </Link>
+        ) : (
+          <Link href={`/course/${enrollment.course.id}`}>
+            <Button variant="outline" size="sm">
+              Continue course
+            </Button>
+          </Link>
+        )
+      }
+    />
+  );
+}
+
 function CertificateCard({
   title,
   track,
@@ -208,6 +245,7 @@ function CertificateCard({
   actions,
   locked = false,
   progressPercent,
+  requirement,
 }: {
   title: string;
   track?: string;
@@ -216,6 +254,8 @@ function CertificateCard({
   actions: React.ReactNode;
   locked?: boolean;
   progressPercent?: number;
+  /** What is still standing in the way, in words the student can act on. */
+  requirement?: string;
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -260,6 +300,11 @@ function CertificateCard({
                 ? `${Math.round(progressPercent)}% complete`
                 : "Locked"}
             </span>
+            {requirement && (
+              <span className="mx-4 rounded-full bg-card px-3 py-1 text-center text-[11px] font-medium text-muted-foreground shadow-sm">
+                {requirement}
+              </span>
+            )}
           </div>
         )}
 

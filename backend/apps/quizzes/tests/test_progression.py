@@ -216,3 +216,111 @@ class TestMaterialAlreadyCovered:
         assert sections[0].id in open_ids
         assert sections[1].id not in open_ids
         assert sections[2].id not in open_ids
+
+
+# --- What is still outstanding, and what the progress number means -----------
+#
+# A student finished every lesson of a course whose certificate also needs a
+# final assessment. The screen said 100%, the certificate stayed locked, and
+# nothing anywhere said why — because progress counted lessons only, and no
+# screen linked to the final. These pin both halves.
+
+
+def test_progress_is_not_complete_while_the_final_assessment_is_outstanding(course_with_sections):
+    from apps.progress.views import refresh_course_progress
+
+    data = course_with_sections
+    build_quiz(data["course"], kind="final")
+    for section in data["sections"]:
+        complete_lessons(data["enrollment"], section)
+
+    progress = refresh_course_progress(data["enrollment"])
+
+    assert progress.is_completed is False
+    # Every lesson is done, so a lesson-only count reads 100. It must not.
+    assert progress.progress_percent < 100
+
+
+def test_progress_reaches_100_once_the_final_is_passed(course_with_sections):
+    from apps.progress.views import refresh_course_progress
+
+    data = course_with_sections
+    final = build_quiz(data["course"], kind="final")
+    for section in data["sections"]:
+        complete_lessons(data["enrollment"], section)
+    QuizAttempt.objects.create(
+        quiz=final, student=data["student"], passed=True, submitted_at=timezone.now()
+    )
+
+    progress = refresh_course_progress(data["enrollment"])
+
+    assert progress.is_completed is True
+    assert progress.progress_percent == 100
+
+
+def test_outstanding_names_the_final_assessment(course_with_sections):
+    from apps.quizzes.progression import outstanding_requirements
+
+    data = course_with_sections
+    final = build_quiz(data["course"], kind="final")
+    for section in data["sections"]:
+        complete_lessons(data["enrollment"], section)
+
+    outstanding = outstanding_requirements(data["enrollment"])
+
+    assert [item["kind"] for item in outstanding] == ["final"]
+    assert outstanding[0]["quizId"] == str(final.id)
+
+
+def test_outstanding_names_an_unpassed_section_quiz(course_with_sections):
+    from apps.quizzes.progression import outstanding_requirements
+
+    data = course_with_sections
+    quiz = build_quiz(data["course"], data["sections"][0])
+    complete_lessons(data["enrollment"], data["sections"][0])
+
+    outstanding = outstanding_requirements(data["enrollment"])
+    section_items = [item for item in outstanding if item["kind"] == "section_quiz"]
+
+    assert len(section_items) == 1
+    assert section_items[0]["quizId"] == str(quiz.id)
+    assert section_items[0]["sectionTitle"] == data["sections"][0].title
+
+
+def test_outstanding_counts_remaining_lessons(course_with_sections):
+    from apps.quizzes.progression import outstanding_requirements
+
+    data = course_with_sections
+    complete_lessons(data["enrollment"], data["sections"][0])
+
+    lessons = [i for i in outstanding_requirements(data["enrollment"]) if i["kind"] == "lessons"]
+
+    assert lessons and lessons[0]["remaining"] == 4
+
+
+def test_nothing_outstanding_once_the_course_is_finished(course_with_sections):
+    from apps.quizzes.progression import outstanding_requirements
+
+    data = course_with_sections
+    final = build_quiz(data["course"], kind="final")
+    for section in data["sections"]:
+        complete_lessons(data["enrollment"], section)
+    QuizAttempt.objects.create(
+        quiz=final, student=data["student"], passed=True, submitted_at=timezone.now()
+    )
+
+    assert outstanding_requirements(data["enrollment"]) == []
+
+
+def test_progression_state_carries_what_is_outstanding(course_with_sections):
+    from apps.quizzes.progression import progression_state
+
+    data = course_with_sections
+    build_quiz(data["course"], kind="final")
+    for section in data["sections"]:
+        complete_lessons(data["enrollment"], section)
+
+    state = progression_state(data["enrollment"])
+
+    assert state["certificateEarned"] is False
+    assert [item["kind"] for item in state["outstanding"]] == ["final"]
