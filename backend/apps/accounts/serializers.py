@@ -68,6 +68,20 @@ class AdminStudentSerializer(serializers.ModelSerializer):
     # Recorded from the first sign-in after last_login started being stamped;
     # empty means "not since then", not "never".
     lastSignedInAt = serializers.DateTimeField(source="user.last_login", read_only=True)
+    # Where each signup came from, both ways: what they said, and where the
+    # click came from. Exported with the student list, so the question "which
+    # flyer worked" is answered by a spreadsheet rather than a dashboard nobody
+    # had time to build.
+    whatsappNumber = serializers.CharField(source="whatsapp_number", read_only=True)
+    heardAboutUs = serializers.CharField(source="heard_about_us", read_only=True)
+    heardAboutUsDetail = serializers.CharField(source="heard_about_us_detail", read_only=True)
+    utmSource = serializers.CharField(source="utm_source", read_only=True)
+    utmMedium = serializers.CharField(source="utm_medium", read_only=True)
+    utmCampaign = serializers.CharField(source="utm_campaign", read_only=True)
+    foundingMemberNumber = serializers.IntegerField(source="founding_member_number", read_only=True)
+    referredByUsername = serializers.CharField(
+        source="referred_by.user.username", read_only=True, default=""
+    )
 
     class Meta:
         model = StudentProfile
@@ -86,6 +100,14 @@ class AdminStudentSerializer(serializers.ModelSerializer):
             "enrolledCourses",
             "completedCourses",
             "totalPayments",
+            "whatsappNumber",
+            "heardAboutUs",
+            "heardAboutUsDetail",
+            "utmSource",
+            "utmMedium",
+            "utmCampaign",
+            "foundingMemberNumber",
+            "referredByUsername",
         )
 
     def get_status(self, obj):
@@ -402,6 +424,13 @@ class RegisterSerializer(serializers.ModelSerializer):
     heardAboutUs = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=60)
     heardAboutUsDetail = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=140)
     referralCode = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=12)
+    # No max_length on purpose: these arrive from a link a marketer built, not
+    # from something the person typed. A campaign tag that is too long must be
+    # truncated in the view, never turn into "your signup failed" for everybody
+    # who clicked that particular ad.
+    utmSource = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    utmMedium = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    utmCampaign = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model = User
@@ -424,6 +453,9 @@ class RegisterSerializer(serializers.ModelSerializer):
             "heardAboutUs",
             "heardAboutUsDetail",
             "referralCode",
+            "utmSource",
+            "utmMedium",
+            "utmCampaign",
         )
 
     def validate(self, attrs):

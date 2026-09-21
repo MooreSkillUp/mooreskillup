@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "@/styles.css";
+import { Suspense } from "react";
+
+import { Analytics } from "@/components/shared/Analytics";
 import { Providers } from "./providers";
 
 /**
@@ -69,6 +72,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="transition-colors duration-300">
         <Providers>{children}</Providers>
+        {/* useSearchParams needs a Suspense boundary, and analytics must never
+            be the reason a page fails to render. */}
+        <Suspense fallback={null}>
+          <Analytics />
+        </Suspense>
       </body>
     </html>
   );

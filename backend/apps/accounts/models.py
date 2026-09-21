@@ -161,6 +161,14 @@ class StudentProfile(UUIDPrimaryKeyModel, TimeStampedModel):
     # A referral counts when the invited account verifies its email — never on a
     # click, which anyone can manufacture by refreshing their own link.
     referral_qualified_at = models.DateTimeField(null=True, blank=True)
+    # --- Where they actually came from ---------------------------------------
+    #
+    # heard_about_us is what they remember; this is where the click came from.
+    # Both are worth having: people misremember, and a campaign tag cannot tell
+    # you that a friend recommended it over lunch.
+    utm_source = models.CharField(max_length=80, blank=True, default="")
+    utm_medium = models.CharField(max_length=80, blank=True, default="")
+    utm_campaign = models.CharField(max_length=120, blank=True, default="")
 
     def __str__(self):
         return self.user.display_name
@@ -226,6 +234,9 @@ class PendingRegistration(UUIDPrimaryKeyModel, TimeStampedModel):
     heard_about_us_detail = models.CharField(max_length=140, blank=True, default="")
     # Whose link brought them. Resolved to a person only once they verify.
     referred_by_code = models.CharField(max_length=12, blank=True, default="")
+    utm_source = models.CharField(max_length=80, blank=True, default="")
+    utm_medium = models.CharField(max_length=80, blank=True, default="")
+    utm_campaign = models.CharField(max_length=120, blank=True, default="")
     code = models.CharField(max_length=6)
     expires_at = models.DateTimeField()
 

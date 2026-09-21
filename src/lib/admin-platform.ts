@@ -51,6 +51,17 @@ export interface AdminStudent {
   enrolledCourses: number;
   completedCourses: number;
   totalPayments: number;
+  whatsappNumber?: string;
+  /** What they said when asked. */
+  heardAboutUs?: string;
+  heardAboutUsDetail?: string;
+  /** Where the click actually came from. */
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  foundingMemberNumber?: number | null;
+  /** The handle of whoever invited them, if anyone. */
+  referredByUsername?: string;
 }
 
 export interface AdminSubcategory {
