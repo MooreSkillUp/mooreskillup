@@ -3,6 +3,7 @@
 import { CalendarClock, MessageCircle, Share2, Trophy } from "lucide-react";
 
 import { ReferralPanel } from "@/components/dashboard/ReferralPanel";
+import { InstallAppCard } from "@/components/shared/InstallAppCard";
 import { Button } from "@/components/ui-kit/Button";
 import type { LaunchState } from "@/lib/feature-flags";
 import { useFeedback } from "@/lib/feedback";
@@ -118,6 +119,8 @@ export function WaitingRoom({
       </section>
 
       <ReferralPanel opensOn={opensReadable} />
+
+      <InstallAppCard reason="So it is one tap away when the courses open." />
 
       {launch.ctaLabel && launch.ctaUrl && (
         <div className="text-center">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, MessageCircle, Sparkles } from "lucide-react";
 
 import { BrandLogo, BRAND_TAGLINE } from "@/components/shared/BrandLogo";
+import { InstallAppCard } from "@/components/shared/InstallAppCard";
 import { Button } from "@/components/ui-kit/Button";
 import type { LaunchState } from "@/lib/feature-flags";
 
@@ -133,6 +134,10 @@ export function LaunchCountdown({ launch }: { launch: LaunchState }) {
           {launch.communityLabel || "Join the community"}
         </a>
       )}
+
+      <div className="mt-10 w-full max-w-md text-left">
+        <InstallAppCard reason="Be ready the moment the doors open." />
+      </div>
 
       <p className="mt-12 max-w-md text-sm text-muted-foreground">
         Already have an account?{" "}

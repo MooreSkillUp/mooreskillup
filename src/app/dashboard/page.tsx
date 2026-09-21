@@ -13,6 +13,7 @@ import { WelcomeBanner } from "@/components/student/dashboard/WelcomeBanner";
 import { useMemo } from "react";
 
 import { WaitingRoom } from "@/components/dashboard/WaitingRoom";
+import { InstallAppCard } from "@/components/shared/InstallAppCard";
 import { useAuth } from "@/lib/auth";
 import { usePlatformStatus } from "@/lib/feature-flags";
 import { useUpcoming } from "@/lib/schedule";
@@ -96,6 +97,13 @@ export default function DashboardPage() {
           certificates={data?.stats.certificates}
           loading={isLoading}
         />
+
+        {/* Offered once they are actually using it, never on the first visit:
+            an install banner shown before somebody has a reason to come back
+            is the one they learn to dismiss without reading. */}
+        {(data?.stats.enrolled ?? 0) > 0 && (
+          <InstallAppCard reason="Your courses, one tap from your home screen." />
+        )}
 
         {isNewStudent ? (
           <>
