@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "@/components/dashboard/AppShell";
+import { CertificateShare } from "@/components/shared/CertificateShare";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { useAuth } from "@/lib/auth";
@@ -157,6 +158,18 @@ export default function CertificatesPage() {
                                 <ExternalLink className="h-3.5 w-3.5" />
                               </Button>
                             </a>
+                          )}
+                          {/* A certificate nobody sees does no work. */}
+                          {cert.verificationUrl && (
+                            <CertificateShare
+                              certificate={{
+                                courseTitle: cert.courseTitle,
+                                certificateCode: cert.certificateCode,
+                                verificationUrl: cert.verificationUrl,
+                                issuedAt: cert.issuedAt,
+                              }}
+                              institution={template?.institutionName}
+                            />
                           )}
                         </>
                       }
