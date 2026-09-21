@@ -39,6 +39,22 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
         source="maintenance_message", required=False, allow_blank=True
     )
     studentRegistrationOpen = serializers.BooleanField(source="student_registration_open", required=False)
+    signInEnabled = serializers.BooleanField(source="sign_in_enabled", required=False)
+    launchState = serializers.ChoiceField(
+        source="launch_state", choices=["pre_launch", "live"], required=False
+    )
+    launchAt = serializers.DateTimeField(source="launch_at", required=False, allow_null=True)
+    countdownEnabled = serializers.BooleanField(source="countdown_enabled", required=False)
+    launchHeadline = serializers.CharField(source="launch_headline", required=False, max_length=120)
+    launchMessage = serializers.CharField(
+        source="launch_message", required=False, allow_blank=True, max_length=400
+    )
+    launchCtaLabel = serializers.CharField(
+        source="launch_cta_label", required=False, allow_blank=True, max_length=60
+    )
+    launchCtaUrl = serializers.CharField(
+        source="launch_cta_url", required=False, allow_blank=True, max_length=300
+    )
     auditRetentionDays = serializers.IntegerField(
         source="audit_retention_days", required=False, min_value=7, max_value=3650
     )
@@ -80,6 +96,14 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
             "maintenanceMode",
             "maintenanceMessage",
             "studentRegistrationOpen",
+            "signInEnabled",
+            "launchState",
+            "launchAt",
+            "countdownEnabled",
+            "launchHeadline",
+            "launchMessage",
+            "launchCtaLabel",
+            "launchCtaUrl",
             "auditRetentionDays",
             "requireAdminSecondApproval",
             "allowTeacherAnnouncements",

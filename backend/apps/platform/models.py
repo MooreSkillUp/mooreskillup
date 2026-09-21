@@ -54,6 +54,29 @@ class PlatformSettings(models.Model):
         default="We are performing scheduled maintenance. Please check back soon.",
     )
     student_registration_open = models.BooleanField(default=True)
+    # --- Launch control -----------------------------------------------------
+    #
+    # Before launch the platform shows a countdown instead of a sign-up form,
+    # and on the day it opens itself: a Super Admin flips launch_state to
+    # "live" and the same app becomes registration and sign-in, with nobody
+    # editing code or deleting a page. Maintenance mode stays separate, because
+    # it is an override that applies in either state.
+    LAUNCH_STATES = (("pre_launch", "Pre-launch"), ("live", "Live"))
+    launch_state = models.CharField(max_length=20, choices=LAUNCH_STATES, default="live")
+    launch_at = models.DateTimeField(null=True, blank=True)
+    countdown_enabled = models.BooleanField(default=True)
+    launch_headline = models.CharField(max_length=120, default="Something is coming")
+    launch_message = models.CharField(
+        max_length=400,
+        blank=True,
+        default="MooreSkillUp opens soon. Practical, job-ready skills taught by people who do the work.",
+    )
+    launch_cta_label = models.CharField(max_length=60, blank=True, default="")
+    launch_cta_url = models.CharField(max_length=300, blank=True, default="")
+    # Sign-in can be closed to students while the team keeps working. Admins are
+    # never locked out by it — a switch that can strand every administrator is
+    # not a switch, it is an outage.
+    sign_in_enabled = models.BooleanField(default=True)
     audit_retention_days = models.PositiveIntegerField(default=90)
     # Course approval hierarchy: when on, a moderator's approval moves a course to
     # "approved" (awaiting an admin/super-admin) instead of publishing it directly.

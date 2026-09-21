@@ -9,7 +9,9 @@ import { BrandLogo } from "@/components/shared/BrandLogo";
 import { AppLoader } from "@/components/shared/AppLoader";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { Button } from "@/components/ui-kit/Button";
+import { LaunchCountdown } from "@/components/shared/LaunchCountdown";
 import { getHomeRouteForUser, useAuth } from "@/lib/auth";
+import { usePlatformStatus } from "@/lib/feature-flags";
 
 /**
  * The front door.
@@ -24,6 +26,7 @@ import { getHomeRouteForUser, useAuth } from "@/lib/auth";
 export default function HomePage() {
   const router = useRouter();
   const { isAuthenticated, isLoading, user } = useAuth();
+  const { status, isLoading: statusLoading } = usePlatformStatus();
 
   // Launching the installed app lands here. Someone already signed in should go
   // straight to their workspace rather than be asked to sign in again.
@@ -36,8 +39,15 @@ export default function HomePage() {
   // Hold the splash while the session resolves *and* while the redirect above
   // runs. Without the second condition the app flashes the sign-in gateway for
   // a frame before jumping to the dashboard on every cold launch.
-  if (isLoading || isAuthenticated) {
+  if (isLoading || isAuthenticated || statusLoading) {
     return <LaunchScreen />;
+  }
+
+  // Before launch a visitor gets the countdown instead of the gateway. Anyone
+  // with an account can still sign in from it — the team and the founding
+  // members are using the platform through exactly this period.
+  if (status.launch.state === "pre_launch") {
+    return <LaunchCountdown launch={status.launch} />;
   }
 
   return <Gateway />;

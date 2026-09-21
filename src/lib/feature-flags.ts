@@ -19,6 +19,18 @@ const DEFAULT_FLAGS: FeatureFlags = {
   quiz: false,
 };
 
+/** Where the platform is in its own life: counting down, or open. */
+export interface LaunchState {
+  state: "pre_launch" | "live";
+  countdownEnabled: boolean;
+  /** ISO timestamp, or null when no date has been set yet. */
+  launchAt: string | null;
+  headline: string;
+  message: string;
+  ctaLabel: string;
+  ctaUrl: string;
+}
+
 export interface PlatformStatus {
   siteName: string;
   maintenanceMode: boolean;
@@ -28,6 +40,9 @@ export interface PlatformStatus {
   paymentsEnabled: boolean;
   /** Hours we tell people to expect a support reply within. 0 promises nothing. */
   supportResponseHours: number;
+  /** False closes sign-in to students. Admins are never locked out. */
+  signInEnabled: boolean;
+  launch: LaunchState;
   features: FeatureFlags;
 }
 
@@ -38,6 +53,19 @@ const DEFAULT_STATUS: PlatformStatus = {
   studentRegistrationOpen: true,
   paymentsEnabled: true,
   supportResponseHours: 24,
+  signInEnabled: true,
+  // If the status call fails we assume the platform is open: a countdown shown
+  // to someone who should be learning is worse than a sign-up form shown a few
+  // hours early, and the server refuses early registrations anyway.
+  launch: {
+    state: "live",
+    countdownEnabled: false,
+    launchAt: null,
+    headline: "",
+    message: "",
+    ctaLabel: "",
+    ctaUrl: "",
+  },
   features: DEFAULT_FLAGS,
 };
 
@@ -70,6 +98,8 @@ export function usePlatformStatus() {
           studentRegistrationOpen: data.studentRegistrationOpen ?? true,
           paymentsEnabled: data.paymentsEnabled ?? true,
           supportResponseHours: data.supportResponseHours ?? 0,
+          signInEnabled: data.signInEnabled ?? true,
+          launch: { ...DEFAULT_STATUS.launch, ...(data.launch ?? {}) },
           features: { ...DEFAULT_FLAGS, ...(data.features ?? {}) },
         });
       })

@@ -65,6 +65,19 @@ function Toggle({
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
+/**
+ * An ISO timestamp as <input type="datetime-local"> wants it: local wall-clock,
+ * no zone, no seconds. Sending the raw ISO string puts a Z-suffixed UTC value
+ * into a control that reads it as local, which silently shifts the launch by
+ * the timezone offset — an hour wrong in Lagos, and nobody notices until D0.
+ */
+function toLocalInput(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function AdminSettingsPage() {
   const { user, toggleTwoFactor, logoutAll } = useAuth();
   const router = useRouter();
@@ -86,6 +99,14 @@ export default function AdminSettingsPage() {
     featureAchievementsEnabled: false,
     featureLeaderboardEnabled: false,
     featureQuizEnabled: false,
+    signInEnabled: true,
+    launchState: "live" as "pre_launch" | "live",
+    launchAt: "",
+    countdownEnabled: true,
+    launchHeadline: "",
+    launchMessage: "",
+    launchCtaLabel: "",
+    launchCtaUrl: "",
     refundWindowDays: 14,
     refundMaxProgressPercent: 30,
     requireAdminTwoFactor: false,
@@ -156,6 +177,15 @@ export default function AdminSettingsPage() {
         featureAchievementsEnabled: settings.featureAchievementsEnabled,
         featureLeaderboardEnabled: settings.featureLeaderboardEnabled,
         featureQuizEnabled: settings.featureQuizEnabled,
+        signInEnabled: settings.signInEnabled,
+        launchState: settings.launchState,
+        // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in local time.
+        launchAt: settings.launchAt ? toLocalInput(settings.launchAt) : "",
+        countdownEnabled: settings.countdownEnabled,
+        launchHeadline: settings.launchHeadline,
+        launchMessage: settings.launchMessage,
+        launchCtaLabel: settings.launchCtaLabel,
+        launchCtaUrl: settings.launchCtaUrl,
         requireAdminTwoFactor: settings.requireAdminTwoFactor,
         paymentsEnabled: settings.paymentsEnabled,
         supportResponseHours: settings.supportResponseHours,
@@ -168,7 +198,11 @@ export default function AdminSettingsPage() {
   const save = async () => {
     try {
       setSaving(true);
-      await saveSettings(form);
+      await saveSettings({
+        ...form,
+        // Back to an absolute instant; empty means "no date set yet".
+        launchAt: form.launchAt ? new Date(form.launchAt).toISOString() : null,
+      });
       setRetentionWarning(null);
       notifySuccess("Settings saved");
     } catch (saveError) {
@@ -390,6 +424,99 @@ export default function AdminSettingsPage() {
                 Access control
               </h2>
               <div className="mt-4 space-y-4">
+                {/* Launch control: the switch that opens the platform. */}
+                <div className="rounded-3xl border border-accent/40 bg-accent/5 p-5">
+                  <div className="font-medium">Platform status</div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Before launch, visitors see a countdown instead of the sign-up form and new
+                    accounts are refused. Switching to Live opens the same app — nothing to delete,
+                    no deploy. People who already have an account can sign in throughout.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {(
+                      [
+                        ["pre_launch", "Pre-launch"],
+                        ["live", "Live"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <Button
+                        key={value}
+                        type="button"
+                        variant={form.launchState === value ? "accent" : "outline"}
+                        size="sm"
+                        disabled={!canEdit || isLoading}
+                        onClick={() => setForm((c) => ({ ...c, launchState: value }))}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {form.launchState === "pre_launch" && (
+                    <div className="mt-5 space-y-4 border-t border-border pt-5">
+                      <Toggle
+                        checked={form.countdownEnabled}
+                        disabled={!canEdit || isLoading}
+                        onChange={(next) => setForm((c) => ({ ...c, countdownEnabled: next }))}
+                        label="Show a countdown"
+                        description="Off still shows the page, just without the ticking clock."
+                      />
+                      <Input
+                        label="Launch date and time"
+                        type="datetime-local"
+                        value={form.launchAt}
+                        disabled={!canEdit || isLoading}
+                        onChange={(e) => setForm((c) => ({ ...c, launchAt: e.target.value }))}
+                      />
+                      <Input
+                        label="Headline"
+                        value={form.launchHeadline}
+                        maxLength={120}
+                        disabled={!canEdit || isLoading}
+                        onChange={(e) => setForm((c) => ({ ...c, launchHeadline: e.target.value }))}
+                      />
+                      <div>
+                        <div className="mb-1 text-sm font-medium">Message</div>
+                        <textarea
+                          id="launch-message"
+                          className="w-full rounded-xl border border-input bg-background p-3 text-sm"
+                          rows={3}
+                          maxLength={400}
+                          value={form.launchMessage}
+                          disabled={!canEdit || isLoading}
+                          onChange={(e) => setForm((c) => ({ ...c, launchMessage: e.target.value }))}
+                        />
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Input
+                          label="Button text"
+                          value={form.launchCtaLabel}
+                          maxLength={60}
+                          disabled={!canEdit || isLoading}
+                          onChange={(e) =>
+                            setForm((c) => ({ ...c, launchCtaLabel: e.target.value }))
+                          }
+                        />
+                        <Input
+                          label="Button link"
+                          placeholder="https://mooreskillup.com"
+                          value={form.launchCtaUrl}
+                          maxLength={300}
+                          disabled={!canEdit || isLoading}
+                          onChange={(e) => setForm((c) => ({ ...c, launchCtaUrl: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <Toggle
+                  checked={form.signInEnabled}
+                  disabled={!canEdit || isLoading}
+                  onChange={(next) => setForm((c) => ({ ...c, signInEnabled: next }))}
+                  label="Sign-in open"
+                  description="When off, students cannot sign in. Admins are never locked out by this."
+                />
                 <Toggle
                   checked={form.studentRegistrationOpen}
                   disabled={!canEdit || isLoading}
