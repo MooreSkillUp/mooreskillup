@@ -110,6 +110,10 @@ class BroadcastCreateView(AdminActionsPerMethod, views.APIView):
         else:
             broadcast = serializer.save(created_by=request.user)
             recipients = fan_out_broadcast(broadcast)
+            if broadcast.send_email:
+                from .delivery import send_broadcast_emails
+
+                send_broadcast_emails(broadcast)
             record_audit(
                 request,
                 "notification.broadcast",
@@ -123,6 +127,50 @@ class BroadcastCreateView(AdminActionsPerMethod, views.APIView):
     # No bulk delete. "Clear Notification History" wiped the record of what had
     # been announced — the one place an admin could check what people were
     # already told. Single entries can still be removed one at a time.
+
+
+class BroadcastEmailSendView(AdminActionsPerMethod, views.APIView):
+    """Email a batch of a broadcast's audience, and say what is left.
+
+    Sending is deliberately in the caller's hands rather than automatic. Six
+    hundred emails do not fit in one request, and an admin who can see "120
+    sent, 480 to go" and press again knows more than one watching a spinner
+    that may have died. Receipts make pressing again safe.
+    """
+
+    admin_actions = {"POST": ("notifications:broadcast",)}
+
+    def post(self, request, broadcast_id):
+        from .delivery import send_broadcast_emails
+
+        broadcast = BroadcastNotification.objects.filter(id=broadcast_id).first()
+        if broadcast is None:
+            return response.Response(
+                {"detail": "That announcement no longer exists."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        sent, remaining = send_broadcast_emails(broadcast)
+        record_audit(
+            request,
+            "notification.broadcast",
+            resource_type="notification",
+            resource_id=broadcast.id,
+            resource_name=broadcast.title,
+            metadata={"emailed": sent, "remaining": remaining, "audience": broadcast.audience},
+        )
+        return response.Response(
+            {
+                "sent": sent,
+                "remaining": remaining,
+                "emailsSent": broadcast.emails_sent,
+                "detail": (
+                    f"Emailed {sent}. {remaining} to go — press again to continue."
+                    if remaining
+                    else f"Emailed {sent}. Everyone on this list has now been told."
+                ),
+            }
+        )
 
 
 class BroadcastDetailView(AdminActionsPerMethod, views.APIView):

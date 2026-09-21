@@ -16,6 +16,11 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 
 class BroadcastNotificationSerializer(serializers.ModelSerializer):
+    audienceTrack = serializers.CharField(
+        source="audience_track", required=False, allow_blank=True, max_length=100
+    )
+    sendEmail = serializers.BooleanField(source="send_email", required=False)
+    emailsSent = serializers.IntegerField(source="emails_sent", read_only=True)
     sentAt = serializers.DateTimeField(source="sent_at", read_only=True)
     scheduledAt = serializers.DateTimeField(source="scheduled_at", required=False, allow_null=True)
     expiresAt = serializers.DateTimeField(source="expires_at", required=False, allow_null=True)
@@ -30,6 +35,9 @@ class BroadcastNotificationSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "audience",
+            "audienceTrack",
+            "sendEmail",
+            "emailsSent",
             "status",
             "scheduledAt",
             "sent_at",

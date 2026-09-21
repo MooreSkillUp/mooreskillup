@@ -20,6 +20,10 @@ class BroadcastNotification(UUIDPrimaryKeyModel, TimeStampedModel):
         ("teachers", "Teachers"),
         ("admins", "Admins"),
         ("moderators", "Moderators"),
+        # Everyone who joined before launch day. The one audience that has to be
+        # reachable on the morning you open, and the one an in-app notification
+        # cannot reach, because they have not signed in for a month.
+        ("waitlist", "Founding members"),
         ("all", "All"),
     )
     STATUS_CHOICES = (("draft", "Draft"), ("scheduled", "Scheduled"), ("sent", "Sent"))
@@ -28,6 +32,13 @@ class BroadcastNotification(UUIDPrimaryKeyModel, TimeStampedModel):
     title = models.CharField(max_length=255)
     description = models.TextField()
     audience = models.CharField(max_length=20, choices=AUDIENCE_CHOICES)
+    # Narrow a student audience to one programme or track. Empty means everyone
+    # in the audience above.
+    audience_track = models.CharField(max_length=100, blank=True, default="")
+    # A notification reaches whoever signs in. An email reaches whoever does
+    # not, which before launch is almost everybody.
+    send_email = models.BooleanField(default=False)
+    emails_sent = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     scheduled_at = models.DateTimeField(null=True, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
@@ -94,3 +105,25 @@ class SupportTicketMessage(UUIDPrimaryKeyModel, TimeStampedModel):
 
     class Meta:
         ordering = ("created_at",)
+
+
+class BroadcastEmailReceipt(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Proof that one person was emailed one broadcast.
+
+    Six hundred emails cannot be sent inside a web request, so they go in
+    batches and the sending can be resumed. Without a per-person record a resume
+    means somebody gets the launch announcement twice, which is the one mistake
+    everybody on the list would notice at once.
+    """
+
+    broadcast = models.ForeignKey(
+        "notifications.BroadcastNotification", on_delete=models.CASCADE, related_name="receipts"
+    )
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="+")
+    delivered = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("broadcast", "user")
+
+    def __str__(self):
+        return f"{self.broadcast_id} -> {self.user_id}"

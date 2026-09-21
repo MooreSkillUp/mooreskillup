@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BellRing, Search, Sparkles, Trash2, Users } from "lucide-react";
+import { BellRing, Mail, Search, Sparkles, Trash2, Users } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { NoAccessPanel } from "@/components/shared/NoAccessPanel";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui-kit/Button";
+import { Input } from "@/components/ui-kit/Input";
 import {
   Dialog,
   DialogContent,
@@ -19,17 +20,25 @@ import { useAdminPlatform, type AdminBroadcast } from "@/lib/admin-platform";
 import { useAuth } from "@/lib/auth";
 import { hasUserPermission } from "@/lib/admin-rbac";
 
-type BroadcastAudience = "students" | "teachers" | "admins" | "moderators" | "all";
+type BroadcastAudience = "students" | "teachers" | "admins" | "moderators" | "waitlist" | "all";
 
 const AUDIENCE_LABELS: Record<BroadcastAudience, string> = {
   students: "Students",
   teachers: "Teachers",
   admins: "Admins",
   moderators: "Moderators",
+  waitlist: "Founding members",
   all: "All users",
 };
 
-const AUDIENCE_OPTIONS: BroadcastAudience[] = ["students", "teachers", "admins", "moderators", "all"];
+const AUDIENCE_OPTIONS: BroadcastAudience[] = [
+  "students",
+  "waitlist",
+  "teachers",
+  "admins",
+  "moderators",
+  "all",
+];
 
 const TEMPLATES: { label: string; title: string; description: string }[] = [
   {
@@ -69,12 +78,17 @@ const when = (value?: string | null) => (value ? new Date(value).toLocaleString(
  */
 export default function BroadcastNotificationsPage() {
   const { notifyError, notifySuccess } = useFeedback();
-  const { broadcasts, createBroadcast, deleteBroadcast, isLoading, error } = useAdminPlatform();
+  const { broadcasts, createBroadcast, sendBroadcastEmails, deleteBroadcast, isLoading, error } =
+    useAdminPlatform();
   const { user } = useAuth();
   const [audience, setAudience] = useState<BroadcastAudience>("students");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
+  // A notification reaches whoever signs in; an email reaches whoever does not.
+  const [sendEmail, setSendEmail] = useState(false);
+  const [audienceTrack, setAudienceTrack] = useState("");
+  const [emailing, setEmailing] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState("");
   const [sending, setSending] = useState(false);
   const [search, setSearch] = useState("");
@@ -102,6 +116,8 @@ export default function BroadcastNotificationsPage() {
         title: title.trim(),
         description: description.trim(),
         audience,
+        audienceTrack: audience === "students" || audience === "waitlist" ? audienceTrack.trim() : "",
+        sendEmail,
         scheduledAt: isScheduled ? new Date(scheduledAt).toISOString() : undefined,
         expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
       });
@@ -109,12 +125,16 @@ export default function BroadcastNotificationsPage() {
         isScheduled ? "Scheduled" : "Sent",
         isScheduled
           ? `It goes out ${new Date(scheduledAt).toLocaleString("en-NG")}.`
-          : `${sent.recipientCount ?? 0} ${sent.recipientCount === 1 ? "person" : "people"} were notified.`,
+          : sendEmail
+            ? `${sent.recipientCount ?? 0} notified in the app, and ${sent.emailsSent ?? 0} emailed so far.`
+            : `${sent.recipientCount ?? 0} ${sent.recipientCount === 1 ? "person" : "people"} were notified.`,
       );
       setTitle("");
       setDescription("");
       setScheduledAt("");
       setExpiresAt("");
+      setSendEmail(false);
+      setAudienceTrack("");
     } catch (actionError) {
       notifyError(
         "Unable to send broadcast",
@@ -122,6 +142,26 @@ export default function BroadcastNotificationsPage() {
       );
     } finally {
       setSending(false);
+    }
+  };
+
+  /**
+   * Emails go out in batches, so a large list needs pressing more than once.
+   * Receipts on the server make that safe: nobody is emailed twice, however
+   * many times this is pressed.
+   */
+  const continueEmails = async (item: AdminBroadcast) => {
+    setEmailing(item.id);
+    try {
+      const result = await sendBroadcastEmails(item.id);
+      notifySuccess(result.remaining ? "Batch sent" : "All sent", result.detail);
+    } catch (actionError) {
+      notifyError(
+        "Could not send the emails",
+        actionError instanceof Error ? actionError.message : "Request failed.",
+      );
+    } finally {
+      setEmailing(null);
     }
   };
 
@@ -236,6 +276,41 @@ export default function BroadcastNotificationsPage() {
                 </div>
               </div>
 
+              {(audience === "students" || audience === "waitlist") && (
+                <div>
+                  <label htmlFor="broadcast-track" className="text-sm font-medium">
+                    Only one programme or track (optional)
+                  </label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    For example Backend Development. Leave empty for everyone in this audience.
+                  </p>
+                  <Input
+                    id="broadcast-track"
+                    value={audienceTrack}
+                    onChange={(event) => setAudienceTrack(event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+              )}
+
+              <label className="flex items-start gap-3 rounded-2xl border border-border bg-background p-4">
+                <input
+                  id="broadcast-email"
+                  type="checkbox"
+                  checked={sendEmail}
+                  onChange={(event) => setSendEmail(event.target.checked)}
+                  className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                />
+                <span>
+                  <span className="block text-sm font-medium">Also send it by email</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    The app only reaches people who sign in. Before launch that is almost nobody,
+                    so anything the waitlist must hear goes by email. Large lists send in batches —
+                    you&apos;ll see how many are left.
+                  </span>
+                </span>
+              </label>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="broadcast-when" className="text-sm font-medium">
@@ -336,6 +411,24 @@ export default function BroadcastNotificationsPage() {
                           <Users className="h-4 w-4" />
                           {item.recipientCount ?? 0}
                         </span>
+                      )}
+                      {item.status === "sent" && item.sendEmail && (
+                        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                          <Mail className="h-4 w-4" />
+                          {item.emailsSent ?? 0} emailed
+                        </span>
+                      )}
+                      {canSend && item.status === "sent" && item.sendEmail && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          loading={emailing === item.id}
+                          loadingText="Sending…"
+                          disabled={emailing !== null}
+                          onClick={() => void continueEmails(item)}
+                        >
+                          <Mail className="h-4 w-4" /> Send remaining
+                        </Button>
                       )}
                       {canSend && (
                         <Button variant="outline" size="sm" onClick={() => setRemoving(item)}>
