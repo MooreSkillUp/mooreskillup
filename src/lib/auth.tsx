@@ -86,6 +86,8 @@ interface RegisterPayload {
   /** Which flyer, post or friend actually worked. */
   heardAboutUs?: string;
   heardAboutUsDetail?: string;
+  /** Whose link brought them here, if any. */
+  referralCode?: string;
 }
 
 interface PasswordResetRequestResult {
@@ -537,6 +539,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           whatsappNumber: payload.whatsappNumber ?? "",
           heardAboutUs: payload.heardAboutUs ?? "",
           heardAboutUsDetail: payload.heardAboutUsDetail ?? "",
+          referralCode: payload.referralCode ?? "",
         }),
       });
       const responsePayload = await parseJsonSafely(response);

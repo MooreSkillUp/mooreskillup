@@ -113,6 +113,12 @@ class PlatformSettings(models.Model):
     community_label = models.CharField(
         max_length=80, blank=True, default="Join the WhatsApp community"
     )
+    # What referring actually gets you. Thresholds rather than prose, so the
+    # screen and the reward cannot drift apart, and editable because none of
+    # this is settled.
+    referral_rewards_enabled = models.BooleanField(default=True)
+    referral_early_access_at = models.PositiveIntegerField(default=3)
+    referral_free_course_at = models.PositiveIntegerField(default=10)
     audit_retention_days = models.PositiveIntegerField(default=90)
     # Course approval hierarchy: when on, a moderator's approval moves a course to
     # "approved" (awaiting an admin/super-admin) instead of publishing it directly.

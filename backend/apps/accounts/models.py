@@ -145,9 +145,42 @@ class StudentProfile(UUIDPrimaryKeyModel, TimeStampedModel):
     # is spent guessing.
     heard_about_us = models.CharField(max_length=60, blank=True, default="")
     heard_about_us_detail = models.CharField(max_length=140, blank=True, default="")
+    # --- Referrals -----------------------------------------------------------
+    #
+    # Immutable and separate from the username, which people may change. Six
+    # characters from an alphabet with no 0/O or 1/I/L, because these get read
+    # aloud in WhatsApp groups and typed on phones.
+    referral_code = models.CharField(max_length=12, unique=True, null=True, blank=True)
+    referred_by = models.ForeignKey(
+        "accounts.StudentProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="referrals",
+    )
+    # A referral counts when the invited account verifies its email — never on a
+    # click, which anyone can manufacture by refreshing their own link.
+    referral_qualified_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.user.display_name
+
+
+REFERRAL_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+
+def generate_referral_code(length=6):
+    """A code people can read aloud and type on a phone.
+
+    No 0/O and no 1/I/L: these travel by voice note and get typed with thumbs,
+    and a code somebody cannot transcribe is a referral you never see.
+    """
+    import secrets
+
+    while True:
+        code = "".join(secrets.choice(REFERRAL_ALPHABET) for _ in range(length))
+        if not StudentProfile.objects.filter(referral_code=code).exists():
+            return code
 
 
 class PasswordResetToken(UUIDPrimaryKeyModel, TimeStampedModel):
@@ -191,6 +224,8 @@ class PendingRegistration(UUIDPrimaryKeyModel, TimeStampedModel):
     whatsapp_number = models.CharField(max_length=32, blank=True, default="")
     heard_about_us = models.CharField(max_length=60, blank=True, default="")
     heard_about_us_detail = models.CharField(max_length=140, blank=True, default="")
+    # Whose link brought them. Resolved to a person only once they verify.
+    referred_by_code = models.CharField(max_length=12, blank=True, default="")
     code = models.CharField(max_length=6)
     expires_at = models.DateTimeField()
 

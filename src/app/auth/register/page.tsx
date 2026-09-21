@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { AuthScreen } from "@/components/auth/AuthScreen";
@@ -78,6 +78,10 @@ export default function AuthRegisterPage() {
   const { notifyError, notifySuccess } = useFeedback();
   const router = useRouter();
   const { status, isLoading: statusLoading } = usePlatformStatus();
+  // Somebody arrived through a friend's link. Held quietly and sent with the
+  // form — asking them to type a code they were handed is a step for nothing.
+  const searchParams = useSearchParams();
+  const referralCode = (searchParams.get("ref") || "").trim().toUpperCase();
   const {
     interests,
     trackOptionsByInterest,
@@ -232,6 +236,7 @@ export default function AuthRegisterPage() {
         whatsappNumber: form.whatsapp.trim(),
         heardAboutUs: form.heardAboutUs,
         heardAboutUsDetail: form.heardDetail.trim(),
+        referralCode,
         email: form.email.trim(),
         password: form.password,
         firstName: form.firstName.trim(),
