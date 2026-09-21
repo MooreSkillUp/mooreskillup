@@ -54,6 +54,8 @@ export interface AuthUser {
   purchasedCourseIds: string[];
   status?: "active" | "disabled";
   mustChangePassword?: boolean;
+  /** "Founding member #312" — null for anyone who joined after launch. */
+  foundingMemberNumber?: number | null;
   twoFactorEnabled?: boolean;
   isOnboarded?: boolean;
 }
@@ -79,6 +81,11 @@ interface RegisterPayload {
   plan?: UserPlan;
   role?: UserRole;
   adminRegistrationToken?: string;
+  /** How we reach people in this market. */
+  whatsappNumber?: string;
+  /** Which flyer, post or friend actually worked. */
+  heardAboutUs?: string;
+  heardAboutUsDetail?: string;
 }
 
 interface PasswordResetRequestResult {
@@ -254,6 +261,8 @@ function normalizeUser(raw: Partial<AuthUser> | null): AuthUser | null {
     purchasedCourseIds: Array.isArray(raw.purchasedCourseIds) ? raw.purchasedCourseIds : [],
     status: (raw.status ?? "active") as "active" | "disabled",
     mustChangePassword: Boolean(raw.mustChangePassword),
+    foundingMemberNumber:
+      typeof raw.foundingMemberNumber === "number" ? raw.foundingMemberNumber : null,
     twoFactorEnabled: Boolean(raw.twoFactorEnabled),
     isOnboarded: raw.role !== "student" ? true : Boolean(raw.isOnboarded),
   };
@@ -525,6 +534,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           selectedTrack: payload.selectedTrack,
           selectedTracks: payload.selectedTracks ?? [payload.selectedTrack],
           plan: payload.plan ?? "free",
+          whatsappNumber: payload.whatsappNumber ?? "",
+          heardAboutUs: payload.heardAboutUs ?? "",
+          heardAboutUsDetail: payload.heardAboutUsDetail ?? "",
         }),
       });
       const responsePayload = await parseJsonSafely(response);

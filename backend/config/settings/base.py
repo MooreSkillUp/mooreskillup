@@ -94,6 +94,10 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
     "DEFAULT_THROTTLE_RATES": {
         "auth-login": os.getenv("THROTTLE_LOGIN", "5/min"),
+        # Its own bucket, not the login one: somebody trying usernames on the
+        # signup form would otherwise spend their sign-in budget and be locked
+        # out of the account they are in the middle of creating.
+        "auth-username": os.getenv("THROTTLE_USERNAME", "40/min"),
         "auth-register": os.getenv("THROTTLE_REGISTER", "10/hour"),
         "auth-password-reset": os.getenv("THROTTLE_PASSWORD_RESET", "3/min"),
         "auth-refresh": os.getenv("THROTTLE_REFRESH", "60/min"),

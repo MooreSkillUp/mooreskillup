@@ -193,6 +193,8 @@ class PublicPlatformStatusView(views.APIView):
                     "message": settings_row.launch_message,
                     "ctaLabel": settings_row.launch_cta_label,
                     "ctaUrl": settings_row.launch_cta_url,
+                    "communityUrl": settings_row.community_url,
+                    "communityLabel": settings_row.community_label,
                 },
                 # Said before someone tries: a Buy button that fails on click
                 # is worse than one that explains itself.

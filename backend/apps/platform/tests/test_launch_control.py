@@ -68,14 +68,18 @@ def sign_in(email, password="pass12345"):
 # --- Registration ------------------------------------------------------------
 
 
-def test_registration_is_refused_before_launch(db):
+def test_registration_stays_open_before_launch(db):
+    """Deliberately reversed once the pre-launch screen became a waitlist.
+
+    The people who sign up before launch are the founding members, and the whole
+    pre-launch campaign exists to collect them. What closes before launch is the
+    courses, not the door — see test_waitlist.py.
+    """
     set_state(launch_state="pre_launch")
 
     response = register()
 
-    assert response.status_code == 403
-    assert "not opened yet" in response.data["detail"]
-    assert not User.objects.filter(email="hopeful@test.dev").exists()
+    assert response.status_code in (200, 201), response.data
 
 
 def test_registration_works_once_the_platform_is_live(db):

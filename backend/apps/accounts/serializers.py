@@ -143,6 +143,8 @@ class UserSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
     twoFactorEnabled = serializers.BooleanField(source="two_factor_enabled", read_only=True)
     isOnboarded = serializers.SerializerMethodField()
+    # "Founding member #312". Null for everyone who joined after launch day.
+    foundingMemberNumber = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -171,6 +173,7 @@ class UserSerializer(serializers.ModelSerializer):
             "plan",
             "status",
             "mustChangePassword",
+            "foundingMemberNumber",
         )
 
     def get_selectedInterest(self, obj):
@@ -252,6 +255,10 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_permissions(self, obj):
         return sorted(get_permissions_for(obj))
+
+    def get_foundingMemberNumber(self, obj):
+        student = getattr(obj, "student_profile", None)
+        return student.founding_member_number if student else None
 
     def get_isOnboarded(self, obj):
         student_profile = self._get_student_profile(obj)
@@ -391,6 +398,9 @@ class RegisterSerializer(serializers.ModelSerializer):
     selectedTracks = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
     plan = serializers.CharField(write_only=True, required=False, allow_blank=True)
     adminRegistrationToken = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    whatsappNumber = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=32)
+    heardAboutUs = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=60)
+    heardAboutUsDetail = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=140)
 
     class Meta:
         model = User
@@ -409,6 +419,9 @@ class RegisterSerializer(serializers.ModelSerializer):
             "selectedTracks",
             "plan",
             "adminRegistrationToken",
+            "whatsappNumber",
+            "heardAboutUs",
+            "heardAboutUsDetail",
         )
 
     def validate(self, attrs):

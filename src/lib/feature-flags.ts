@@ -21,7 +21,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
 
 /** Where the platform is in its own life: counting down, or open. */
 export interface LaunchState {
-  state: "pre_launch" | "live";
+  state: "pre_launch" | "founding_beta" | "live";
   countdownEnabled: boolean;
   /** ISO timestamp, or null when no date has been set yet. */
   launchAt: string | null;
@@ -29,6 +29,9 @@ export interface LaunchState {
   message: string;
   ctaLabel: string;
   ctaUrl: string;
+  /** Where the community lives — a WhatsApp invite, usually. */
+  communityUrl: string;
+  communityLabel: string;
 }
 
 export interface PlatformStatus {
@@ -65,6 +68,8 @@ const DEFAULT_STATUS: PlatformStatus = {
     message: "",
     ctaLabel: "",
     ctaUrl: "",
+    communityUrl: "",
+    communityLabel: "",
   },
   features: DEFAULT_FLAGS,
 };

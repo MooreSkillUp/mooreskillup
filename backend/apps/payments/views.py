@@ -124,6 +124,25 @@ class PaymentInitializeView(views.APIView):
     permission_classes = [IsStudentUserRole]
 
     def post(self, request):
+        from apps.platform.models import PlatformSettings
+
+        platform = PlatformSettings.get_solo()
+        if platform.launch_state == "pre_launch":
+            return response.Response(
+                {"detail": "Courses open on launch day. You will be able to buy then."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if platform.launch_state == "founding_beta":
+            # The point of the founding window is that waiting first earned you
+            # something. Anyone without a founding number arrived after launch
+            # was announced and waits for the doors.
+            student = getattr(request.user, "student_profile", None)
+            if not student or student.founding_member_number is None:
+                return response.Response(
+                    {"detail": "Courses are open to founding members right now. Everyone else on launch day."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         serializer = PaymentInitializeSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         try:

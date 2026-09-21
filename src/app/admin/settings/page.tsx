@@ -100,13 +100,15 @@ export default function AdminSettingsPage() {
     featureLeaderboardEnabled: false,
     featureQuizEnabled: false,
     signInEnabled: true,
-    launchState: "live" as "pre_launch" | "live",
+    launchState: "live" as "pre_launch" | "founding_beta" | "live",
     launchAt: "",
     countdownEnabled: true,
     launchHeadline: "",
     launchMessage: "",
     launchCtaLabel: "",
     launchCtaUrl: "",
+    communityUrl: "",
+    communityLabel: "",
     refundWindowDays: 14,
     refundMaxProgressPercent: 30,
     requireAdminTwoFactor: false,
@@ -186,6 +188,8 @@ export default function AdminSettingsPage() {
         launchMessage: settings.launchMessage,
         launchCtaLabel: settings.launchCtaLabel,
         launchCtaUrl: settings.launchCtaUrl,
+        communityUrl: settings.communityUrl,
+        communityLabel: settings.communityLabel,
         requireAdminTwoFactor: settings.requireAdminTwoFactor,
         paymentsEnabled: settings.paymentsEnabled,
         supportResponseHours: settings.supportResponseHours,
@@ -428,14 +432,18 @@ export default function AdminSettingsPage() {
                 <div className="rounded-3xl border border-accent/40 bg-accent/5 p-5">
                   <div className="font-medium">Platform status</div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Before launch, visitors see a countdown instead of the sign-up form and new
-                    accounts are refused. Switching to Live opens the same app — nothing to delete,
-                    no deploy. People who already have an account can sign in throughout.
+                    <strong>Pre-launch:</strong> visitors see the countdown and can join the
+                    waitlist — real accounts, numbered in order — but no course can be bought.{" "}
+                    <strong>Founding beta:</strong> the people who waited can buy at the founding
+                    price; nobody else can.{" "}
+                    <strong>Live:</strong> open to everyone. Switching opens the same app — nothing
+                    to delete, no deploy.
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {(
                       [
                         ["pre_launch", "Pre-launch"],
+                        ["founding_beta", "Founding beta"],
                         ["live", "Live"],
                       ] as const
                     ).map(([value, label]) => (
@@ -508,6 +516,24 @@ export default function AdminSettingsPage() {
                       </div>
                     </div>
                   )}
+
+                  <div className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2">
+                    <Input
+                      label="Community link"
+                      placeholder="https://chat.whatsapp.com/..."
+                      value={form.communityUrl}
+                      maxLength={300}
+                      disabled={!canEdit || isLoading}
+                      onChange={(e) => setForm((c) => ({ ...c, communityUrl: e.target.value }))}
+                    />
+                    <Input
+                      label="Community button text"
+                      value={form.communityLabel}
+                      maxLength={80}
+                      disabled={!canEdit || isLoading}
+                      onChange={(e) => setForm((c) => ({ ...c, communityLabel: e.target.value }))}
+                    />
+                  </div>
                 </div>
 
                 <Toggle

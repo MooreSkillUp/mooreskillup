@@ -12,7 +12,9 @@ import { TodayCard } from "@/components/student/dashboard/TodayCard";
 import { WelcomeBanner } from "@/components/student/dashboard/WelcomeBanner";
 import { useMemo } from "react";
 
+import { WaitingRoom } from "@/components/dashboard/WaitingRoom";
 import { useAuth } from "@/lib/auth";
+import { usePlatformStatus } from "@/lib/feature-flags";
 import { useUpcoming } from "@/lib/schedule";
 import { useMyCourses, useRecommended, useStudentDashboard } from "@/lib/student";
 
@@ -32,6 +34,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const isStudent = user?.role === "student";
 
+  const { status } = usePlatformStatus();
   const { data, isLoading } = useStudentDashboard(isStudent);
   const { courses: recommended, isLoading: recLoading } = useRecommended(isStudent);
   const { items: upcoming, isLoading: upcomingLoading } = useUpcoming(isStudent);
@@ -65,6 +68,21 @@ export default function DashboardPage() {
   // showing it while still fetching would flash "you have nothing" at someone
   // who has plenty.
   const isNewStudent = !isLoading && (data?.stats.enrolled ?? 0) === 0;
+
+  // Before launch there is nothing to enrol in, so the usual "start your first
+  // course" dashboard would be telling them to do something they cannot do.
+  // They get a waiting room instead: where they stand, and where to be.
+  if (status.launch.state === "pre_launch") {
+    return (
+      <AppShell allowedRoles={["student"]}>
+        <WaitingRoom
+          name={user?.firstName || user?.displayName}
+          number={user?.foundingMemberNumber ?? null}
+          launch={status.launch}
+        />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell allowedRoles={["student"]}>
