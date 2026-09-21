@@ -13,7 +13,6 @@ would have to undo it.
 import pytest
 from rest_framework.test import APIClient
 
-from apps.accounts.models import User
 from apps.platform.models import PlatformSettings
 from common.rbac import ADMIN, MODERATOR, SUPER_ADMIN
 

@@ -8,7 +8,6 @@ from .views import (
     ChangePasswordView,
     CompleteOnboardingView,
     LoginView,
-    UsernameAvailableView,
     LogoutAllView,
     LogoutView,
     MeView,
@@ -19,6 +18,7 @@ from .views import (
     ResendRegisterCodeView,
     TwoFactorToggleView,
     TwoFactorVerifyView,
+    UsernameAvailableView,
     VerifyRegisterView,
     health_check,
 )
