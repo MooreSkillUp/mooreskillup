@@ -1,3 +1,4 @@
+import re
 import secrets
 from datetime import timedelta
 
@@ -94,14 +95,9 @@ class RegisterView(generics.CreateAPIView):
         from .models import PendingRegistration
 
         platform = PlatformSettings.get_solo()
-        # Before launch there is a countdown where the sign-up form goes, so a
-        # registration reaching here is either a stale tab or somebody probing
-        # the API. Either way the answer is the same one the screen gives.
-        if platform.launch_state == "pre_launch":
-            return response.Response(
-                {"detail": "MooreSkillUp has not opened yet. Accounts open on launch day."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        # Sign-ups stay open before launch: these are the founding members, and
+        # the whole pre-launch campaign exists to collect them. What is closed
+        # before launch is the courses, not the door.
         if not platform.student_registration_open:
             return response.Response(
                 {"detail": "New registrations are temporarily closed. Please check back later."},
@@ -123,6 +119,9 @@ class RegisterView(generics.CreateAPIView):
         selected_track = data.get("selectedTrack", "")
         selected_tracks = data.get("selectedTracks", [])
         plan = data.get("plan", "free")
+        whatsapp_number = (data.get("whatsappNumber") or "").strip()
+        heard_about_us = (data.get("heardAboutUs") or "").strip()
+        heard_about_us_detail = (data.get("heardAboutUsDetail") or "").strip()
 
         code = f"{secrets.randbelow(1_000_000):06d}"
         
@@ -141,6 +140,9 @@ class RegisterView(generics.CreateAPIView):
             selected_track=selected_track,
             selected_tracks=selected_tracks,
             plan=plan,
+            whatsapp_number=whatsapp_number,
+            heard_about_us=heard_about_us,
+            heard_about_us_detail=heard_about_us_detail,
             code=code,
             expires_at=timezone.now() + timedelta(minutes=10)
         )
@@ -227,14 +229,25 @@ class VerifyRegisterView(APIView):
         user.password = pending.password
         user.save()
 
-        StudentProfile.objects.create(
+        student = StudentProfile.objects.create(
             user=user,
             selected_interest=pending.selected_interest,
             selected_track=pending.selected_track,
             selected_tracks=pending.selected_tracks,
             plan=pending.plan,
             onboarded=False,
+            whatsapp_number=pending.whatsapp_number,
+            heard_about_us=pending.heard_about_us,
+            heard_about_us_detail=pending.heard_about_us_detail,
         )
+
+        # Numbered only once the email is verified, so the count on screen means
+        # people we can actually reach on launch day rather than typos.
+        from apps.platform.models import PlatformSettings as _Settings
+        from apps.platform.models import assign_founding_number
+
+        if _Settings.get_solo().launch_state != "live":
+            assign_founding_number(student)
 
         auth_response = build_session_auth_response(user, request=request)
         pending.delete()
@@ -366,6 +379,45 @@ def two_factor_applies(user):
     if user.two_factor_enabled:
         return True
     return user.role == "admin" and two_factor_required_for_admins()
+
+
+class UsernameAvailableView(APIView):
+    """Is this username free?
+
+    The username is the handle a leaderboard can show without putting someone's
+    real name or email on a public page, so it has to be unique — and telling
+    someone that after they have filled in the whole form is the wrong moment.
+    Throttled on its own bucket, not the login one: somebody trying usernames
+    here would otherwise spend their sign-in budget and be locked out of the
+    account they are in the middle of creating. It is still an enumeration
+    surface, and usernames are public anyway, but not at speed.
+    """
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-username"
+
+    def get(self, request):
+        from .models import PendingRegistration, User
+
+        username = (request.query_params.get("username") or "").strip()
+        if len(username) < 3:
+            return response.Response(
+                {"available": False, "reason": "Usernames need at least 3 characters."}
+            )
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", username):
+            return response.Response(
+                {"available": False, "reason": "Letters, numbers, dots, dashes and underscores only."}
+            )
+        taken = (
+            User.objects.filter(username__iexact=username).exists()
+            # A name held by someone mid-verification is not free either, or two
+            # people both get told yes and the second one fails at the last step.
+            or PendingRegistration.objects.filter(username__iexact=username).exists()
+        )
+        return response.Response(
+            {"available": not taken, "reason": "That one is taken." if taken else ""}
+        )
 
 
 class LoginView(APIView):

@@ -55,6 +55,12 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
     launchCtaUrl = serializers.CharField(
         source="launch_cta_url", required=False, allow_blank=True, max_length=300
     )
+    communityUrl = serializers.CharField(
+        source="community_url", required=False, allow_blank=True, max_length=300
+    )
+    communityLabel = serializers.CharField(
+        source="community_label", required=False, allow_blank=True, max_length=80
+    )
     auditRetentionDays = serializers.IntegerField(
         source="audit_retention_days", required=False, min_value=7, max_value=3650
     )
@@ -104,6 +110,8 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
             "launchMessage",
             "launchCtaLabel",
             "launchCtaUrl",
+            "communityUrl",
+            "communityLabel",
             "auditRetentionDays",
             "requireAdminSecondApproval",
             "allowTeacherAnnouncements",

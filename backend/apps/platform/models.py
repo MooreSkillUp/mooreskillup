@@ -40,6 +40,30 @@ class AuditLog(UUIDPrimaryKeyModel, TimeStampedModel):
         return f"{self.actor_email or 'system'}: {self.action}"
 
 
+def assign_founding_number(student):
+    """Give a pre-launch signup the next founding-member number.
+
+    Sequential and gap-free enough to be meaningful on screen: "founding member
+    #312" has to mean 311 people came first, or it is decoration. Taken under a
+    row lock so two simultaneous signups cannot claim the same number.
+    """
+    from django.db import transaction
+
+    from apps.accounts.models import StudentProfile
+
+    with transaction.atomic():
+        highest = (
+            StudentProfile.objects.select_for_update()
+            .filter(founding_member_number__isnull=False)
+            .order_by("-founding_member_number")
+            .values_list("founding_member_number", flat=True)
+            .first()
+        )
+        student.founding_member_number = (highest or 0) + 1
+        student.save(update_fields=["founding_member_number", "updated_at"])
+    return student.founding_member_number
+
+
 class PlatformSettings(models.Model):
     """Single-row table holding platform-wide configuration.
 
@@ -61,7 +85,13 @@ class PlatformSettings(models.Model):
     # "live" and the same app becomes registration and sign-in, with nobody
     # editing code or deleting a page. Maintenance mode stays separate, because
     # it is an override that applies in either state.
-    LAUNCH_STATES = (("pre_launch", "Pre-launch"), ("live", "Live"))
+    # Three states, not two. "Founding beta" is the window where the people who
+    # signed up before launch — and only them — can buy at the founding price.
+    LAUNCH_STATES = (
+        ("pre_launch", "Pre-launch"),
+        ("founding_beta", "Founding beta"),
+        ("live", "Live"),
+    )
     launch_state = models.CharField(max_length=20, choices=LAUNCH_STATES, default="live")
     launch_at = models.DateTimeField(null=True, blank=True)
     countdown_enabled = models.BooleanField(default=True)
@@ -77,6 +107,12 @@ class PlatformSettings(models.Model):
     # never locked out by it — a switch that can strand every administrator is
     # not a switch, it is an outage.
     sign_in_enabled = models.BooleanField(default=True)
+    # Where the community actually lives. Nigeria runs on WhatsApp, so a waiting
+    # member with nothing to learn yet still has somewhere to be.
+    community_url = models.CharField(max_length=300, blank=True, default="")
+    community_label = models.CharField(
+        max_length=80, blank=True, default="Join the WhatsApp community"
+    )
     audit_retention_days = models.PositiveIntegerField(default=90)
     # Course approval hierarchy: when on, a moderator's approval moves a course to
     # "approved" (awaiting an admin/super-admin) instead of publishing it directly.

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, MessageCircle, Sparkles } from "lucide-react";
 
 import { BrandLogo, BRAND_TAGLINE } from "@/components/shared/BrandLogo";
 import { Button } from "@/components/ui-kit/Button";
@@ -100,12 +101,36 @@ export function LaunchCountdown({ launch }: { launch: LaunchState }) {
         </p>
       )}
 
-      {launch.ctaLabel && launch.ctaUrl && (
-        <a href={launch.ctaUrl} className="mt-9" target="_blank" rel="noreferrer">
+      {/* The point of the page: get a founding member, not just a visitor. */}
+      <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
+        <Link href="/auth/register">
           <Button variant="accent" size="lg">
-            {launch.ctaLabel}
+            Join the waitlist
             <ArrowRight className="h-4 w-4" />
           </Button>
+        </Link>
+        {launch.ctaLabel && launch.ctaUrl && (
+          <a href={launch.ctaUrl} target="_blank" rel="noreferrer">
+            <Button variant="outline" size="lg">
+              {launch.ctaLabel}
+            </Button>
+          </a>
+        )}
+      </div>
+
+      <p className="mt-4 max-w-md text-sm text-muted-foreground">
+        Sign up now and your account is ready on launch day — nothing to redo.
+      </p>
+
+      {launch.communityUrl && (
+        <a
+          href={launch.communityUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-8 inline-flex items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-semibold shadow-sm transition-colors hover:border-accent hover:text-accent"
+        >
+          <MessageCircle className="h-4 w-4 text-accent" />
+          {launch.communityLabel || "Join the community"}
         </a>
       )}
 

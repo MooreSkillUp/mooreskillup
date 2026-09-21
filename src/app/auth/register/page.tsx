@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { AuthScreen } from "@/components/auth/AuthScreen";
+import { buildApiUrl, parseJsonSafely } from "@/lib/authenticated-api";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { PasswordInput } from "@/components/ui-kit/PasswordInput";
-import { LaunchCountdown } from "@/components/shared/LaunchCountdown";
 import { useAuth } from "@/lib/auth";
 import { usePlatformStatus } from "@/lib/feature-flags";
 import { useFeedback } from "@/lib/feedback";
@@ -52,6 +52,27 @@ function readPending(): PendingVerification | null {
   }
 }
 
+/**
+ * Where people say they found us.
+ *
+ * Fixed values, not free text: this is the only way to tell which of the
+ * countdown flyers worked, and "Instagram", "instagram" and "IG" in a text box
+ * are three different answers to the same question.
+ */
+const HEARD_OPTIONS = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "instagram", label: "Instagram" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "friend", label: "A friend told me" },
+  { value: "campus", label: "On campus" },
+  { value: "x", label: "X (Twitter)" },
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "search", label: "Google search" },
+  { value: "other", label: "Somewhere else" },
+];
+
+const NEEDS_DETAIL = ["friend", "campus", "other"];
+
 export default function AuthRegisterPage() {
   const { initiateRegister, verifyRegister, resendRegisterCode } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
@@ -71,7 +92,16 @@ export default function AuthRegisterPage() {
     email: "",
     password: "",
     confirm: "",
+    whatsapp: "",
+    heardAboutUs: "",
+    heardDetail: "",
   });
+  // Checked as they type, because being told a username is taken after the
+  // whole form is filled in is the wrong moment to find out.
+  const [usernameCheck, setUsernameCheck] = useState<{
+    state: "idle" | "checking" | "free" | "taken";
+    reason: string;
+  }>({ state: "idle", reason: "" });
   const [selectedInterest, setSelectedInterest] = useState<Interest>("");
   const [primaryTrack, setPrimaryTrack] = useState<TrackName>("");
   const [secondaryTracks, setSecondaryTracks] = useState<TrackName[]>([]);
@@ -82,6 +112,31 @@ export default function AuthRegisterPage() {
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [resendIn, setResendIn] = useState(0);
+
+  // Debounced: one request after they stop typing, not one per keystroke.
+  useEffect(() => {
+    const username = form.username.trim();
+    if (username.length < 3) {
+      setUsernameCheck({ state: "idle", reason: "" });
+      return;
+    }
+    setUsernameCheck({ state: "checking", reason: "" });
+    const timer = setTimeout(async () => {
+      try {
+        const result = await fetch(
+          buildApiUrl(`/api/auth/username-available/?username=${encodeURIComponent(username)}`),
+        ).then(parseJsonSafely);
+        setUsernameCheck({
+          state: result?.available ? "free" : "taken",
+          reason: result?.reason ?? "",
+        });
+      } catch {
+        // A failed check must not block the form; the server decides anyway.
+        setUsernameCheck({ state: "idle", reason: "" });
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [form.username]);
 
   const trackOptions = useMemo(
     () => trackOptionsByInterest[selectedInterest] ?? [],
@@ -174,6 +229,9 @@ export default function AuthRegisterPage() {
     try {
       const result = await initiateRegister({
         username: form.username.trim(),
+        whatsappNumber: form.whatsapp.trim(),
+        heardAboutUs: form.heardAboutUs,
+        heardAboutUsDetail: form.heardDetail.trim(),
         email: form.email.trim(),
         password: form.password,
         firstName: form.firstName.trim(),
@@ -235,16 +293,6 @@ export default function AuthRegisterPage() {
       notifyError("Resend failed", message);
     }
   };
-
-  // ── Before launch there is no sign-up form ───────────────────────────────
-  //
-  // Someone arriving here early — from a shared link, or "Create account" on
-  // the website — gets the countdown rather than a form the server would
-  // refuse. Anyone mid-verification keeps their step: closing sign-ups must not
-  // strand a person who already started.
-  if (!statusLoading && status.launch.state === "pre_launch" && !pending) {
-    return <LaunchCountdown launch={status.launch} />;
-  }
 
   // ── Verification step ────────────────────────────────────────────────────
   if (pending) {
@@ -353,13 +401,27 @@ export default function AuthRegisterPage() {
             autoComplete="family-name"
             required
           />
-          <Input
-            label="Username"
-            value={form.username}
-            onChange={setField("username")}
-            autoComplete="username"
-            required
-          />
+          <div>
+            <Input
+              label="Username"
+              value={form.username}
+              onChange={setField("username")}
+              autoComplete="username"
+              hint="Your public handle — what a leaderboard shows instead of your real name."
+              required
+            />
+            {usernameCheck.state === "checking" && (
+              <p className="mt-1 text-xs text-muted-foreground">Checking…</p>
+            )}
+            {usernameCheck.state === "free" && (
+              <p className="mt-1 text-xs font-medium text-success">That one is free.</p>
+            )}
+            {usernameCheck.state === "taken" && (
+              <p className="mt-1 text-xs font-medium text-destructive">
+                {usernameCheck.reason || "That one is taken."}
+              </p>
+            )}
+          </div>
           <Input
             label="Email"
             type="email"
@@ -370,6 +432,46 @@ export default function AuthRegisterPage() {
             placeholder="you@example.com"
             required
           />
+          <Input
+            label="WhatsApp number"
+            type="tel"
+            value={form.whatsapp}
+            onChange={setField("whatsapp")}
+            autoComplete="tel"
+            inputMode="tel"
+            placeholder="0801 234 5678"
+            hint="How we reach you about your courses and your group."
+            required
+          />
+          <div>
+            <label htmlFor="heard-about-us" className="mb-1.5 block text-sm font-medium">
+              How did you hear about us?
+            </label>
+            <select
+              id="heard-about-us"
+              value={form.heardAboutUs}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, heardAboutUs: event.target.value }))
+              }
+              required
+              className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm"
+            >
+              <option value="">Choose one</option>
+              {HEARD_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {NEEDS_DETAIL.includes(form.heardAboutUs) && (
+              <Input
+                label={form.heardAboutUs === "friend" ? "Who told you?" : "Tell us where"}
+                value={form.heardDetail}
+                onChange={setField("heardDetail")}
+                className="mt-3"
+              />
+            )}
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -517,7 +619,10 @@ export default function AuthRegisterPage() {
             !form.firstName.trim() ||
             !form.lastName.trim() ||
             !form.username.trim() ||
+            usernameCheck.state === "taken" ||
             !form.email.trim() ||
+            !form.whatsapp.trim() ||
+            !form.heardAboutUs ||
             !form.password ||
             !form.confirm
           }

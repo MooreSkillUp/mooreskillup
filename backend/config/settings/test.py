@@ -16,6 +16,7 @@ REST_FRAMEWORK = {
         "auth-login": None,
         "auth-register": None,
         "auth-password-reset": None,
+        "auth-username": None,
     },
 }
 

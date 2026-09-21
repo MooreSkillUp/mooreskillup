@@ -131,6 +131,20 @@ class StudentProfile(UUIDPrimaryKeyModel, TimeStampedModel):
     # How many minutes a day this student is aiming for. Theirs to set, because
     # a number that motivates a casual learner discourages a serious one.
     daily_goal_minutes = models.PositiveIntegerField(default=30)
+    # --- Waitlist ------------------------------------------------------------
+    #
+    # Everyone who signed up before launch day gets a number, in order. It is
+    # what "founding member #312" on their screen refers to, and it is how the
+    # founding-beta window knows who may buy early. Null means they arrived
+    # after launch, which is the normal case forever after.
+    founding_member_number = models.PositiveIntegerField(null=True, blank=True, unique=True)
+    # Nigeria runs on WhatsApp: Status, the Channel, support, the cohort groups.
+    # An address we cannot message is half a contact.
+    whatsapp_number = models.CharField(max_length=32, blank=True, default="")
+    # Which flyer, post or friend actually worked. Without it October's ad money
+    # is spent guessing.
+    heard_about_us = models.CharField(max_length=60, blank=True, default="")
+    heard_about_us_detail = models.CharField(max_length=140, blank=True, default="")
 
     def __str__(self):
         return self.user.display_name
@@ -172,6 +186,11 @@ class PendingRegistration(UUIDPrimaryKeyModel, TimeStampedModel):
     selected_track = models.CharField(max_length=100, blank=True)
     selected_tracks = models.JSONField(default=list, blank=True)
     plan = models.CharField(max_length=20, default="free")
+    # Carried through verification for the same reason first_name is: whatever
+    # is not carried is silently discarded, and the student never finds out.
+    whatsapp_number = models.CharField(max_length=32, blank=True, default="")
+    heard_about_us = models.CharField(max_length=60, blank=True, default="")
+    heard_about_us_detail = models.CharField(max_length=140, blank=True, default="")
     code = models.CharField(max_length=6)
     expires_at = models.DateTimeField()
 

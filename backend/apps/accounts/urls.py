@@ -18,6 +18,7 @@ from .views import (
     ResendRegisterCodeView,
     TwoFactorToggleView,
     TwoFactorVerifyView,
+    UsernameAvailableView,
     VerifyRegisterView,
     health_check,
 )
@@ -29,6 +30,7 @@ urlpatterns = [
     path("register/resend-code/", ResendRegisterCodeView.as_view(), name="auth-register-resend"),
     path("onboard/", CompleteOnboardingView.as_view(), name="auth-onboard"),
     path("admin-register/", AdminRegisterView.as_view(), name="auth-admin-register"),
+    path("username-available/", UsernameAvailableView.as_view(), name="auth-username-available"),
     path("login/", LoginView.as_view(), name="auth-login"),
     path("login/verify-2fa/", TwoFactorVerifyView.as_view(), name="auth-2fa-verify"),
     path("two-factor/", TwoFactorToggleView.as_view(), name="auth-2fa-toggle"),
