@@ -93,7 +93,16 @@ class RegisterView(generics.CreateAPIView):
 
         from .models import PendingRegistration
 
-        if not PlatformSettings.get_solo().student_registration_open:
+        platform = PlatformSettings.get_solo()
+        # Before launch there is a countdown where the sign-up form goes, so a
+        # registration reaching here is either a stale tab or somebody probing
+        # the API. Either way the answer is the same one the screen gives.
+        if platform.launch_state == "pre_launch":
+            return response.Response(
+                {"detail": "MooreSkillUp has not opened yet. Accounts open on launch day."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not platform.student_registration_open:
             return response.Response(
                 {"detail": "New registrations are temporarily closed. Please check back later."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -377,6 +386,16 @@ class LoginView(APIView):
                 register_failed_login(user)
             raise
         user = serializer.validated_data["user"]
+        # Sign-in can be closed while the team keeps working. Admins are never
+        # locked out by it: a switch that can strand every administrator is not
+        # a switch, it is an outage with no way back.
+        from apps.platform.models import PlatformSettings
+
+        if not PlatformSettings.get_solo().sign_in_enabled and user.role != "admin":
+            return response.Response(
+                {"detail": "Signing in is closed right now. Please try again shortly."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if two_factor_applies(user):
             _send_login_otp(user)
             return response.Response(

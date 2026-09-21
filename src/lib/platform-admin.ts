@@ -105,6 +105,14 @@ export interface PlatformSettingsData {
   maintenanceMode: boolean;
   maintenanceMessage: string;
   studentRegistrationOpen: boolean;
+  signInEnabled: boolean;
+  launchState: "pre_launch" | "live";
+  launchAt: string | null;
+  countdownEnabled: boolean;
+  launchHeadline: string;
+  launchMessage: string;
+  launchCtaLabel: string;
+  launchCtaUrl: string;
   auditRetentionDays: number;
   requireAdminSecondApproval: boolean;
   allowTeacherAnnouncements: boolean;

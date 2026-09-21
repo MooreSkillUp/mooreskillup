@@ -8,7 +8,9 @@ import { AuthScreen } from "@/components/auth/AuthScreen";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { PasswordInput } from "@/components/ui-kit/PasswordInput";
+import { LaunchCountdown } from "@/components/shared/LaunchCountdown";
 import { useAuth } from "@/lib/auth";
+import { usePlatformStatus } from "@/lib/feature-flags";
 import { useFeedback } from "@/lib/feedback";
 import { usePlatformTaxonomy } from "@/lib/taxonomy";
 import { type Interest, type TrackName } from "@/lib/taxonomy-types";
@@ -54,6 +56,7 @@ export default function AuthRegisterPage() {
   const { initiateRegister, verifyRegister, resendRegisterCode } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
   const router = useRouter();
+  const { status, isLoading: statusLoading } = usePlatformStatus();
   const {
     interests,
     trackOptionsByInterest,
@@ -232,6 +235,16 @@ export default function AuthRegisterPage() {
       notifyError("Resend failed", message);
     }
   };
+
+  // ── Before launch there is no sign-up form ───────────────────────────────
+  //
+  // Someone arriving here early — from a shared link, or "Create account" on
+  // the website — gets the countdown rather than a form the server would
+  // refuse. Anyone mid-verification keeps their step: closing sign-ups must not
+  // strand a person who already started.
+  if (!statusLoading && status.launch.state === "pre_launch" && !pending) {
+    return <LaunchCountdown launch={status.launch} />;
+  }
 
   // ── Verification step ────────────────────────────────────────────────────
   if (pending) {

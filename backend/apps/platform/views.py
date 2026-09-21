@@ -180,6 +180,20 @@ class PublicPlatformStatusView(views.APIView):
                 "maintenanceMode": settings_row.maintenance_mode,
                 "maintenanceMessage": settings_row.maintenance_message,
                 "studentRegistrationOpen": settings_row.student_registration_open,
+                "signInEnabled": settings_row.sign_in_enabled,
+                # Everything the pre-launch screen needs, for a visitor who has
+                # no account and cannot be asked to sign in first.
+                "launch": {
+                    "state": settings_row.launch_state,
+                    "countdownEnabled": settings_row.countdown_enabled,
+                    "launchAt": (
+                        settings_row.launch_at.isoformat() if settings_row.launch_at else None
+                    ),
+                    "headline": settings_row.launch_headline,
+                    "message": settings_row.launch_message,
+                    "ctaLabel": settings_row.launch_cta_label,
+                    "ctaUrl": settings_row.launch_cta_url,
+                },
                 # Said before someone tries: a Buy button that fails on click
                 # is worse than one that explains itself.
                 "paymentsEnabled": settings_row.payments_enabled,
