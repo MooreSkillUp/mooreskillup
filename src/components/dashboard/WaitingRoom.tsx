@@ -2,6 +2,7 @@
 
 import { CalendarClock, MessageCircle, Share2, Trophy } from "lucide-react";
 
+import { ReferralPanel } from "@/components/dashboard/ReferralPanel";
 import { Button } from "@/components/ui-kit/Button";
 import type { LaunchState } from "@/lib/feature-flags";
 import { useFeedback } from "@/lib/feedback";
@@ -115,6 +116,8 @@ export function WaitingRoom({
           </span>
         </button>
       </section>
+
+      <ReferralPanel opensOn={opensReadable} />
 
       {launch.ctaLabel && launch.ctaUrl && (
         <div className="text-center">

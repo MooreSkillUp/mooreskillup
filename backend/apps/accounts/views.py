@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 from apps.courses.models import Course
 from apps.platform.audit import record_audit
 from common.mail_backend import backend_delivers
+from common.permissions import IsStudentUserRole
 from common.rbac import SUPER_ADMIN, AdminAction, AdminActionsPerMethod
 
 from .models import PasswordResetToken
@@ -122,6 +123,7 @@ class RegisterView(generics.CreateAPIView):
         whatsapp_number = (data.get("whatsappNumber") or "").strip()
         heard_about_us = (data.get("heardAboutUs") or "").strip()
         heard_about_us_detail = (data.get("heardAboutUsDetail") or "").strip()
+        referred_by_code = (data.get("referralCode") or "").strip().upper()
 
         code = f"{secrets.randbelow(1_000_000):06d}"
         
@@ -143,6 +145,7 @@ class RegisterView(generics.CreateAPIView):
             whatsapp_number=whatsapp_number,
             heard_about_us=heard_about_us,
             heard_about_us_detail=heard_about_us_detail,
+            referred_by_code=referred_by_code,
             code=code,
             expires_at=timezone.now() + timedelta(minutes=10)
         )
@@ -248,6 +251,28 @@ class VerifyRegisterView(APIView):
 
         if _Settings.get_solo().launch_state != "live":
             assign_founding_number(student)
+
+        # Their own code, and credit to whoever sent them. Credited here rather
+        # than at the click, because a click is something anyone can produce by
+        # refreshing their own link.
+        from .models import generate_referral_code
+
+        student.referral_code = generate_referral_code()
+        if pending.referred_by_code:
+            referrer = StudentProfile.objects.filter(
+                referral_code=pending.referred_by_code
+            ).exclude(pk=student.pk).first()
+            if referrer:
+                student.referred_by = referrer
+                student.referral_qualified_at = timezone.now()
+        student.save(
+            update_fields=[
+                "referral_code",
+                "referred_by",
+                "referral_qualified_at",
+                "updated_at",
+            ]
+        )
 
         auth_response = build_session_auth_response(user, request=request)
         pending.delete()
@@ -379,6 +404,76 @@ def two_factor_applies(user):
     if user.two_factor_enabled:
         return True
     return user.role == "admin" and two_factor_required_for_admins()
+
+
+class MyReferralsView(APIView):
+    """Where a member stands: their link, their count, and what it has earned.
+
+    One call, because the waiting room shows all of it at once and asking
+    piecemeal invites the screen to disagree with itself.
+    """
+
+    permission_classes = [IsStudentUserRole]
+
+    def get(self, request):
+        from apps.platform.models import PlatformSettings
+
+        from .models import StudentProfile
+
+        student = request.user.student_profile
+        platform = PlatformSettings.get_solo()
+
+        qualified = StudentProfile.objects.filter(
+            referred_by=student, referral_qualified_at__isnull=False
+        ).count()
+
+        # Position among people who have actually referred somebody. Being told
+        # you are 400th when nobody has referred anyone is discouraging and
+        # untrue.
+        ahead = (
+            StudentProfile.objects.filter(referral_qualified_at__isnull=False)
+            .values("referred_by")
+            .distinct()
+            .count()
+        )
+
+        return response.Response(
+            {
+                "code": student.referral_code,
+                "qualified": qualified,
+                "rewardsEnabled": platform.referral_rewards_enabled,
+                "earlyAccessAt": platform.referral_early_access_at,
+                "freeCourseAt": platform.referral_free_course_at,
+                "hasEarlyAccess": qualified >= platform.referral_early_access_at,
+                "hasFreeCourse": qualified >= platform.referral_free_course_at,
+                "referrersSoFar": ahead,
+            }
+        )
+
+
+class ReferralLeaderboardView(APIView):
+    """Top referrers, by the handle they chose.
+
+    Usernames exist precisely so a public board can name somebody without
+    putting their real name or email on a page anyone can read.
+    """
+
+    permission_classes = [IsStudentUserRole]
+
+    def get(self, request):
+        from django.db.models import Count
+
+        from .models import StudentProfile
+
+        rows = (
+            StudentProfile.objects.filter(referrals__referral_qualified_at__isnull=False)
+            .annotate(total=Count("referrals"))
+            .order_by("-total", "founding_member_number")
+            .values("user__username", "total")[:10]
+        )
+        return response.Response(
+            [{"username": row["user__username"], "referrals": row["total"]} for row in rows]
+        )
 
 
 class UsernameAvailableView(APIView):

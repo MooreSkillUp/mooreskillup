@@ -401,6 +401,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     whatsappNumber = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=32)
     heardAboutUs = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=60)
     heardAboutUsDetail = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=140)
+    referralCode = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=12)
 
     class Meta:
         model = User
@@ -422,6 +423,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             "whatsappNumber",
             "heardAboutUs",
             "heardAboutUsDetail",
+            "referralCode",
         )
 
     def validate(self, attrs):
