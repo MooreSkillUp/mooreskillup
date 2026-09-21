@@ -129,13 +129,40 @@ export default function AdminStudentsPage() {
     const rows = filtered.length ? filtered : students;
     const cell = (value: string | number) => `"${String(value ?? "").replace(/"/g, '""')}"`;
     const lines = [
-      ["Name", "Email", "Program", "Track", "Enrolled", "Completed", "Paid courses", "Last studied", "Last signed in", "Status"]
+      [
+        "Name",
+        "Email",
+        "WhatsApp",
+        "Founding #",
+        "Heard about us",
+        "Detail",
+        "Referred by",
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "Program",
+        "Track",
+        "Enrolled",
+        "Completed",
+        "Paid courses",
+        "Last studied",
+        "Last signed in",
+        "Status",
+      ]
         .map(cell)
         .join(","),
       ...rows.map((student) =>
         [
           student.displayName,
           student.email,
+          student.whatsappNumber || "",
+          student.foundingMemberNumber ?? "",
+          student.heardAboutUs || "",
+          student.heardAboutUsDetail || "",
+          student.referredByUsername || "",
+          student.utmSource || "",
+          student.utmMedium || "",
+          student.utmCampaign || "",
           student.selectedInterest || "",
           student.selectedTrack || "",
           student.enrolledCourses,

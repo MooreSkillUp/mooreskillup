@@ -124,6 +124,9 @@ class RegisterView(generics.CreateAPIView):
         heard_about_us = (data.get("heardAboutUs") or "").strip()
         heard_about_us_detail = (data.get("heardAboutUsDetail") or "").strip()
         referred_by_code = (data.get("referralCode") or "").strip().upper()
+        utm_source = (data.get("utmSource") or "").strip()[:80]
+        utm_medium = (data.get("utmMedium") or "").strip()[:80]
+        utm_campaign = (data.get("utmCampaign") or "").strip()[:120]
 
         code = f"{secrets.randbelow(1_000_000):06d}"
         
@@ -146,6 +149,9 @@ class RegisterView(generics.CreateAPIView):
             heard_about_us=heard_about_us,
             heard_about_us_detail=heard_about_us_detail,
             referred_by_code=referred_by_code,
+            utm_source=utm_source,
+            utm_medium=utm_medium,
+            utm_campaign=utm_campaign,
             code=code,
             expires_at=timezone.now() + timedelta(minutes=10)
         )
@@ -242,6 +248,9 @@ class VerifyRegisterView(APIView):
             whatsapp_number=pending.whatsapp_number,
             heard_about_us=pending.heard_about_us,
             heard_about_us_detail=pending.heard_about_us_detail,
+            utm_source=pending.utm_source,
+            utm_medium=pending.utm_medium,
+            utm_campaign=pending.utm_campaign,
         )
 
         # Numbered only once the email is verified, so the count on screen means

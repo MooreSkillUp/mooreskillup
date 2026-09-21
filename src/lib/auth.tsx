@@ -88,6 +88,10 @@ interface RegisterPayload {
   heardAboutUsDetail?: string;
   /** Whose link brought them here, if any. */
   referralCode?: string;
+  /** Where the click came from, captured on the first page of the visit. */
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
 }
 
 interface PasswordResetRequestResult {
@@ -540,6 +544,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           heardAboutUs: payload.heardAboutUs ?? "",
           heardAboutUsDetail: payload.heardAboutUsDetail ?? "",
           referralCode: payload.referralCode ?? "",
+          utmSource: payload.utmSource ?? "",
+          utmMedium: payload.utmMedium ?? "",
+          utmCampaign: payload.utmCampaign ?? "",
         }),
       });
       const responsePayload = await parseJsonSafely(response);

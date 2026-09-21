@@ -9,6 +9,7 @@ import { buildApiUrl, parseJsonSafely } from "@/lib/authenticated-api";
 import { Button } from "@/components/ui-kit/Button";
 import { Input } from "@/components/ui-kit/Input";
 import { PasswordInput } from "@/components/ui-kit/PasswordInput";
+import { getAttribution } from "@/lib/attribution";
 import { useAuth } from "@/lib/auth";
 import { usePlatformStatus } from "@/lib/feature-flags";
 import { useFeedback } from "@/lib/feedback";
@@ -237,6 +238,7 @@ export default function AuthRegisterPage() {
         heardAboutUs: form.heardAboutUs,
         heardAboutUsDetail: form.heardDetail.trim(),
         referralCode,
+        ...getAttribution(),
         email: form.email.trim(),
         password: form.password,
         firstName: form.firstName.trim(),
