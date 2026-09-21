@@ -91,9 +91,21 @@ def refresh_course_progress(enrollment: Enrollment):
         is_published=True,
     ).count()
     completed = LessonProgress.objects.filter(enrollment=enrollment, status="completed").count()
+
+    # The percentage counts everything the course requires, not lessons alone.
+    # A student who finished every lesson of a course with a final assessment
+    # used to see 100% while the certificate stayed locked, with nothing saying
+    # why — the number was the reason the dead end went unnoticed for so long.
+    # The lesson counts below stay lesson counts, because that is what they are
+    # called and what the course card shows.
+    from apps.quizzes.progression import required_progress
+
+    done_items, total_items = required_progress(enrollment)
     percentage = Decimal("0.00")
-    if total:
-        percentage = (Decimal(completed) / Decimal(total) * Decimal("100")).quantize(Decimal("0.01"))
+    if total_items:
+        percentage = (Decimal(done_items) / Decimal(total_items) * Decimal("100")).quantize(
+            Decimal("0.01")
+        )
     progress, _ = CourseProgress.objects.get_or_create(enrollment=enrollment)
     progress.completed_lessons_count = completed
     progress.total_lessons_count = total

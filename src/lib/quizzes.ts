@@ -53,6 +53,12 @@ export interface QuizOverview {
   attempts: QuizAttemptResult[];
 }
 
+/** One thing still standing between the student and the certificate. */
+export type OutstandingItem =
+  | { kind: "lessons"; remaining: number }
+  | { kind: "section_quiz"; quizId: string; title: string; sectionId: string; sectionTitle: string }
+  | { kind: "final"; quizId: string; title: string };
+
 export interface ProgressionState {
   mode: "open" | "sequential";
   accessibleSectionIds: string[];
@@ -61,6 +67,23 @@ export interface ProgressionState {
   finalAssessmentPassed: boolean;
   finalAssessmentAvailable: boolean;
   certificateEarned: boolean;
+  outstanding: OutstandingItem[];
+}
+
+/** A sentence a student can act on, plus where to go. */
+export function describeOutstanding(
+  item: OutstandingItem,
+): { text: string; href: string | null } {
+  if (item.kind === "lessons") {
+    return {
+      text: `${item.remaining} ${item.remaining === 1 ? "lesson" : "lessons"} left to finish`,
+      href: null,
+    };
+  }
+  if (item.kind === "section_quiz") {
+    return { text: `Pass the quiz in ${item.sectionTitle}`, href: `/quiz/${item.quizId}` };
+  }
+  return { text: "Pass the final assessment", href: `/quiz/${item.quizId}` };
 }
 
 /** What a student sees before starting: the shape of it, and where they stand. */

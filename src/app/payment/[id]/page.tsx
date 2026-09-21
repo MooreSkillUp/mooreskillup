@@ -7,6 +7,7 @@ import { ArrowLeft, BadgeCheck, CreditCard, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { formatNaira } from "@/lib/commerce";
+import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/lib/feedback";
 import { publicEnv } from "@/lib/public-env";
 import { initializePayment, useCourse } from "@/lib/student";
@@ -16,7 +17,8 @@ export default function PaymentPage() {
   const router = useRouter();
   const courseId = params.id as string;
   const { notifyError, notifySuccess } = useFeedback();
-  const { course, isLoading } = useCourse(courseId);
+  const { isLoading: authLoading } = useAuth();
+  const { course, isLoading } = useCourse(courseId, !authLoading);
   const [processing, setProcessing] = useState(false);
 
   if (isLoading) {

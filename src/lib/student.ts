@@ -401,12 +401,21 @@ function normalizeCourseDetail(raw: Record<string, unknown>): CourseDetail {
   };
 }
 
-export function useCourse(courseId: string) {
+/**
+ * A course, seen as the person asking.
+ *
+ * `ready` must be false until auth has finished restoring the session. The
+ * token used to be read on mount regardless, so a student who opened a course
+ * link directly was served the signed-out view of a course they already own —
+ * "Buy this course" on something they had paid for. Same trap as usePlayer.
+ */
+export function useCourse(courseId: string, ready = true) {
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
+    if (!ready) return;
     setIsLoading(true);
     setError("");
     try {
@@ -424,7 +433,7 @@ export function useCourse(courseId: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [courseId]);
+  }, [courseId, ready]);
 
   useEffect(() => {
     void refresh();

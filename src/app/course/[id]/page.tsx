@@ -21,6 +21,7 @@ import { CurriculumAccordion } from "@/components/course/CurriculumAccordion";
 import { formatNaira } from "@/lib/commerce";
 import { useAuth } from "@/lib/auth";
 import { usePlatformStatus } from "@/lib/feature-flags";
+import { useProgression } from "@/lib/quizzes";
 import { useFeedback } from "@/lib/feedback";
 import { enrollFree, submitReview, useCourse, useCourseReviews } from "@/lib/student";
 
@@ -30,11 +31,14 @@ export default function CoursePage() {
   const params = useParams();
   const router = useRouter();
   const courseId = params.id as string;
-  const { user, toggleWishlist } = useAuth();
+  const { user, toggleWishlist, isLoading: authLoading } = useAuth();
   const { status } = usePlatformStatus();
   const { notifyError, notifySuccess } = useFeedback();
-  const { course, isLoading, error, refresh } = useCourse(courseId);
+  const { course, isLoading, error, refresh } = useCourse(courseId, !authLoading);
   const { reviews, refresh: refreshReviews } = useCourseReviews(courseId);
+  // Only enrolled students have a progression; the endpoint 404s otherwise and
+  // the hook quietly returns null, which is exactly what a visitor should see.
+  const { state: progression } = useProgression(courseId, Boolean(course?.isOwned));
   const [enrolling, setEnrolling] = useState(false);
   const [myRating, setMyRating] = useState(0);
   const [myComment, setMyComment] = useState("");
@@ -290,6 +294,16 @@ export default function CoursePage() {
                 })),
               }))}
               courseOwned={course.isOwned}
+              finalAssessment={
+                progression?.finalAssessmentId
+                  ? {
+                      id: progression.finalAssessmentId,
+                      title: "Final assessment",
+                      passed: progression.finalAssessmentPassed,
+                      available: progression.finalAssessmentAvailable,
+                    }
+                  : null
+              }
               lessonHref={(lessonId) => `/lesson/${lessonId}`}
             />
 

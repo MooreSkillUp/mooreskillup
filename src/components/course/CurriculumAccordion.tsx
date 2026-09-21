@@ -10,8 +10,10 @@ import {
   FolderGit2,
   Lock,
   PlayCircle,
+  Trophy,
 } from "lucide-react";
 
+import { Button } from "@/components/ui-kit/Button";
 import { cn } from "@/lib/utils";
 
 export interface AccordionLesson {
@@ -74,10 +76,23 @@ export function CurriculumAccordion({
   sections,
   courseOwned,
   lessonHref,
+  finalAssessment,
 }: {
   sections: AccordionSection[];
   courseOwned: boolean;
   lessonHref: (lessonId: string) => string;
+  /**
+   * The assessment that stands between the student and the certificate.
+   *
+   * It existed in the API from the start and no screen ever showed it, so a
+   * student could finish every lesson and never find the one thing left to do.
+   */
+  finalAssessment?: {
+    id: string;
+    title: string;
+    passed: boolean;
+    available: boolean;
+  } | null;
 }) {
   // The first section opens by default: an accordion where everything is shut
   // makes a reader work before it tells them anything.
@@ -340,6 +355,50 @@ export function CurriculumAccordion({
             </div>
           );
         })}
+
+        {finalAssessment && (
+          <div className="border-t border-border">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-5">
+              <div className="flex items-start gap-3">
+                <span
+                  className={cn(
+                    "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                    finalAssessment.passed
+                      ? "bg-success/15 text-success"
+                      : finalAssessment.available
+                        ? "bg-accent/15 text-accent"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {finalAssessment.passed ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : finalAssessment.available ? (
+                    <Trophy className="h-4 w-4" />
+                  ) : (
+                    <Lock className="h-4 w-4" />
+                  )}
+                </span>
+                <div>
+                  <p className="font-medium">{finalAssessment.title || "Final assessment"}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {finalAssessment.passed
+                      ? "Passed — your certificate is unlocked."
+                      : finalAssessment.available
+                        ? "The last step. Pass this to earn your certificate."
+                        : "Opens once every section is complete."}
+                  </p>
+                </div>
+              </div>
+              {finalAssessment.available && !finalAssessment.passed && (
+                <Link href={`/quiz/${finalAssessment.id}`}>
+                  <Button variant="accent" size="sm">
+                    Take the final assessment
+                  </Button>
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -126,6 +126,83 @@ def certificate_is_earned(enrollment) -> bool:
     return True
 
 
+def outstanding_requirements(enrollment):
+    """Everything still standing between this student and the certificate.
+
+    One list, in the order a student would work through it, so every screen can
+    say the same thing. A course that gates has to be able to explain itself:
+    the certificate used to sit blurred behind an unpassed final assessment with
+    nothing anywhere naming it, which is indistinguishable from being broken.
+    """
+    completed_ids = _completed_lesson_ids(enrollment)
+    sections = list(
+        Section.objects.filter(course=enrollment.course, is_published=True).order_by("order")
+    )
+    items = []
+
+    remaining_lessons = 0
+    for section in sections:
+        lesson_ids = set(
+            Lesson.objects.filter(section=section, is_published=True).values_list("id", flat=True)
+        )
+        remaining_lessons += len(lesson_ids - completed_ids)
+    if remaining_lessons:
+        items.append({"kind": "lessons", "remaining": remaining_lessons})
+
+    for section in sections:
+        quiz = Quiz.objects.filter(section=section, kind="section").first()
+        if quiz and quiz.is_ready and not has_passed(enrollment.student, quiz):
+            items.append(
+                {
+                    "kind": "section_quiz",
+                    "quizId": str(quiz.id),
+                    "title": quiz.title,
+                    "sectionId": str(section.id),
+                    "sectionTitle": section.title,
+                }
+            )
+
+    final = final_assessment_for(enrollment.course)
+    if final and not has_passed(enrollment.student, final):
+        items.append({"kind": "final", "quizId": str(final.id), "title": final.title})
+
+    return items
+
+
+def required_progress(enrollment):
+    """(done, total) over everything the course actually requires.
+
+    Lessons alone used to be the whole measure, so a student who finished every
+    lesson saw 100% while a section quiz or the final assessment was still
+    outstanding — a number that was not true, and the reason a locked
+    certificate looked like a bug rather than an instruction.
+    """
+    completed_ids = _completed_lesson_ids(enrollment)
+    sections = list(
+        Section.objects.filter(course=enrollment.course, is_published=True).order_by("order")
+    )
+
+    done = total = 0
+    for section in sections:
+        lesson_ids = set(
+            Lesson.objects.filter(section=section, is_published=True).values_list("id", flat=True)
+        )
+        total += len(lesson_ids)
+        done += len(lesson_ids & completed_ids)
+
+        quiz = Quiz.objects.filter(section=section, kind="section").first()
+        if quiz and quiz.is_ready:
+            total += 1
+            done += 1 if has_passed(enrollment.student, quiz) else 0
+
+    final = final_assessment_for(enrollment.course)
+    if final:
+        total += 1
+        done += 1 if has_passed(enrollment.student, final) else 0
+
+    return done, total
+
+
 def progression_state(enrollment):
     """Everything the UI needs to explain where a student stands.
 
@@ -144,4 +221,6 @@ def progression_state(enrollment):
         # Only offer the final once the material behind it is actually done.
         "finalAssessmentAvailable": bool(final and sections_done),
         "certificateEarned": certificate_is_earned(enrollment),
+        # What is left, named, so a screen can point at it instead of blurring.
+        "outstanding": outstanding_requirements(enrollment),
     }
