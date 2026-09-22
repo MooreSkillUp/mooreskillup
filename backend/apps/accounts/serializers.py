@@ -82,6 +82,8 @@ class AdminStudentSerializer(serializers.ModelSerializer):
     referredByUsername = serializers.CharField(
         source="referred_by.user.username", read_only=True, default=""
     )
+    termsAcceptedAt = serializers.DateTimeField(source="user.terms_accepted_at", read_only=True)
+    termsVersion = serializers.CharField(source="user.terms_version", read_only=True)
 
     class Meta:
         model = StudentProfile
@@ -108,6 +110,8 @@ class AdminStudentSerializer(serializers.ModelSerializer):
             "utmCampaign",
             "foundingMemberNumber",
             "referredByUsername",
+            "termsAcceptedAt",
+            "termsVersion",
         )
 
     def get_status(self, obj):
@@ -424,6 +428,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     heardAboutUs = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=60)
     heardAboutUsDetail = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=140)
     referralCode = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=12)
+    acceptTerms = serializers.BooleanField(write_only=True, required=False, default=False)
     # No max_length on purpose: these arrive from a link a marketer built, not
     # from something the person typed. A campaign tag that is too long must be
     # truncated in the view, never turn into "your signup failed" for everybody
@@ -453,6 +458,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             "heardAboutUs",
             "heardAboutUsDetail",
             "referralCode",
+            "acceptTerms",
             "utmSource",
             "utmMedium",
             "utmCampaign",
@@ -519,6 +525,21 @@ class RegisterSerializer(serializers.ModelSerializer):
         interests = validated_data.pop("interests", [])
         plan = validated_data.pop("plan", "free")
         validated_data.pop("adminRegistrationToken", None)
+        # Fields that describe the signup rather than the user. They belong on
+        # the pending row and the student profile, never in User(): anything
+        # left here reaches create_user as an unexpected keyword. acceptTerms
+        # has a default, so it is always present and was the first to break.
+        for signup_only in (
+            "acceptTerms",
+            "whatsappNumber",
+            "heardAboutUs",
+            "heardAboutUsDetail",
+            "referralCode",
+            "utmSource",
+            "utmMedium",
+            "utmCampaign",
+        ):
+            validated_data.pop(signup_only, None)
         if role == "admin":
             # Bootstrap path: the first (token-gated) admin is the platform owner.
             validated_data["is_staff"] = True

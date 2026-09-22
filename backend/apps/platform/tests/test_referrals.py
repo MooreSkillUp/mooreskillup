@@ -36,6 +36,7 @@ def register(email, username, ref=""):
         "lastName": "Person",
         "selectedInterest": "Web Development",
         "selectedTrack": "Frontend",
+        "acceptTerms": True,
     }
     if ref:
         payload["referralCode"] = ref

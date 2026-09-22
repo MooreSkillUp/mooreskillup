@@ -64,6 +64,11 @@ class User(UUIDPrimaryKeyModel, AbstractBaseUser, PermissionsMixin, TimeStampedM
     # Opt-in email one-time-code 2FA for admin accounts.
     two_factor_enabled = models.BooleanField(default=False)
     must_change_password = models.BooleanField(default=False)
+    # What they agreed to and when. The version matters as much as the date:
+    # when the terms change, "they ticked a box once" says nothing about which
+    # terms, and that is the question a dispute turns on.
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
+    terms_version = models.CharField(max_length=40, blank=True, default="")
     failed_login_attempts = models.PositiveIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
 
@@ -234,6 +239,8 @@ class PendingRegistration(UUIDPrimaryKeyModel, TimeStampedModel):
     heard_about_us_detail = models.CharField(max_length=140, blank=True, default="")
     # Whose link brought them. Resolved to a person only once they verify.
     referred_by_code = models.CharField(max_length=12, blank=True, default="")
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
+    terms_version = models.CharField(max_length=40, blank=True, default="")
     utm_source = models.CharField(max_length=80, blank=True, default="")
     utm_medium = models.CharField(max_length=80, blank=True, default="")
     utm_campaign = models.CharField(max_length=120, blank=True, default="")

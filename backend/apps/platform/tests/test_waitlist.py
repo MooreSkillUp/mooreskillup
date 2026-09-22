@@ -42,6 +42,7 @@ def register(email="waiting@test.dev", username="waiting", **extra):
         "lastName": "Ing",
         "selectedInterest": "Web Development",
         "selectedTrack": "Frontend",
+        "acceptTerms": True,
     }
     payload.update(extra)
     return APIClient().post("/api/auth/register/", payload, format="json")

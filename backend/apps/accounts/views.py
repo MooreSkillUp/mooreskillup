@@ -108,6 +108,20 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        # Agreement is enforced here, not only by the checkbox. A form can be
+        # skipped; an API call cannot pretend a person agreed.
+        if serializer.validated_data.get("role", "student") == "student" and not (
+            serializer.validated_data.get("acceptTerms")
+        ):
+            return response.Response(
+                {
+                    "acceptTerms": [
+                        "Please agree to the Terms of Service and Privacy Policy to create an account."
+                    ]
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         data = serializer.validated_data
         email = data.get("email")
         username = data.get("username")
@@ -124,6 +138,8 @@ class RegisterView(generics.CreateAPIView):
         heard_about_us = (data.get("heardAboutUs") or "").strip()
         heard_about_us_detail = (data.get("heardAboutUsDetail") or "").strip()
         referred_by_code = (data.get("referralCode") or "").strip().upper()
+        terms_version = platform.terms_version if data.get("acceptTerms") else ""
+        terms_accepted_at = timezone.now() if data.get("acceptTerms") else None
         utm_source = (data.get("utmSource") or "").strip()[:80]
         utm_medium = (data.get("utmMedium") or "").strip()[:80]
         utm_campaign = (data.get("utmCampaign") or "").strip()[:120]
@@ -149,6 +165,8 @@ class RegisterView(generics.CreateAPIView):
             heard_about_us=heard_about_us,
             heard_about_us_detail=heard_about_us_detail,
             referred_by_code=referred_by_code,
+            terms_accepted_at=terms_accepted_at,
+            terms_version=terms_version,
             utm_source=utm_source,
             utm_medium=utm_medium,
             utm_campaign=utm_campaign,
@@ -281,6 +299,8 @@ class VerifyRegisterView(APIView):
             last_name=pending.last_name,
             role=pending.role,
             is_active=True,
+            terms_accepted_at=pending.terms_accepted_at,
+            terms_version=pending.terms_version,
         )
         user.password = pending.password
         user.save()

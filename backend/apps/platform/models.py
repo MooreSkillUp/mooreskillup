@@ -119,6 +119,12 @@ class PlatformSettings(models.Model):
     referral_rewards_enabled = models.BooleanField(default=True)
     referral_early_access_at = models.PositiveIntegerField(default=3)
     referral_free_course_at = models.PositiveIntegerField(default=10)
+    # The legal pages live on the public website, so the platform only knows
+    # where they are. Bump the version whenever the text changes, so every
+    # acceptance records which text it was.
+    terms_version = models.CharField(max_length=40, default="2026-09")
+    terms_url = models.CharField(max_length=300, blank=True, default="")
+    privacy_url = models.CharField(max_length=300, blank=True, default="")
     audit_retention_days = models.PositiveIntegerField(default=90)
     # Course approval hierarchy: when on, a moderator's approval moves a course to
     # "approved" (awaiting an admin/super-admin) instead of publishing it directly.

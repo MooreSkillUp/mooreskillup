@@ -53,6 +53,7 @@ def register():
             "lastName": "Ful",
             "selectedInterest": "Web Development",
             "selectedTrack": "Frontend",
+            "acceptTerms": True,
         },
         format="json",
     )

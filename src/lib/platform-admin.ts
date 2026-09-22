@@ -115,6 +115,9 @@ export interface PlatformSettingsData {
   launchCtaUrl: string;
   communityUrl: string;
   communityLabel: string;
+  termsVersion: string;
+  termsUrl: string;
+  privacyUrl: string;
   auditRetentionDays: number;
   requireAdminSecondApproval: boolean;
   allowTeacherAnnouncements: boolean;
