@@ -718,7 +718,9 @@ export default function AdminSettingsPage() {
                   disabled={!canEdit || isLoading}
                   onChange={(next) => setForm((c) => ({ ...c, featureQuizEnabled: next }))}
                   label="Quiz shop (coming soon)"
-                  description="Quizzes and quiz rewards. Off = shows as 'Coming soon'."
+                  // Named for what it controls. The old wording read as if it
+                  // switched course quizzes off, which nothing does.
+                  description="Only the Quiz Shop page in the student menu, which is still coming soon. Course quizzes and final assessments always work, whatever this says."
                 />
               </div>
             </div>
