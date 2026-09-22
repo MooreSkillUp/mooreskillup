@@ -15,6 +15,7 @@ import {
 } from "../../components/ui/dialog";
 import { Button } from "../../components/ui-kit/Button";
 import { Input } from "../../components/ui-kit/Input";
+import { CookieChoices } from "../../components/shared/CookieConsent";
 import { UserAvatar } from "../../components/shared/UserAvatar";
 import { AVATARS } from "../../lib/avatars";
 import { toDisplayName, useAuth } from "../../lib/auth";
@@ -180,6 +181,13 @@ export default function SettingsPage() {
         </div>
 
         <CommunityLinks />
+
+        <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
+          <h2 className="font-display text-xl font-semibold">Cookies</h2>
+          <div className="mt-3">
+            <CookieChoices />
+          </div>
+        </section>
 
         <section className="rounded-[2rem] border border-border bg-card p-6 shadow-sm">
           <h2 className="font-display text-xl font-semibold">Session management</h2>

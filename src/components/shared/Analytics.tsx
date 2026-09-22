@@ -5,6 +5,9 @@ import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { captureAttribution } from "@/lib/attribution";
+import { clearTrackingCookies, useConsent } from "@/lib/consent";
+
+import { CookieBanner } from "./CookieConsent";
 
 /**
  * Analytics, and only when it is configured.
@@ -14,6 +17,11 @@ import { captureAttribution } from "@/lib/attribution";
  * behaves exactly as it did before. Both IDs are public by nature — they ship
  * in the page either way — so they live in NEXT_PUBLIC_ vars rather than being
  * fetched.
+ *
+ * Nothing that reports to Google or Meta loads until the visitor accepts in the
+ * cookie banner — the NDPA requires the question to come first. Campaign-tag
+ * capture below is not tracking: it stays in this browser for the visit and
+ * only reaches our own server if the person signs up.
  *
  * This also captures the campaign tags on the first page of a visit, because by
  * the time somebody reaches the signup form the URL no longer carries them.
@@ -44,6 +52,12 @@ export function trackEvent(name: string, params: Record<string, unknown> = {}): 
 export function Analytics() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const consent = useConsent();
+  const allowed = consent === "granted";
+
+  useEffect(() => {
+    if (consent === "denied") clearTrackingCookies();
+  }, [consent]);
 
   useEffect(() => {
     captureAttribution(window.location.search);
@@ -64,7 +78,9 @@ export function Analytics() {
 
   return (
     <>
-      {GA_ID && (
+      <CookieBanner />
+
+      {allowed && GA_ID && (
         <>
           <Script
             src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
@@ -72,19 +88,19 @@ export function Analytics() {
           />
           <Script id="ga-init" strategy="afterInteractive">
             {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}
-window.gtag=gtag;gtag('js',new Date());gtag('config','${GA_ID}',{send_page_view:false});`}
+window.gtag=gtag;gtag('js',new Date());gtag('config','${GA_ID}');`}
           </Script>
         </>
       )}
 
-      {META_PIXEL_ID && (
+      {allowed && META_PIXEL_ID && (
         <Script id="meta-pixel" strategy="afterInteractive">
           {`!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
 n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
 n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
 t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
 document,'script','https://connect.facebook.net/en_US/fbevents.js');
-fbq('init','${META_PIXEL_ID}');`}
+fbq('init','${META_PIXEL_ID}');fbq('track','PageView');`}
         </Script>
       )}
     </>
