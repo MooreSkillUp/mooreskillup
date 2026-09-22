@@ -174,6 +174,53 @@ class RegisterView(generics.CreateAPIView):
         }, status=status.HTTP_200_OK)
 
 
+def send_waitlist_welcome(student):
+    """Tell a new founding member they are in, in writing.
+
+    Somebody who joins in October and hears nothing until November has no
+    reason to remember us, nothing in their inbox to come back to, and no link
+    to share from the place they actually forward things. The screen said all
+    of this once; an email says it again in a month, which is when it matters.
+
+    Only before launch. After that a signup is an ordinary signup and this
+    would be a strange thing to receive.
+    """
+    from apps.platform.models import PlatformSettings
+    from common.email import frontend_url, send_transactional_email
+
+    platform = PlatformSettings.get_solo()
+    if platform.launch_state == "live" or student.founding_member_number is None:
+        return
+
+    opens = ""
+    if platform.launch_at:
+        opens = platform.launch_at.strftime("%A %d %B %Y")
+
+    lines = [
+        f"You are founding member #{student.founding_member_number}.",
+    ]
+    if opens:
+        lines.append(f"Courses open on {opens}. Your account is ready — nothing to redo.")
+    if student.referral_code:
+        lines.append(
+            "Invite a friend with your link and you both get in early: "
+            f"{frontend_url('/auth/register')}?ref={student.referral_code}"
+        )
+    if platform.community_url:
+        lines.append(f"Meet the other founding members: {platform.community_url}")
+
+    send_transactional_email(
+        to_email=student.user.email,
+        subject="You're in — MooreSkillUp",
+        heading="You're in",
+        greeting=f"Hi {student.user.first_name or student.user.display_name},",
+        intro="Thanks for joining MooreSkillUp before we opened. Here is where you stand.",
+        lines=lines,
+        button_label="Open MooreSkillUp",
+        button_url=frontend_url("/dashboard"),
+    )
+
+
 class VerifyRegisterView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_classes = [ScopedRateThrottle]
@@ -282,6 +329,8 @@ class VerifyRegisterView(APIView):
                 "updated_at",
             ]
         )
+
+        send_waitlist_welcome(student)
 
         auth_response = build_session_auth_response(user, request=request)
         pending.delete()

@@ -132,7 +132,7 @@ export interface AdminBroadcast {
   id: string;
   title: string;
   description: string;
-  audience: "students" | "teachers" | "admins" | "moderators" | "all";
+  audience: "students" | "teachers" | "admins" | "moderators" | "waitlist" | "all";
   status: string;
   sentAt?: string;
   scheduledAt?: string | null;
@@ -140,6 +140,11 @@ export interface AdminBroadcast {
   /** Who announced it — the history lists every admin's, not just your own. */
   sentByName?: string;
   recipientCount?: number;
+  /** Narrows a student audience to one programme or track. */
+  audienceTrack?: string;
+  /** Whether it was also sent by email, and to how many so far. */
+  sendEmail?: boolean;
+  emailsSent?: number;
 }
 
 export interface AdminTotals {
@@ -659,7 +664,9 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     async (input: {
       title: string;
       description: string;
-      audience: "students" | "teachers" | "admins" | "moderators" | "all";
+      audience: "students" | "teachers" | "admins" | "moderators" | "waitlist" | "all";
+      audienceTrack?: string;
+      sendEmail?: boolean;
       scheduledAt?: string | null;
       expiresAt?: string | null;
     }) => {
@@ -674,6 +681,33 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     },
     [runAction],
   );
+  /**
+   * Email the next batch of a broadcast's audience.
+   *
+   * Sending is a repeated action rather than one long request: six hundred
+   * emails cannot go out inside a single call, and an admin who can see how
+   * many are left knows more than one watching a spinner.
+   */
+  const sendBroadcastEmails = useCallback(
+    async (broadcastId: string) => {
+      const result = await runAction(() =>
+        authenticatedRequest<{
+          sent: number;
+          remaining: number;
+          emailsSent: number;
+          detail: string;
+        }>(`/api/admin/broadcasts/${broadcastId}/send-emails/`, { method: "POST" }),
+      );
+      setBroadcasts((current) =>
+        current.map((item) =>
+          item.id === broadcastId ? { ...item, emailsSent: result.emailsSent } : item,
+        ),
+      );
+      return result;
+    },
+    [runAction],
+  );
+
 
   // No clearBroadcastHistory. It deleted the record of what had been announced
   // — the one place to check what people were already told — behind a button
@@ -834,6 +868,7 @@ export function useAdminPlatform(options?: { enabled?: boolean }) {
     updateSubcategory,
     deleteSubcategory,
     createBroadcast,
+    sendBroadcastEmails,
     deleteBroadcast,
     updateSupportTicket,
     addTicketMessage,
