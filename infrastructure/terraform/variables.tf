@@ -147,3 +147,16 @@ variable "admin_registration_token" {
   sensitive   = true
   description = "Shared secret for the public admin sign-up page. Empty keeps that page closed; anyone with this value can create an admin account."
 }
+
+variable "sentry_dsn" {
+  type        = string
+  description = <<-EOT
+    Where the API reports errors. Empty means no reporting, which is how every
+    environment behaved before this existed.
+
+    It is an ingest key rather than a password - it can only send events in -
+    but it is passed as a secret so it never lands in a log.
+  EOT
+  sensitive   = true
+  default     = ""
+}

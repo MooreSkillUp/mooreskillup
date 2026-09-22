@@ -83,6 +83,7 @@ module "container_apps" {
   postgres_db_name         = module.postgres.database_name
   postgres_admin_username  = var.db_admin_username
   postgres_admin_password  = var.db_admin_password
+  sentry_dsn               = var.sentry_dsn
   storage_account_name     = module.storage.name
   storage_account_key      = module.storage.primary_access_key
   brevo_api_key            = var.brevo_api_key

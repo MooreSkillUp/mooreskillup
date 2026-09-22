@@ -116,3 +116,10 @@ LOGGING = {
         },
     },
 }
+
+
+# Error reporting, last so that a failure here cannot take settings down with it.
+# See config/monitoring.py: no student data ever leaves with the report.
+from config.monitoring import init_sentry  # noqa: E402
+
+init_sentry(os.getenv("SENTRY_ENVIRONMENT", "production"))

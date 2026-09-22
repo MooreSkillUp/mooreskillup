@@ -139,3 +139,10 @@ variable "paystack_public_key" {
   default     = ""
   description = "Paystack public key (pk_test_… or pk_live_…)."
 }
+
+variable "sentry_dsn" {
+  type        = string
+  description = "Error reporting endpoint for the API. Empty disables reporting."
+  sensitive   = true
+  default     = ""
+}

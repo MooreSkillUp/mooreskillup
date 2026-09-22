@@ -87,6 +87,11 @@ resource "azurerm_container_app" "api" {
         value = var.auth_return_refresh_in_body
       }
       env {
+        name  = "SENTRY_DSN"
+        value = var.sentry_dsn
+      }
+
+      env {
         name  = "AZURE_STORAGE_ACCOUNT"
         value = var.storage_account_name
       }

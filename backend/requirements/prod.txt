@@ -2,3 +2,5 @@
 gunicorn>=22.0,<23.0
 whitenoise>=6.7,<7.0
 django-storages[azure]>=1.14,<2.0
+# Error reporting. Production only: nothing should be sent from a laptop.
+sentry-sdk[django]>=2.14,<3.0
