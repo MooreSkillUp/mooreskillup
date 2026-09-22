@@ -133,6 +133,7 @@ class PlatformSettings(models.Model):
     feature_recommendations_enabled = models.BooleanField(default=True)
     feature_achievements_enabled = models.BooleanField(default=False)
     feature_leaderboard_enabled = models.BooleanField(default=False)
+    # The Quiz Shop page only. Course quizzes and finals are never gated by it.
     feature_quiz_enabled = models.BooleanField(default=False)
     default_course_banner_theme = models.CharField(max_length=40, default="default")
     default_course_banner_accent = models.CharField(max_length=20, default="#FC6104")
