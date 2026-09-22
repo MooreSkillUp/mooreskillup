@@ -75,16 +75,19 @@ const HEARD_OPTIONS = [
 const NEEDS_DETAIL = ["friend", "campus", "other"];
 
 /**
- * A legal link that degrades honestly.
+ * A link to one of the platform's own legal pages.
  *
- * The pages live on the public website and the lawyer has not finished them,
- * so until a URL is set in Settings the words are shown without a link rather
- * than pointing at a page that does not exist.
+ * Opens in a new tab, because leaving the form halfway through to read the
+ * terms should not cost somebody everything they typed.
  */
 function LegalLink({ href, children }: { href: string; children: React.ReactNode }) {
-  if (!href) return <span className="font-medium text-foreground">{children}</span>;
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="font-medium text-accent hover:underline">
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="font-medium text-accent underline underline-offset-2 hover:no-underline"
+    >
       {children}
     </a>
   );

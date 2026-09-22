@@ -119,12 +119,7 @@ class PlatformSettings(models.Model):
     referral_rewards_enabled = models.BooleanField(default=True)
     referral_early_access_at = models.PositiveIntegerField(default=3)
     referral_free_course_at = models.PositiveIntegerField(default=10)
-    # The legal pages live on the public website, so the platform only knows
-    # where they are. Bump the version whenever the text changes, so every
-    # acceptance records which text it was.
-    terms_version = models.CharField(max_length=40, default="2026-09")
-    terms_url = models.CharField(max_length=300, blank=True, default="")
-    privacy_url = models.CharField(max_length=300, blank=True, default="")
+
     audit_retention_days = models.PositiveIntegerField(default=90)
     # Course approval hierarchy: when on, a moderator's approval moves a course to
     # "approved" (awaiting an admin/super-admin) instead of publishing it directly.
@@ -203,3 +198,60 @@ class AuthenticationSettings(models.Model):
 
     def __str__(self):
         return "Authentication settings"
+
+
+class LegalDocument(models.Model):
+    """Terms of Service, Privacy Policy and Refund Policy, written in the admin.
+
+    Hosted here rather than on the website so the text people agree to at
+    signup is the text a Super Admin controls, in one place, with a history.
+
+    Every published change bumps the version. An acceptance records the
+    versions in force at that moment, so "they agreed" always answers "to
+    what" — the question a dispute turns on.
+    """
+
+    KINDS = (
+        ("terms", "Terms of Service"),
+        ("privacy", "Privacy Policy"),
+        ("refund", "Refund Policy"),
+    )
+
+    kind = models.CharField(max_length=20, choices=KINDS, unique=True)
+    title = models.CharField(max_length=120)
+    body = models.TextField(blank=True, default="")
+    version = models.PositiveIntegerField(default=0)
+    published_at = models.DateTimeField(null=True, blank=True)
+    updated_by = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.title} v{self.version}"
+
+    @property
+    def is_published(self):
+        return self.version > 0 and bool(self.body.strip())
+
+    @classmethod
+    def for_kind(cls, kind):
+        title = dict(cls.KINDS)[kind]
+        document, _ = cls.objects.get_or_create(kind=kind, defaults={"title": title})
+        return document
+
+
+def current_legal_version():
+    """What somebody agrees to when they tick the box today.
+
+    Terms and privacy together, because the checkbox covers both. Reads like
+    "terms-v3/privacy-v2"; before anything is published it is "unpublished",
+    which is itself worth recording.
+    """
+    versions = dict(
+        LegalDocument.objects.filter(kind__in=("terms", "privacy")).values_list("kind", "version")
+    )
+    terms, privacy = versions.get("terms", 0), versions.get("privacy", 0)
+    if not terms and not privacy:
+        return "unpublished"
+    return f"terms-v{terms}/privacy-v{privacy}"

@@ -61,11 +61,6 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
     communityLabel = serializers.CharField(
         source="community_label", required=False, allow_blank=True, max_length=80
     )
-    termsVersion = serializers.CharField(source="terms_version", required=False, max_length=40)
-    termsUrl = serializers.CharField(source="terms_url", required=False, allow_blank=True, max_length=300)
-    privacyUrl = serializers.CharField(
-        source="privacy_url", required=False, allow_blank=True, max_length=300
-    )
     auditRetentionDays = serializers.IntegerField(
         source="audit_retention_days", required=False, min_value=7, max_value=3650
     )
@@ -117,9 +112,6 @@ class PlatformSettingsSerializer(serializers.ModelSerializer):
             "launchCtaUrl",
             "communityUrl",
             "communityLabel",
-            "termsVersion",
-            "termsUrl",
-            "privacyUrl",
             "auditRetentionDays",
             "requireAdminSecondApproval",
             "allowTeacherAnnouncements",
@@ -151,3 +143,17 @@ class AuthenticationSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = AuthenticationSettings
         fields = ("maxStudentDevices", "maxTeacherDevices", "maxAdminDevices", "updatedAt")
+
+
+class LegalDocumentSerializer(serializers.Serializer):
+    kind = serializers.CharField(read_only=True)
+    title = serializers.CharField(max_length=120)
+    body = serializers.CharField(allow_blank=True)
+    version = serializers.IntegerField(read_only=True)
+    publishedAt = serializers.DateTimeField(source="published_at", read_only=True)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+    updatedByName = serializers.SerializerMethodField()
+    isPublished = serializers.BooleanField(source="is_published", read_only=True)
+
+    def get_updatedByName(self, obj):
+        return obj.updated_by.display_name if obj.updated_by else ""

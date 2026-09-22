@@ -126,7 +126,16 @@ export default function PaymentPage() {
               <ShieldCheck className="h-4 w-4" /> Pay {formatNaira(amount)} securely
             </Button>
             <p className="text-center text-xs text-muted-foreground">
-              One-time payment unlocks full lifetime access to this course.
+              One-time payment unlocks full lifetime access to this course.{" "}
+              {/* "Can I get my money back?" is asked before paying, not after. */}
+              <a
+                href="/legal/refund"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-accent underline underline-offset-2"
+              >
+                Refund Policy
+              </a>
             </p>
           </div>
         </div>

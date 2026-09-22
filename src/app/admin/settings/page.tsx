@@ -109,9 +109,6 @@ export default function AdminSettingsPage() {
     launchCtaUrl: "",
     communityUrl: "",
     communityLabel: "",
-    termsVersion: "",
-    termsUrl: "",
-    privacyUrl: "",
     refundWindowDays: 14,
     refundMaxProgressPercent: 30,
     requireAdminTwoFactor: false,
@@ -193,9 +190,6 @@ export default function AdminSettingsPage() {
         launchCtaUrl: settings.launchCtaUrl,
         communityUrl: settings.communityUrl,
         communityLabel: settings.communityLabel,
-        termsVersion: settings.termsVersion,
-        termsUrl: settings.termsUrl,
-        privacyUrl: settings.privacyUrl,
         requireAdminTwoFactor: settings.requireAdminTwoFactor,
         paymentsEnabled: settings.paymentsEnabled,
         supportResponseHours: settings.supportResponseHours,
@@ -544,35 +538,15 @@ export default function AdminSettingsPage() {
                   <div className="mt-5 border-t border-border pt-5">
                     <div className="font-medium">Legal pages</div>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Everyone who signs up must agree to these, and their account records which
-                      version they agreed to. Change the version whenever the wording changes.
+                      Terms of Service, Privacy Policy and Refund Policy are written and published
+                      on their own page.
                     </p>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                      <Input
-                        label="Terms version"
-                        placeholder="2026-09"
-                        value={form.termsVersion}
-                        maxLength={40}
-                        disabled={!canEdit || isLoading}
-                        onChange={(e) => setForm((c) => ({ ...c, termsVersion: e.target.value }))}
-                      />
-                      <Input
-                        label="Terms of Service link"
-                        placeholder="https://mooreskillup.com/terms"
-                        value={form.termsUrl}
-                        maxLength={300}
-                        disabled={!canEdit || isLoading}
-                        onChange={(e) => setForm((c) => ({ ...c, termsUrl: e.target.value }))}
-                      />
-                      <Input
-                        label="Privacy Policy link"
-                        placeholder="https://mooreskillup.com/privacy"
-                        value={form.privacyUrl}
-                        maxLength={300}
-                        disabled={!canEdit || isLoading}
-                        onChange={(e) => setForm((c) => ({ ...c, privacyUrl: e.target.value }))}
-                      />
-                    </div>
+                    <a
+                      href="/admin/legal"
+                      className="mt-3 inline-block text-sm font-semibold text-accent hover:underline"
+                    >
+                      Edit the legal pages →
+                    </a>
                   </div>
                 </div>
 

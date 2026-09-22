@@ -138,7 +138,9 @@ class RegisterView(generics.CreateAPIView):
         heard_about_us = (data.get("heardAboutUs") or "").strip()
         heard_about_us_detail = (data.get("heardAboutUsDetail") or "").strip()
         referred_by_code = (data.get("referralCode") or "").strip().upper()
-        terms_version = platform.terms_version if data.get("acceptTerms") else ""
+        from apps.platform.models import current_legal_version
+
+        terms_version = current_legal_version() if data.get("acceptTerms") else ""
         terms_accepted_at = timezone.now() if data.get("acceptTerms") else None
         utm_source = (data.get("utmSource") or "").strip()[:80]
         utm_medium = (data.get("utmMedium") or "").strip()[:80]
