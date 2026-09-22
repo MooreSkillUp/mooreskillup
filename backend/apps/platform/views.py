@@ -181,6 +181,11 @@ class PublicPlatformStatusView(views.APIView):
                 "maintenanceMessage": settings_row.maintenance_message,
                 "studentRegistrationOpen": settings_row.student_registration_open,
                 "signInEnabled": settings_row.sign_in_enabled,
+                "legal": {
+                    "termsVersion": settings_row.terms_version,
+                    "termsUrl": settings_row.terms_url,
+                    "privacyUrl": settings_row.privacy_url,
+                },
                 # Everything the pre-launch screen needs, for a visitor who has
                 # no account and cannot be asked to sign in first.
                 "launch": {

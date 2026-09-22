@@ -62,6 +62,8 @@ export interface AdminStudent {
   foundingMemberNumber?: number | null;
   /** The handle of whoever invited them, if anyone. */
   referredByUsername?: string;
+  termsAcceptedAt?: string | null;
+  termsVersion?: string;
 }
 
 export interface AdminSubcategory {

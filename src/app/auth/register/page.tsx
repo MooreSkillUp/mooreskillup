@@ -74,6 +74,22 @@ const HEARD_OPTIONS = [
 
 const NEEDS_DETAIL = ["friend", "campus", "other"];
 
+/**
+ * A legal link that degrades honestly.
+ *
+ * The pages live on the public website and the lawyer has not finished them,
+ * so until a URL is set in Settings the words are shown without a link rather
+ * than pointing at a page that does not exist.
+ */
+function LegalLink({ href, children }: { href: string; children: React.ReactNode }) {
+  if (!href) return <span className="font-medium text-foreground">{children}</span>;
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="font-medium text-accent hover:underline">
+      {children}
+    </a>
+  );
+}
+
 export default function AuthRegisterPage() {
   const { initiateRegister, verifyRegister, resendRegisterCode } = useAuth();
   const { notifyError, notifySuccess } = useFeedback();
@@ -101,6 +117,7 @@ export default function AuthRegisterPage() {
     heardAboutUs: "",
     heardDetail: "",
   });
+  const [acceptTerms, setAcceptTerms] = useState(false);
   // Checked as they type, because being told a username is taken after the
   // whole form is filled in is the wrong moment to find out.
   const [usernameCheck, setUsernameCheck] = useState<{
@@ -238,6 +255,7 @@ export default function AuthRegisterPage() {
         heardAboutUs: form.heardAboutUs,
         heardAboutUsDetail: form.heardDetail.trim(),
         referralCode,
+        acceptTerms,
         ...getAttribution(),
         email: form.email.trim(),
         password: form.password,
@@ -612,6 +630,22 @@ export default function AuthRegisterPage() {
           </>
         )}
 
+        <label htmlFor="accept-terms" className="flex items-start gap-3 text-sm">
+          <input
+            id="accept-terms"
+            type="checkbox"
+            checked={acceptTerms}
+            onChange={(event) => setAcceptTerms(event.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
+            required
+          />
+          <span className="text-muted-foreground">
+            I agree to the{" "}
+            <LegalLink href={status.legal.termsUrl}>Terms of Service</LegalLink> and the{" "}
+            <LegalLink href={status.legal.privacyUrl}>Privacy Policy</LegalLink>.
+          </span>
+        </label>
+
         <Button
           type="submit"
           variant="accent"
@@ -630,6 +664,7 @@ export default function AuthRegisterPage() {
             !form.email.trim() ||
             !form.whatsapp.trim() ||
             !form.heardAboutUs ||
+            !acceptTerms ||
             !form.password ||
             !form.confirm
           }

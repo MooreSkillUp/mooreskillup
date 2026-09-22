@@ -32,7 +32,8 @@ def test_registration_initiates_pending_registration_and_sends_email(db, api_cli
         "selectedInterest": "Backend Development",
         "selectedTrack": "Backend with Python",
         "selectedTracks": ["Backend with Python"],
-        "plan": "free"
+        "plan": "free",
+        "acceptTerms": True
     }
     
     response = api_client.post("/api/auth/register/", payload, format="json")
@@ -220,6 +221,7 @@ def test_real_name_survives_email_verification(db, api_client, setup_platform_se
             "password": "password123",
             "selectedInterest": "Backend Development",
             "selectedTrack": "Backend with Python",
+            "acceptTerms": True,
         },
         format="json",
     )

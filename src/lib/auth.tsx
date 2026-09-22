@@ -88,6 +88,8 @@ interface RegisterPayload {
   heardAboutUsDetail?: string;
   /** Whose link brought them here, if any. */
   referralCode?: string;
+  /** An explicit yes to the Terms and Privacy Policy. Required for students. */
+  acceptTerms?: boolean;
   /** Where the click came from, captured on the first page of the visit. */
   utmSource?: string;
   utmMedium?: string;
@@ -544,6 +546,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           heardAboutUs: payload.heardAboutUs ?? "",
           heardAboutUsDetail: payload.heardAboutUsDetail ?? "",
           referralCode: payload.referralCode ?? "",
+          acceptTerms: Boolean(payload.acceptTerms),
           utmSource: payload.utmSource ?? "",
           utmMedium: payload.utmMedium ?? "",
           utmCampaign: payload.utmCampaign ?? "",

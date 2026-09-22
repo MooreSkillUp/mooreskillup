@@ -45,6 +45,8 @@ export interface PlatformStatus {
   supportResponseHours: number;
   /** False closes sign-in to students. Admins are never locked out. */
   signInEnabled: boolean;
+  /** Where the legal pages live — on the public website, not here. */
+  legal: { termsVersion: string; termsUrl: string; privacyUrl: string };
   launch: LaunchState;
   features: FeatureFlags;
 }
@@ -57,6 +59,7 @@ const DEFAULT_STATUS: PlatformStatus = {
   paymentsEnabled: true,
   supportResponseHours: 24,
   signInEnabled: true,
+  legal: { termsVersion: "", termsUrl: "", privacyUrl: "" },
   // If the status call fails we assume the platform is open: a countdown shown
   // to someone who should be learning is worse than a sign-up form shown a few
   // hours early, and the server refuses early registrations anyway.
@@ -104,6 +107,7 @@ export function usePlatformStatus() {
           paymentsEnabled: data.paymentsEnabled ?? true,
           supportResponseHours: data.supportResponseHours ?? 0,
           signInEnabled: data.signInEnabled ?? true,
+          legal: { ...DEFAULT_STATUS.legal, ...(data.legal ?? {}) },
           launch: { ...DEFAULT_STATUS.launch, ...(data.launch ?? {}) },
           features: { ...DEFAULT_FLAGS, ...(data.features ?? {}) },
         });
