@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    AdminCampaignDetailView,
+    AdminCampaignListView,
     AdminPaymentRefundView,
     AdminTransactionExportView,
     AdminTransactionListView,
@@ -15,6 +17,12 @@ urlpatterns = [
     path("payments/initialize/", PaymentInitializeView.as_view(), name="payments-initialize"),
     path("payments/verify/", PaymentVerifyView.as_view(), name="payments-verify"),
     path("payments/webhooks/<str:provider>/", PaymentWebhookView.as_view(), name="payments-webhook"),
+    path("admin/campaigns/", AdminCampaignListView.as_view(), name="admin-campaigns"),
+    path(
+        "admin/campaigns/<int:campaign_id>/",
+        AdminCampaignDetailView.as_view(),
+        name="admin-campaign-detail",
+    ),
     path("admin/transactions/", AdminTransactionListView.as_view(), name="admin-transactions"),
     path("admin/transactions/export/", AdminTransactionExportView.as_view(), name="admin-transactions-export"),
     path("admin/payments/<uuid:payment_id>/refund/", AdminPaymentRefundView.as_view(), name="admin-payment-refund"),

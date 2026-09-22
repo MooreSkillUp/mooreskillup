@@ -15,7 +15,14 @@ class EnrollmentQuerySet(models.QuerySet):
 
 
 class Enrollment(UUIDPrimaryKeyModel, TimeStampedModel):
-    ACCESS_CHOICES = (("free", "Free"), ("payment", "Payment"), ("admin_grant", "Admin grant"))
+    ACCESS_CHOICES = (
+        ("free", "Free"),
+        ("payment", "Payment"),
+        ("admin_grant", "Admin grant"),
+        # A campaign that took the price to nothing. Recorded as its own source
+        # so a 100% promotion is not mistaken for a course that was always free.
+        ("campaign", "Campaign"),
+    )
     STATUS_CHOICES = (("active", "Active"), ("completed", "Completed"), ("revoked", "Revoked"))
 
     student = models.ForeignKey("accounts.StudentProfile", on_delete=models.CASCADE, related_name="enrollments")

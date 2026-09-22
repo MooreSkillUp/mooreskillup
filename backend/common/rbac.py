@@ -45,6 +45,7 @@ _ADMIN_PERMISSIONS = _MODERATOR_PERMISSIONS | frozenset(
         # Admins see how the ambassador links are performing; only a Super Admin
         # creates, edits or retires them.
         "ambassadors:view",
+        "campaigns:view",
         "teachers:view",
         "teachers:create",
         "teachers:edit",
@@ -100,6 +101,7 @@ _SUPER_ADMIN_PERMISSIONS = _ADMIN_PERMISSIONS | frozenset(
         "audit-logs:export",
         "permissions:manage",
         "ambassadors:manage",
+        "campaigns:manage",
     }
 )
 

@@ -37,13 +37,25 @@ class EnrollFreeView(views.APIView):
         existing = Enrollment.objects.with_access().filter(student=student, course=course).first()
         if existing:
             return response.Response(EnrollmentSerializer(existing, context={"request": request}).data)
-        if course.price and course.price > 0:
+        # The same launch rules as checkout. A course that costs nothing — on its
+        # own, or through a 100% campaign — must not be a way in before the
+        # doors open.
+        from apps.payments.pricing import price_for, purchase_refusal
+
+        refusal = purchase_refusal(student)
+        if refusal:
+            return response.Response({"detail": refusal}, status=status.HTTP_403_FORBIDDEN)
+
+        amount, campaign, _ = price_for(course, student)
+        if amount > 0:
             return response.Response(
                 {"detail": "This is a paid course. Please complete checkout to enroll."},
                 status=status.HTTP_402_PAYMENT_REQUIRED,
             )
         enrollment, _ = Enrollment.objects.update_or_create(
-            student=student, course=course, defaults={"access_source": "free", "status": "active"}
+            student=student,
+            course=course,
+            defaults={"access_source": "campaign" if campaign else "free", "status": "active"},
         )
 
         from common.email import frontend_url, send_transactional_email

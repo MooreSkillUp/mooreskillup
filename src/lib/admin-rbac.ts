@@ -80,7 +80,9 @@ export type AdminResourceAction =
   | "audit-logs:export"
   | "permissions:manage"
   | "ambassadors:view"
-  | "ambassadors:manage";
+  | "ambassadors:manage"
+  | "campaigns:view"
+  | "campaigns:manage";
 
 export interface AdminPermission {
   action: AdminResourceAction;
@@ -155,11 +157,14 @@ export const rolePermissionMap: RolePermissionMap = {
     "permissions:manage",
     "ambassadors:view",
     "ambassadors:manage",
+    "campaigns:view",
+    "campaigns:manage",
   ],
   admin: [
     "dashboard:view",
     "dashboard:refresh",
     "ambassadors:view",
+    "campaigns:view",
     "teachers:view",
     "teachers:create",
     "teachers:edit",
@@ -273,6 +278,8 @@ export const allPermissions: AdminPermission[] = [
   { action: "permissions:manage", description: "Manage permissions and roles", resourceType: "settings" },
   { action: "ambassadors:view", description: "See how ambassador links perform", resourceType: "settings" },
   { action: "ambassadors:manage", description: "Create, edit and retire ambassador links", resourceType: "settings" },
+  { action: "campaigns:view", description: "See discount campaigns", resourceType: "settings" },
+  { action: "campaigns:manage", description: "Create, edit and end discount campaigns", resourceType: "settings" },
 ];
 
 // ── DISPLAY-ONLY checks against the default role map ──────────────────────────

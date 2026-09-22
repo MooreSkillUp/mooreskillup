@@ -389,6 +389,10 @@ class CourseSerializer(serializers.ModelSerializer):
     discountPrice = serializers.DecimalField(
         source="discount_price", max_digits=12, decimal_places=2, required=False, allow_null=True
     )
+    # What this viewer would actually pay right now, and the campaign behind it.
+    # Worked out here once, so the page, the card and checkout cannot disagree.
+    effectivePrice = serializers.SerializerMethodField()
+    activeCampaign = serializers.SerializerMethodField()
     metaTitle = serializers.CharField(source="meta_title", required=False, allow_blank=True)
     metaDescription = serializers.CharField(source="meta_description", required=False, allow_blank=True)
     techStack = serializers.JSONField(source="tech_stack", required=False)
@@ -440,6 +444,8 @@ class CourseSerializer(serializers.ModelSerializer):
             "price",
             "discount_price",
             "discountPrice",
+            "effectivePrice",
+            "activeCampaign",
             "currency",
             "status",
             "visibility",
@@ -519,6 +525,32 @@ class CourseSerializer(serializers.ModelSerializer):
     def get_producedBy(self, obj):
         return "Produced by MooreSkillUp"
 
+    def _pricing(self, obj):
+        cache = self.context.setdefault("_pricing", {})
+        if obj.pk not in cache:
+            from apps.payments.pricing import price_for
+
+            request = self.context.get("request")
+            student = None
+            if request and request.user.is_authenticated and request.user.role == "student":
+                student = getattr(request.user, "student_profile", None)
+            cache[obj.pk] = price_for(obj, student)
+        return cache[obj.pk]
+
+    def get_effectivePrice(self, obj):
+        return str(self._pricing(obj)[0])
+
+    def get_activeCampaign(self, obj):
+        _, campaign, _ = self._pricing(obj)
+        if campaign is None:
+            return None
+        return {
+            "name": campaign.name,
+            "percentOff": campaign.percent_off,
+            "endsAt": campaign.ends_at.isoformat(),
+            "showCountdown": campaign.show_countdown,
+        }
+
     def get_isOwned(self, obj):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated or request.user.role != "student":
@@ -532,7 +564,9 @@ class CourseSerializer(serializers.ModelSerializer):
         return Watchlist.objects.filter(student=request.user.student_profile, course=obj).exists()
 
     def get_cta(self, obj):
-        if obj.price == 0:
+        # Free if it costs nothing to this viewer now, including through a 100%
+        # campaign, not only if the list price is zero.
+        if self._pricing(obj)[0] == 0:
             return "start_course"
         if self.get_isOwned(obj):
             return "open_course"

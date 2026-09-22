@@ -6,8 +6,9 @@ from rest_framework import permissions, response, status, views
 
 from apps.enrollments.models import Enrollment
 from apps.notifications.models import Notification
+from apps.platform.audit import record_audit
 from common.permissions import IsStudentUserRole
-from common.rbac import AdminAction
+from common.rbac import AdminAction, AdminActionsPerMethod
 
 from . import paystack
 from .models import Payment, Transaction
@@ -124,24 +125,11 @@ class PaymentInitializeView(views.APIView):
     permission_classes = [IsStudentUserRole]
 
     def post(self, request):
-        from apps.platform.models import PlatformSettings
+        from .pricing import purchase_refusal
 
-        platform = PlatformSettings.get_solo()
-        if platform.launch_state == "pre_launch":
-            return response.Response(
-                {"detail": "Courses open on launch day. You will be able to buy then."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if platform.launch_state == "founding_beta":
-            # The point of the founding window is that waiting first earned you
-            # something. Anyone without a founding number arrived after launch
-            # was announced and waits for the doors.
-            student = getattr(request.user, "student_profile", None)
-            if not student or student.founding_member_number is None:
-                return response.Response(
-                    {"detail": "Courses are open to founding members right now. Everyone else on launch day."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        refusal = purchase_refusal(getattr(request.user, "student_profile", None))
+        if refusal:
+            return response.Response({"detail": refusal}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = PaymentInitializeSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
@@ -458,3 +446,162 @@ class AdminPaymentRefundView(views.APIView):
             metadata={"amount": str(payment.amount), "reason": refund_reason},
         )
         return response.Response({"detail": "Refund processed.", "status": "refunded"})
+
+
+
+def _campaign_payload(campaign, used=0):
+    from django.utils import timezone
+
+    now = timezone.now()
+    if not campaign.is_active:
+        state = "ended"
+    elif now < campaign.starts_at:
+        state = "scheduled"
+    elif now >= campaign.ends_at:
+        state = "finished"
+    else:
+        state = "running"
+    return {
+        "id": campaign.id,
+        "name": campaign.name,
+        "percentOff": campaign.percent_off,
+        "startsAt": campaign.starts_at.isoformat(),
+        "endsAt": campaign.ends_at.isoformat(),
+        "audience": campaign.audience,
+        "categoryId": str(campaign.category_id) if campaign.category_id else None,
+        "categoryName": campaign.category.name if campaign.category_id else "",
+        "showCountdown": campaign.show_countdown,
+        "isActive": campaign.is_active,
+        "state": state,
+        # Purchases actually priced by it — the number that says it worked.
+        "purchases": used,
+    }
+
+
+def _read_campaign(data, campaign=None):
+    """Validate a campaign from request data. Returns (fields, errors)."""
+    from django.utils.dateparse import parse_datetime
+
+    from apps.categories.models import Category
+
+    errors = {}
+    fields = {}
+
+    if campaign is None or "name" in data:
+        name = (data.get("name") or "").strip()
+        if not name:
+            errors["name"] = ["Give the campaign a name, like Founding price."]
+        fields["name"] = name[:120]
+
+    if campaign is None or "percentOff" in data:
+        try:
+            percent = int(data.get("percentOff"))
+        except (TypeError, ValueError):
+            percent = 0
+        if not 1 <= percent <= 100:
+            errors["percentOff"] = ["A discount between 1% and 100%."]
+        fields["percent_off"] = percent
+
+    for key, field in (("startsAt", "starts_at"), ("endsAt", "ends_at")):
+        if campaign is None or key in data:
+            value = parse_datetime(str(data.get(key) or ""))
+            if value is None:
+                errors[key] = ["A date and time is needed."]
+            fields[field] = value
+
+    starts = fields.get("starts_at", campaign.starts_at if campaign else None)
+    ends = fields.get("ends_at", campaign.ends_at if campaign else None)
+    if starts and ends and ends <= starts:
+        errors["endsAt"] = ["The end has to be after the start."]
+
+    if "audience" in data or campaign is None:
+        audience = data.get("audience") or "everyone"
+        if audience not in ("everyone", "founding"):
+            errors["audience"] = ["Everyone or founding members."]
+        fields["audience"] = audience
+
+    if "categoryId" in data:
+        category_id = data.get("categoryId")
+        if category_id:
+            category = Category.objects.filter(id=category_id).first()
+            if category is None:
+                errors["categoryId"] = ["That programme no longer exists."]
+            fields["category"] = category
+        else:
+            fields["category"] = None
+
+    for key, field in (("showCountdown", "show_countdown"), ("isActive", "is_active")):
+        if key in data:
+            fields[field] = bool(data.get(key))
+
+    return fields, errors
+
+
+class AdminCampaignListView(AdminActionsPerMethod, views.APIView):
+    """Discount campaigns: the founding price and every promotion after it."""
+
+    admin_actions = {"GET": ("campaigns:view",), "POST": ("campaigns:manage",)}
+
+    def get(self, request):
+        from django.db.models import Count
+
+        from .models import DiscountCampaign
+
+        campaigns = list(DiscountCampaign.objects.select_related("category"))
+        used = dict(
+            Payment.objects.filter(discount_campaign__in=campaigns, status="successful")
+            .values("discount_campaign")
+            .annotate(n=Count("id"))
+            .values_list("discount_campaign", "n")
+        )
+        return response.Response([_campaign_payload(c, used.get(c.id, 0)) for c in campaigns])
+
+    def post(self, request):
+        from .models import DiscountCampaign
+
+        fields, errors = _read_campaign(request.data)
+        if errors:
+            return response.Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        campaign = DiscountCampaign.objects.create(created_by=request.user, **fields)
+        record_audit(
+            request,
+            "settings.update",
+            resource_type="campaign",
+            resource_id=campaign.id,
+            resource_name=f"{campaign.name} ({campaign.percent_off}% off)",
+            metadata={"action": "campaign-created"},
+        )
+        return response.Response(_campaign_payload(campaign), status=status.HTTP_201_CREATED)
+
+
+class AdminCampaignDetailView(AdminActionsPerMethod, views.APIView):
+    admin_actions = {"PATCH": ("campaigns:manage",)}
+
+    def patch(self, request, campaign_id):
+        from .models import DiscountCampaign
+
+        campaign = DiscountCampaign.objects.filter(id=campaign_id).first()
+        if campaign is None:
+            return response.Response(
+                {"detail": "That campaign no longer exists."}, status=status.HTTP_404_NOT_FOUND
+            )
+        fields, errors = _read_campaign(request.data, campaign)
+        if errors:
+            return response.Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        changes = {}
+        for field, value in fields.items():
+            before = getattr(campaign, field)
+            if before != value:
+                changes[field] = {"before": str(before), "after": str(value)}
+                setattr(campaign, field, value)
+        campaign.save()
+        record_audit(
+            request,
+            "settings.update",
+            resource_type="campaign",
+            resource_id=campaign.id,
+            resource_name=f"{campaign.name} ({campaign.percent_off}% off)",
+            changes=changes,
+        )
+        used = Payment.objects.filter(discount_campaign=campaign, status="successful").count()
+        return response.Response(_campaign_payload(campaign, used))
