@@ -19,7 +19,7 @@ from common.mail_backend import backend_delivers
 from common.permissions import IsStudentUserRole
 from common.rbac import SUPER_ADMIN, AdminAction, AdminActionsPerMethod
 
-from .models import PasswordResetToken
+from .models import PasswordResetToken, StudentProfile
 from .password_reset_email import try_send_password_reset_email
 from .serializers import (
     AdminAccountCreateSerializer,
@@ -335,16 +335,28 @@ class VerifyRegisterView(APIView):
 
         student.referral_code = generate_referral_code()
         if pending.referred_by_code:
-            referrer = StudentProfile.objects.filter(
-                referral_code=pending.referred_by_code
-            ).exclude(pk=student.pk).first()
-            if referrer:
-                student.referred_by = referrer
+            from .models import Ambassador
+
+            # One namespace: a code belongs to an ambassador or to a student,
+            # never both. A retired ambassador's code still credits nobody new.
+            ambassador = Ambassador.objects.filter(
+                code=pending.referred_by_code, is_active=True
+            ).first()
+            if ambassador:
+                student.ambassador = ambassador
                 student.referral_qualified_at = timezone.now()
+            else:
+                referrer = StudentProfile.objects.filter(
+                    referral_code=pending.referred_by_code
+                ).exclude(pk=student.pk).first()
+                if referrer:
+                    student.referred_by = referrer
+                    student.referral_qualified_at = timezone.now()
         student.save(
             update_fields=[
                 "referral_code",
                 "referred_by",
+                "ambassador",
                 "referral_qualified_at",
                 "updated_at",
             ]
@@ -552,6 +564,243 @@ class ReferralLeaderboardView(APIView):
         return response.Response(
             [{"username": row["user__username"], "referrals": row["total"]} for row in rows]
         )
+
+
+def _ambassador_payload(ambassador, stats):
+    return {
+        "id": str(ambassador.id),
+        "name": ambassador.name,
+        "code": ambassador.code,
+        "phone": ambassador.phone,
+        "email": ambassador.email,
+        "community": ambassador.community,
+        "notes": ambassador.notes,
+        "isActive": ambassador.is_active,
+        "createdAt": ambassador.created_at.isoformat(),
+        "clicks": ambassador.clicks,
+        # Started the form with this code but have not entered the emailed code
+        # yet. Worth seeing: a high number here means the email is the problem.
+        "started": stats.get("started", 0),
+        "verified": stats.get("verified", 0),
+        # The number that actually says whether the promotion works.
+        "paying": stats.get("paying", 0),
+    }
+
+
+def _ambassador_stats(ambassadors):
+    """Counts for every ambassador in three queries, not three per row."""
+    from django.db.models import Count
+
+    from apps.payments.models import Payment
+
+    from .models import PendingRegistration
+
+    codes = [a.code for a in ambassadors]
+    started = dict(
+        PendingRegistration.objects.filter(referred_by_code__in=codes)
+        .values("referred_by_code")
+        .annotate(n=Count("id"))
+        .values_list("referred_by_code", "n")
+    )
+    verified = dict(
+        StudentProfile.objects.filter(ambassador__in=ambassadors)
+        .values("ambassador_id")
+        .annotate(n=Count("id"))
+        .values_list("ambassador_id", "n")
+    )
+    # Live money only: a test-key checkout is not a customer.
+    paying = dict(
+        Payment.objects.filter(
+            student__ambassador__in=ambassadors, status="successful", mode="live"
+        )
+        .values("student__ambassador_id")
+        .annotate(n=Count("student", distinct=True))
+        .values_list("student__ambassador_id", "n")
+    )
+    return {
+        a.id: {
+            "started": started.get(a.code, 0),
+            "verified": verified.get(a.id, 0),
+            "paying": paying.get(a.id, 0),
+        }
+        for a in ambassadors
+    }
+
+
+def _clean_code(raw):
+    code = (raw or "").strip().upper()
+    if not re.fullmatch(r"[A-Z0-9-]{3,24}", code):
+        return None
+    return code
+
+
+CODE_RULE = "3 to 24 characters: letters, numbers and dashes."
+
+
+class AdminAmbassadorListView(AdminActionsPerMethod, APIView):
+    """Every ambassador link, and what each one has brought in."""
+
+    admin_actions = {"GET": ("ambassadors:view",), "POST": ("ambassadors:manage",)}
+
+    def get(self, request):
+        from .models import Ambassador
+
+        ambassadors = list(Ambassador.objects.all())
+        stats = _ambassador_stats(ambassadors)
+        return response.Response([_ambassador_payload(a, stats[a.id]) for a in ambassadors])
+
+    def post(self, request):
+        from .models import Ambassador, generate_referral_code, referral_code_in_use
+
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            return response.Response(
+                {"name": ["Give the ambassador a name you will recognise."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        requested = request.data.get("code")
+        if requested:
+            code = _clean_code(requested)
+            if code is None:
+                return response.Response({"code": [CODE_RULE]}, status=status.HTTP_400_BAD_REQUEST)
+            if referral_code_in_use(code):
+                return response.Response(
+                    {"code": ["That code already belongs to someone."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            code = generate_referral_code()
+
+        ambassador = Ambassador.objects.create(
+            name=name[:120],
+            code=code,
+            phone=(request.data.get("phone") or "").strip()[:32],
+            email=(request.data.get("email") or "").strip()[:254],
+            community=(request.data.get("community") or "").strip()[:120],
+            notes=(request.data.get("notes") or "").strip()[:500],
+            created_by=request.user,
+        )
+        record_audit(
+            request,
+            "ambassador.create",
+            resource_type="ambassador",
+            resource_id=ambassador.id,
+            resource_name=f"{ambassador.name} ({ambassador.code})",
+        )
+        stats = _ambassador_stats([ambassador])
+        return response.Response(
+            _ambassador_payload(ambassador, stats[ambassador.id]), status=status.HTTP_201_CREATED
+        )
+
+
+class AdminAmbassadorDetailView(AdminActionsPerMethod, APIView):
+    admin_actions = {"PATCH": ("ambassadors:manage",)}
+
+    def patch(self, request, ambassador_id):
+        from .models import Ambassador, referral_code_in_use
+
+        ambassador = Ambassador.objects.filter(id=ambassador_id).first()
+        if ambassador is None:
+            return response.Response(
+                {"detail": "That ambassador no longer exists."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        changes = {}
+        limits = (("name", 120), ("phone", 32), ("email", 254), ("community", 120), ("notes", 500))
+        for field, limit in limits:
+            if field in request.data:
+                value = (request.data.get(field) or "").strip()[:limit]
+                if field == "name" and not value:
+                    return response.Response(
+                        {"name": ["The name cannot be empty."]}, status=status.HTTP_400_BAD_REQUEST
+                    )
+                changes[field] = {"before": getattr(ambassador, field), "after": value}
+                setattr(ambassador, field, value)
+
+        if "code" in request.data:
+            code = _clean_code(request.data.get("code"))
+            if code is None:
+                return response.Response({"code": [CODE_RULE]}, status=status.HTTP_400_BAD_REQUEST)
+            if code != ambassador.code:
+                if referral_code_in_use(code, exclude_ambassador=ambassador):
+                    return response.Response(
+                        {"code": ["That code already belongs to someone."]},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                # Changing a code breaks every link already shared with the old
+                # one, so it is recorded like any other change and the screen
+                # warns before doing it.
+                changes["code"] = {"before": ambassador.code, "after": code}
+                ambassador.code = code
+
+        if "isActive" in request.data:
+            active = bool(request.data.get("isActive"))
+            changes["isActive"] = {"before": ambassador.is_active, "after": active}
+            ambassador.is_active = active
+
+        ambassador.save()
+        record_audit(
+            request,
+            "ambassador.update",
+            resource_type="ambassador",
+            resource_id=ambassador.id,
+            resource_name=f"{ambassador.name} ({ambassador.code})",
+            changes=changes,
+        )
+        stats = _ambassador_stats([ambassador])
+        return response.Response(_ambassador_payload(ambassador, stats[ambassador.id]))
+
+
+class ReferralCodeCheckView(APIView):
+    """What a code on the signup form belongs to, if anything.
+
+    Lets the form say "Invited by ..." as somebody types, instead of accepting a
+    mistyped code in silence and crediting nobody. Answers with the minimum: a
+    student's public handle, or an ambassador's name, never an email or phone.
+    """
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-username"
+
+    def get(self, request):
+        from .models import Ambassador
+
+        code = _clean_code(request.query_params.get("code"))
+        if code is None:
+            return response.Response({"valid": False})
+        ambassador = Ambassador.objects.filter(code=code, is_active=True).first()
+        if ambassador:
+            return response.Response({"valid": True, "kind": "ambassador", "name": ambassador.name})
+        student = StudentProfile.objects.select_related("user").filter(referral_code=code).first()
+        if student:
+            return response.Response({"valid": True, "kind": "friend", "name": student.user.username})
+        return response.Response({"valid": False})
+
+
+class ReferralClickView(APIView):
+    """Count one visit through an ambassador link.
+
+    The browser sends this once per session, so a refresh is not a new visitor.
+    Student codes are not counted here: their measure is who verified, and
+    visits would only invite people to farm them.
+    """
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-username"
+
+    def post(self, request):
+        from django.db.models import F
+
+        from .models import Ambassador
+
+        code = _clean_code(request.data.get("code"))
+        if code:
+            Ambassador.objects.filter(code=code, is_active=True).update(clicks=F("clicks") + 1)
+        # Always the same answer, so the endpoint says nothing about which codes
+        # exist.
+        return response.Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UsernameAvailableView(APIView):

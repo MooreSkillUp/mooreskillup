@@ -98,7 +98,65 @@ export default function AuthRegisterPage() {
   // Somebody arrived through a friend's link. Held quietly and sent with the
   // form — asking them to type a code they were handed is a step for nothing.
   const searchParams = useSearchParams();
-  const referralCode = (searchParams.get("ref") || "").trim().toUpperCase();
+  // Filled in from the link when there is one, and typeable when there is not:
+  // a code told aloud or sent in a voice note has to have somewhere to go.
+  const [referralCode, setReferralCode] = useState(
+    () => (searchParams.get("ref") || "").trim().toUpperCase(),
+  );
+  const [codeCheck, setCodeCheck] = useState<{
+    state: "idle" | "checking" | "valid" | "invalid";
+    label: string;
+  }>({ state: "idle", label: "" });
+
+  // One visit per ambassador link per session, so a refresh is not a visitor.
+  useEffect(() => {
+    const fromLink = (searchParams.get("ref") || "").trim().toUpperCase();
+    if (!fromLink) return;
+    try {
+      const key = `msu-ref-click-${fromLink}`;
+      if (window.sessionStorage.getItem(key)) return;
+      window.sessionStorage.setItem(key, "1");
+    } catch {
+      // Storage blocked: count it anyway rather than never.
+    }
+    void fetch(buildApiUrl("/api/auth/referral-code/click/"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: fromLink }),
+    }).catch(() => {});
+  }, [searchParams]);
+
+  // Say whose code it is as they type, instead of accepting a typo in silence
+  // and crediting nobody.
+  useEffect(() => {
+    const code = referralCode.trim();
+    if (code.length < 3) {
+      setCodeCheck({ state: "idle", label: "" });
+      return;
+    }
+    setCodeCheck({ state: "checking", label: "" });
+    const timer = setTimeout(async () => {
+      try {
+        const result = await fetch(
+          buildApiUrl(`/api/auth/referral-code/?code=${encodeURIComponent(code)}`),
+        ).then(parseJsonSafely);
+        if (result?.valid) {
+          setCodeCheck({
+            state: "valid",
+            label:
+              result.kind === "ambassador"
+                ? `Invited by ${result.name}.`
+                : `Invited by @${result.name}.`,
+          });
+        } else {
+          setCodeCheck({ state: "invalid", label: "We don't recognise that code." });
+        }
+      } catch {
+        setCodeCheck({ state: "idle", label: "" });
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [referralCode]);
   const {
     interests,
     trackOptionsByInterest,
@@ -495,6 +553,22 @@ export default function AuthRegisterPage() {
                 onChange={setField("heardDetail")}
                 className="mt-3"
               />
+            )}
+          </div>
+          <div>
+            <Input
+              label="Referral code (optional)"
+              value={referralCode}
+              onChange={(event) => setReferralCode(event.target.value.toUpperCase())}
+              autoCapitalize="characters"
+              autoComplete="off"
+              placeholder="e.g. ZNWTPP"
+            />
+            {codeCheck.state === "valid" && (
+              <p className="mt-1 text-xs font-medium text-success">{codeCheck.label}</p>
+            )}
+            {codeCheck.state === "invalid" && (
+              <p className="mt-1 text-xs font-medium text-destructive">{codeCheck.label}</p>
             )}
           </div>
         </div>

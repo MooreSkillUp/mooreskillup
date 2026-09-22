@@ -82,6 +82,7 @@ class AdminStudentSerializer(serializers.ModelSerializer):
     referredByUsername = serializers.CharField(
         source="referred_by.user.username", read_only=True, default=""
     )
+    ambassadorName = serializers.CharField(source="ambassador.name", read_only=True, default="")
     termsAcceptedAt = serializers.DateTimeField(source="user.terms_accepted_at", read_only=True)
     termsVersion = serializers.CharField(source="user.terms_version", read_only=True)
 
@@ -110,6 +111,7 @@ class AdminStudentSerializer(serializers.ModelSerializer):
             "utmCampaign",
             "foundingMemberNumber",
             "referredByUsername",
+            "ambassadorName",
             "termsAcceptedAt",
             "termsVersion",
         )
