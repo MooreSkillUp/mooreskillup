@@ -78,7 +78,9 @@ export type AdminResourceAction =
   | "admin-settings:edit"
   | "audit-logs:view"
   | "audit-logs:export"
-  | "permissions:manage";
+  | "permissions:manage"
+  | "ambassadors:view"
+  | "ambassadors:manage";
 
 export interface AdminPermission {
   action: AdminResourceAction;
@@ -151,10 +153,13 @@ export const rolePermissionMap: RolePermissionMap = {
     "audit-logs:view",
     "audit-logs:export",
     "permissions:manage",
+    "ambassadors:view",
+    "ambassadors:manage",
   ],
   admin: [
     "dashboard:view",
     "dashboard:refresh",
+    "ambassadors:view",
     "teachers:view",
     "teachers:create",
     "teachers:edit",
@@ -266,6 +271,8 @@ export const allPermissions: AdminPermission[] = [
   { action: "audit-logs:view", description: "View audit logs", resourceType: "logs" },
   { action: "audit-logs:export", description: "Export audit logs", resourceType: "logs" },
   { action: "permissions:manage", description: "Manage permissions and roles", resourceType: "settings" },
+  { action: "ambassadors:view", description: "See how ambassador links perform", resourceType: "settings" },
+  { action: "ambassadors:manage", description: "Create, edit and retire ambassador links", resourceType: "settings" },
 ];
 
 // ── DISPLAY-ONLY checks against the default role map ──────────────────────────

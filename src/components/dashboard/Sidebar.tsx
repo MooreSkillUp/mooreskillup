@@ -26,6 +26,7 @@ import {
   Waves,
   X,
   type LucideIcon,
+  Megaphone,
 } from "lucide-react";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { UserAvatar } from "@/components/shared/UserAvatar";
@@ -164,6 +165,12 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         // overlapping pages that disagreed about what their buttons did.
         { href: "/admin/teachers", label: "Teachers", icon: Users, permission: "teachers:view" },
         { href: "/admin/admins", label: "Admin team", icon: Shield, permission: "admins:view" },
+        {
+          href: "/admin/ambassadors",
+          label: "Ambassadors",
+          icon: Megaphone,
+          permission: "ambassadors:view",
+        },
       ],
     },
     {

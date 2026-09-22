@@ -166,6 +166,16 @@ class StudentProfile(UUIDPrimaryKeyModel, TimeStampedModel):
     # A referral counts when the invited account verifies its email — never on a
     # click, which anyone can manufacture by refreshing their own link.
     referral_qualified_at = models.DateTimeField(null=True, blank=True)
+    # Brought in by an ambassador rather than by another student. Separate from
+    # referred_by because the two are rewarded and read differently: a student
+    # earns early access, an ambassador is measured for a campaign.
+    ambassador = models.ForeignKey(
+        "accounts.Ambassador",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="students",
+    )
     # --- Where they actually came from ---------------------------------------
     #
     # heard_about_us is what they remember; this is where the click came from.
@@ -192,8 +202,55 @@ def generate_referral_code(length=6):
 
     while True:
         code = "".join(secrets.choice(REFERRAL_ALPHABET) for _ in range(length))
-        if not StudentProfile.objects.filter(referral_code=code).exists():
+        if not referral_code_in_use(code):
             return code
+
+
+class Ambassador(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Somebody who promotes MooreSkillUp with their own link.
+
+    Not a user: an ambassador never signs in. A Super Admin creates the link and
+    watches what it brings in. Giving them an account would mean a login to
+    support and a dashboard to build for a programme that is still being
+    defined — and every number they would see is already here.
+
+    Codes share one namespace with student referral codes, so a code always
+    means exactly one person.
+    """
+
+    name = models.CharField(max_length=120)
+    code = models.CharField(max_length=24, unique=True)
+    phone = models.CharField(max_length=32, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+    # Campus, community, platform — whatever tells you where their people are.
+    community = models.CharField(max_length=120, blank=True, default="")
+    notes = models.CharField(max_length=500, blank=True, default="")
+    # Retired rather than deleted: the students they brought in keep pointing
+    # at them, and the campaign history stays true.
+    is_active = models.BooleanField(default=True)
+    # Visits through the link. Counted once per browser session, so a refresh is
+    # not a new visitor.
+    clicks = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+def referral_code_in_use(code, *, exclude_ambassador=None):
+    """Whether a code already belongs to anyone, student or ambassador."""
+    code = (code or "").strip().upper()
+    if StudentProfile.objects.filter(referral_code=code).exists():
+        return True
+    ambassadors = Ambassador.objects.filter(code=code)
+    if exclude_ambassador is not None:
+        ambassadors = ambassadors.exclude(pk=exclude_ambassador.pk)
+    return ambassadors.exists()
 
 
 class PasswordResetToken(UUIDPrimaryKeyModel, TimeStampedModel):
