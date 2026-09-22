@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { BrandLogo } from "@/components/shared/BrandLogo";
+import { CookieChoices } from "@/components/shared/CookieConsent";
 import { LegalText } from "@/components/shared/LegalText";
 import { serverApiUrl } from "@/lib/server-api";
 
@@ -93,6 +94,15 @@ export default async function LegalPage({ params }: { params: Promise<{ kind: st
           </p>
         )}
       </div>
+
+      {kind === "privacy" && (
+        <section id="cookies" className="mt-10 rounded-2xl border border-border bg-card p-5">
+          <h2 className="font-display text-lg font-semibold">Your cookie choices</h2>
+          <div className="mt-2">
+            <CookieChoices />
+          </div>
+        </section>
+      )}
 
       <nav className="mt-12 flex flex-wrap gap-x-5 gap-y-2 border-t border-border pt-6 text-sm">
         <Link href="/legal/terms" className="text-muted-foreground hover:text-foreground">
