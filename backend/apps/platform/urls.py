@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .health import HealthView
 from .views import (
     AdminAuditLogExportView,
     AdminAuditLogListView,
@@ -11,6 +12,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("health/", HealthView.as_view(), name="health"),
     path("admin/audit-logs/", AdminAuditLogListView.as_view(), name="admin-audit-logs"),
     path("admin/audit-logs/export/", AdminAuditLogExportView.as_view(), name="admin-audit-logs-export"),
     path("admin/auth-settings/", AuthenticationSettingsView.as_view(), name="admin-auth-settings"),

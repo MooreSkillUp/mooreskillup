@@ -1,13 +1,17 @@
 resource "azurerm_postgresql_flexible_server" "this" {
-  name                          = var.name
-  resource_group_name           = var.resource_group_name
-  location                      = var.location
-  version                       = "16"
-  administrator_login           = var.administrator_login
-  administrator_password        = var.administrator_password
-  sku_name                      = var.sku_name
-  storage_mb                    = 32768
-  backup_retention_days         = 7
+  name                   = var.name
+  resource_group_name    = var.resource_group_name
+  location               = var.location
+  version                = "16"
+  administrator_login    = var.administrator_login
+  administrator_password = var.administrator_password
+  sku_name               = var.sku_name
+  storage_mb             = 32768
+  # 14 days of point-in-time restore. Azure includes backup storage up to the
+  # provisioned size (32 GB), and the database is far smaller than that, so the
+  # longer window costs nothing today. A week is not long enough to notice
+  # quiet data damage: the mistake is usually found after the backup expires.
+  backup_retention_days         = 14
   public_network_access_enabled = true
   tags                          = var.tags
 
