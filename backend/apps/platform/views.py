@@ -181,11 +181,9 @@ class PublicPlatformStatusView(views.APIView):
                 "maintenanceMessage": settings_row.maintenance_message,
                 "studentRegistrationOpen": settings_row.student_registration_open,
                 "signInEnabled": settings_row.sign_in_enabled,
-                "legal": {
-                    "termsVersion": settings_row.terms_version,
-                    "termsUrl": settings_row.terms_url,
-                    "privacyUrl": settings_row.privacy_url,
-                },
+                # The documents live on this platform; the form only needs to
+                # know which exist yet, so it never links to an empty page.
+                "legal": _legal_summary(),
                 # Everything the pre-launch screen needs, for a visitor who has
                 # no account and cannot be asked to sign in first.
                 "launch": {
@@ -215,3 +213,96 @@ class PublicPlatformStatusView(views.APIView):
                 },
             }
         )
+
+
+
+def _legal_summary():
+    from .models import LegalDocument, current_legal_version
+
+    published = {
+        document.kind
+        for document in LegalDocument.objects.all()
+        if document.is_published
+    }
+    return {
+        "version": current_legal_version(),
+        "termsUrl": "/legal/terms",
+        "privacyUrl": "/legal/privacy",
+        "refundUrl": "/legal/refund",
+        "termsPublished": "terms" in published,
+        "privacyPublished": "privacy" in published,
+        "refundPublished": "refund" in published,
+    }
+
+
+class PublicLegalDocumentView(views.APIView):
+    """A legal document, for anyone. Nothing here is private by design."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, kind):
+        from .models import LegalDocument
+        from .serializers import LegalDocumentSerializer
+
+        if kind not in dict(LegalDocument.KINDS):
+            return response.Response({"detail": "No such document."}, status=404)
+        document = LegalDocument.for_kind(kind)
+        data = LegalDocumentSerializer(document).data
+        # Unpublished drafts are not shown to the public, only their absence.
+        if not document.is_published:
+            data["body"] = ""
+        data.pop("updatedByName", None)
+        return response.Response(data)
+
+
+class AdminLegalDocumentView(AdminActionsPerMethod, views.APIView):
+    """Write and publish the legal documents.
+
+    A Super Admin edits the text here. Publishing a changed body bumps the
+    version, so acceptances recorded from then on say which text they were.
+    Saving the same text again changes nothing, and bumps nothing.
+    """
+
+    admin_actions = {"GET": ("admin-settings:view",), "PUT": ("admin-settings:edit",)}
+
+    def get(self, request, kind=None):
+        from .models import LegalDocument
+        from .serializers import LegalDocumentSerializer
+
+        documents = [LegalDocument.for_kind(k) for k, _ in LegalDocument.KINDS]
+        return response.Response(LegalDocumentSerializer(documents, many=True).data)
+
+    def put(self, request, kind=None):
+        from django.utils import timezone
+
+        from .models import LegalDocument
+        from .serializers import LegalDocumentSerializer
+
+        if kind not in dict(LegalDocument.KINDS):
+            return response.Response({"detail": "No such document."}, status=404)
+        document = LegalDocument.for_kind(kind)
+        serializer = LegalDocumentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        title = serializer.validated_data["title"].strip() or document.title
+        body = serializer.validated_data["body"]
+        changed = body.strip() != document.body.strip() or title != document.title
+
+        if changed:
+            before = document.version
+            document.title = title
+            document.body = body
+            document.version += 1
+            document.published_at = timezone.now()
+            document.updated_by = request.user
+            document.save()
+            record_audit(
+                request,
+                "settings.update",
+                resource_type="settings",
+                resource_id=document.id,
+                resource_name=document.title,
+                changes={"version": {"before": before, "after": document.version}},
+            )
+        return response.Response(LegalDocumentSerializer(document).data)

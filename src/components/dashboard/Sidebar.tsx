@@ -27,6 +27,7 @@ import {
   X,
   type LucideIcon,
   Megaphone,
+  Scale,
 } from "lucide-react";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { UserAvatar } from "@/components/shared/UserAvatar";
@@ -184,6 +185,12 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           permission: "payments:view",
         },
         { href: "/admin/support", label: "Support", icon: LifeBuoy, permission: "support:view" },
+        {
+          href: "/admin/legal",
+          label: "Legal pages",
+          icon: Scale,
+          permission: "admin-settings:view",
+        },
         {
           href: "/admin/activity-logs",
           label: "Activity logs",

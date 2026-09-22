@@ -19,6 +19,16 @@ const DEFAULT_FLAGS: FeatureFlags = {
   quiz: false,
 };
 
+export interface LegalSummary {
+  version: string;
+  termsUrl: string;
+  privacyUrl: string;
+  refundUrl: string;
+  termsPublished: boolean;
+  privacyPublished: boolean;
+  refundPublished: boolean;
+}
+
 /** Where the platform is in its own life: counting down, or open. */
 export interface LaunchState {
   state: "pre_launch" | "founding_beta" | "live";
@@ -45,8 +55,8 @@ export interface PlatformStatus {
   supportResponseHours: number;
   /** False closes sign-in to students. Admins are never locked out. */
   signInEnabled: boolean;
-  /** Where the legal pages live — on the public website, not here. */
-  legal: { termsVersion: string; termsUrl: string; privacyUrl: string };
+  /** The legal pages this platform hosts, and which have been published. */
+  legal: LegalSummary;
   launch: LaunchState;
   features: FeatureFlags;
 }
@@ -59,7 +69,15 @@ const DEFAULT_STATUS: PlatformStatus = {
   paymentsEnabled: true,
   supportResponseHours: 24,
   signInEnabled: true,
-  legal: { termsVersion: "", termsUrl: "", privacyUrl: "" },
+  legal: {
+    version: "",
+    termsUrl: "/legal/terms",
+    privacyUrl: "/legal/privacy",
+    refundUrl: "/legal/refund",
+    termsPublished: false,
+    privacyPublished: false,
+    refundPublished: false,
+  },
   // If the status call fails we assume the platform is open: a countdown shown
   // to someone who should be learning is worse than a sign-up form shown a few
   // hours early, and the server refuses early registrations anyway.
