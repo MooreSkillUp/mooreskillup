@@ -13,6 +13,31 @@ export function resolveMediaUrl(path: string | null | undefined): string | null 
 
 export type CourseLevel = "beginner" | "intermediate" | "advanced";
 
+/** A running discount campaign, as it applies to one course for one viewer. */
+function pricingFrom(raw: Record<string, unknown>) {
+  const price = Number(raw.price ?? 0);
+  const ownDiscount = raw.discountPrice == null ? null : Number(raw.discountPrice);
+  const effective =
+    raw.effectivePrice == null
+      ? ownDiscount !== null && ownDiscount < price
+        ? ownDiscount
+        : price
+      : Number(raw.effectivePrice);
+  const campaign = raw.activeCampaign as ActiveCampaign | null | undefined;
+  return {
+    discountPrice: effective < price ? effective : null,
+    effectivePrice: effective,
+    activeCampaign: campaign ?? null,
+  };
+}
+
+export interface ActiveCampaign {
+  name: string;
+  percentOff: number;
+  endsAt: string;
+  showCountdown: boolean;
+}
+
 export interface StudentCourse {
   id: string;
   title: string;
@@ -22,7 +47,15 @@ export interface StudentCourse {
   track: string;
   level: CourseLevel;
   price: number;
+  /**
+   * The lower price this viewer pays, if any — a course's own discount or a
+   * running campaign, whichever is bigger. Folded in here so every place that
+   * already shows a struck-through price shows campaigns too.
+   */
   discountPrice: number | null;
+  /** What this viewer would be charged right now. Decided by the server. */
+  effectivePrice: number;
+  activeCampaign: ActiveCampaign | null;
   currency: string;
   techStack: string[];
   tags: string[];
@@ -71,7 +104,7 @@ export function normalizeStudentCourse(raw: Record<string, unknown>): StudentCou
     track: String(raw.track ?? raw.subcategoryName ?? ""),
     level: (String(raw.level ?? "beginner") as CourseLevel),
     price: num(raw.price),
-    discountPrice: raw.discountPrice == null ? null : Number(raw.discountPrice),
+    ...pricingFrom(raw),
     currency: String(raw.currency ?? "NGN"),
     techStack: arr(raw.techStack),
     tags: arr(raw.tags),

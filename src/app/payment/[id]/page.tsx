@@ -45,7 +45,9 @@ export default function PaymentPage() {
   }
 
   const firstLessonHref = `/course/${course.id}`;
-  const amount = course.discountPrice !== null && course.discountPrice < course.price ? course.discountPrice : course.price;
+  // The server charges this; showing anything else would be a price the
+  // student never pays.
+  const amount = course.effectivePrice;
 
   if (course.isOwned) {
     return (

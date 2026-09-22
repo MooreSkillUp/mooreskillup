@@ -9,11 +9,11 @@ from . import paystack
 from .models import Payment, Transaction
 
 
-def effective_price(course):
-    """The amount actually charged: discount price when it's lower, else price."""
-    if course.discount_price is not None and 0 < course.discount_price < course.price:
-        return course.discount_price
-    return course.price
+def effective_price(course, student=None):
+    """The amount actually charged. See payments.pricing for the rules."""
+    from .pricing import price_for
+
+    return price_for(course, student)[0]
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -73,7 +73,11 @@ class PaymentInitializeSerializer(serializers.Serializer):
         course = Course.objects.filter(id=attrs["course_id"], status="published", visibility="visible").first()
         if not course:
             raise serializers.ValidationError({"course_id": "Course not available for purchase."})
-        if course.price <= 0:
+        from .pricing import price_for
+
+        student = self.context["request"].user.student_profile
+        if price_for(course, student)[0] <= 0:
+            # Free on its own or through a 100% campaign: enrolment, not checkout.
             raise serializers.ValidationError({"course_id": "Free courses do not require payment."})
         if Enrollment.objects.with_access().filter(
             student=self.context["request"].user.student_profile, course=course
@@ -86,7 +90,10 @@ class PaymentInitializeSerializer(serializers.Serializer):
         request = self.context["request"]
         student = request.user.student_profile
         course = validated_data["course"]
-        amount = effective_price(course)  # server-computed; never trust the client
+        from .pricing import price_for
+
+        # Server-computed, for this student, at this moment. Never the client's.
+        amount, campaign, list_price = price_for(course, student)
         reference = paystack.new_reference()
         callback_url = validated_data.get("callback_url") or ""
 
@@ -102,6 +109,8 @@ class PaymentInitializeSerializer(serializers.Serializer):
                 status="pending",
                 description=f"{course.title} full course access",
                 mode=paystack.mode(),
+                list_price=list_price,
+                discount_campaign=campaign,
             )
             init = paystack.initialize_transaction(
                 email=request.user.email,

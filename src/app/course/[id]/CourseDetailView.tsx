@@ -17,6 +17,7 @@ import {
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { CourseBanner, CourseBannerHighlight } from "@/components/course/CourseBanner";
+import { CampaignNotice } from "@/components/course/CampaignNotice";
 import { CurriculumAccordion } from "@/components/course/CurriculumAccordion";
 import { formatNaira } from "@/lib/commerce";
 import { useAuth } from "@/lib/auth";
@@ -66,7 +67,8 @@ export function CourseDetailView() {
     );
   }
 
-  const isFree = course.price === 0;
+  // Free to this viewer right now — a free course, or a 100% campaign.
+  const isFree = course.effectivePrice === 0;
   const showDiscount = course.discountPrice !== null && course.discountPrice < course.price;
   const firstLesson = course.sections.flatMap((s) => s.lessons)[0];
   const totalLessons = course.sections.reduce((sum, s) => sum + s.lessons.length, 0);
@@ -172,7 +174,14 @@ export function CourseDetailView() {
             <div className="self-start rounded-[1.5rem] border border-border bg-card p-6 shadow-lg lg:sticky lg:top-6">
               <div className="font-display text-3xl font-bold">
                 {isFree ? (
-                  <span className="text-success">Free</span>
+                  <span className="flex items-baseline gap-2 text-success">
+                    Free
+                    {course.price > 0 && (
+                      <span className="text-base font-normal text-muted-foreground line-through">
+                        {formatNaira(course.price)}
+                      </span>
+                    )}
+                  </span>
                 ) : showDiscount ? (
                   <span className="flex items-baseline gap-2">
                     {formatNaira(course.discountPrice as number)}
@@ -184,6 +193,9 @@ export function CourseDetailView() {
                   formatNaira(course.price)
                 )}
               </div>
+              {!course.isOwned && course.activeCampaign && (
+                <CampaignNotice campaign={course.activeCampaign} />
+              )}
               {course.isOwned && (
                 <div className="mt-2 flex items-center gap-1 text-sm font-medium text-success">
                   <BadgeCheck className="h-4 w-4" /> You own this course

@@ -14,6 +14,16 @@ class Payment(UUIDPrimaryKeyModel, TimeStampedModel):
     )
 
     student = models.ForeignKey("accounts.StudentProfile", on_delete=models.CASCADE, related_name="payments")
+    # What the course cost before any discount, and which campaign cut it, so a
+    # refund, a revenue figure or a dispute can say what actually happened.
+    list_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    discount_campaign = models.ForeignKey(
+        "payments.DiscountCampaign",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments",
+    )
     course = models.ForeignKey("courses.Course", on_delete=models.CASCADE, related_name="payments")
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     currency = models.CharField(max_length=10, default="NGN")
@@ -45,3 +55,53 @@ class Transaction(UUIDPrimaryKeyModel, TimeStampedModel):
     authorization_url = models.URLField(blank=True)
     gateway_response = models.JSONField(default=dict, blank=True)
     verified_at = models.DateTimeField(null=True, blank=True)
+
+
+class DiscountCampaign(models.Model):
+    """A named, dated discount a Super Admin runs: the founding price, a
+    Christmas gift-a-skill week, a campus promotion.
+
+    One mechanism rather than special code per promotion. It takes a percentage
+    off the course's list price for the people it applies to, between two
+    dates, and when two campaigns overlap the bigger discount wins — they never
+    stack. Stacking is how a 50% campaign and a 60% campaign end up giving a
+    course away by accident.
+    """
+
+    AUDIENCES = (
+        ("everyone", "Everyone"),
+        # People who joined before launch day: the founding price.
+        ("founding", "Founding members"),
+    )
+
+    name = models.CharField(max_length=120)
+    percent_off = models.PositiveSmallIntegerField()
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    audience = models.CharField(max_length=20, choices=AUDIENCES, default="everyone")
+    # Empty means every course; set, it limits the campaign to one programme.
+    category = models.ForeignKey(
+        "categories.Category", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    # The deadline is what turns "later" into "now", so it is shown by default.
+    show_countdown = models.BooleanField(default=True)
+    # A kill switch that does not rewrite history: ending a campaign early
+    # leaves its dates as they were planned.
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-starts_at",)
+
+    def __str__(self):
+        return f"{self.name} ({self.percent_off}% off)"
+
+    def is_running(self, now=None):
+        from django.utils import timezone
+
+        now = now or timezone.now()
+        return self.is_active and self.starts_at <= now < self.ends_at
