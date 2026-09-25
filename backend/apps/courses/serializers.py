@@ -360,6 +360,36 @@ class SectionSerializer(serializers.ModelSerializer):
         return "unlocked"
 
 
+class CourseTagField(serializers.SlugRelatedField):
+    """A tag the teacher types, created the first time it is used.
+
+    Tags are free text in the studio: a teacher types "FastAPI" and presses
+    enter. The plain SlugRelatedField refused anything not already in the
+    database, so saving a course with a new tag failed with "Object with
+    name=Python does not exist" - a message that blamed the teacher for a row
+    we had simply never created. It blocked saving the course at all, because
+    the whole request was rejected.
+
+    Matching is case-insensitive, so Python and python stay one tag rather than
+    two that look identical in a filter list.
+    """
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("slug_field", "name")
+        kwargs.setdefault("queryset", CourseTag.objects.all())
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        name = str(data).strip()
+        if not name:
+            self.fail("invalid")
+        existing = CourseTag.objects.filter(name__iexact=name).first()
+        if existing is not None:
+            return existing
+        tag, _ = CourseTag.objects.get_or_create(name=name[:100])
+        return tag
+
+
 class CourseSerializer(serializers.ModelSerializer):
     sections = SectionSerializer(many=True, read_only=True)
     teacherName = serializers.SerializerMethodField()
@@ -385,7 +415,7 @@ class CourseSerializer(serializers.ModelSerializer):
     lastUpdated = serializers.DateTimeField(source="updated_at", read_only=True)
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     analytics = serializers.SerializerMethodField()
-    tags = serializers.SlugRelatedField(slug_field="name", many=True, queryset=CourseTag.objects.all(), required=False)
+    tags = CourseTagField(many=True, required=False)
     discountPrice = serializers.DecimalField(
         source="discount_price", max_digits=12, decimal_places=2, required=False, allow_null=True
     )
