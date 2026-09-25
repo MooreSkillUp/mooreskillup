@@ -23,13 +23,26 @@ export async function parseJsonSafely(response: Response) {
   }
 }
 
+/** Turn snake_case and camelCase field names into something readable. */
+function fieldLabel(name: string) {
+  return name
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase();
+}
+
 export function extractErrorMessage(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object") return fallback;
   if ("detail" in payload && typeof payload.detail === "string") return payload.detail;
 
-  for (const value of Object.values(payload as Record<string, unknown>)) {
-    if (typeof value === "string") return value;
-    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  // Field errors arrive as { subcategory: ["This field may not be null."] }.
+  // "This field may not be blank" on its own tells nobody which field, and a
+  // teacher cannot act on it — so the field is named in the message.
+  for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+    const message = typeof value === "string" ? value : Array.isArray(value) && typeof value[0] === "string" ? value[0] : "";
+    if (!message) continue;
+    if (key === "non_field_errors" || key === "nonFieldErrors") return message;
+    return `${fieldLabel(key)}: ${message}`;
   }
 
   return fallback;
@@ -258,7 +271,9 @@ export async function authenticatedRequest<T = unknown>(endpoint: string, option
 
   const payload = await parseJsonSafely(response);
   if (!response.ok) {
-    throw new Error(extractErrorMessage(payload, "Request failed."));
+    // The status code goes in the fallback: an HTML 404 or 502 parses to
+    // nothing, and "Request failed." alone gives no way to start looking.
+    throw new Error(extractErrorMessage(payload, `Request failed (${response.status}).`));
   }
 
   return payload as T;
