@@ -117,8 +117,23 @@ class Course(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.title)
+            self.slug = self._unique_slug(slugify(self.title) or "course")
         super().save(*args, **kwargs)
+
+    def _unique_slug(self, base):
+        """A slug nobody else is using.
+
+        Slugs are unique across the whole platform, and course titles are not:
+        "Python for Beginners" is a title two teachers will reach for. Without
+        this, the second one got a 500 from the database with no explanation of
+        what to change.
+        """
+        slug = base
+        suffix = 2
+        while Course.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+            slug = f"{base}-{suffix}"
+            suffix += 1
+        return slug
 
     def __str__(self):
         return self.title
