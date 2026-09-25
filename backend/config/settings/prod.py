@@ -9,11 +9,14 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
-# The frontend is served from a different domain than this API, so auth cookies
-# must be SameSite=None or the browser silently drops them on the refresh call
-# and every student gets signed out when their access token expires. Override
-# with AUTH_COOKIE_SAMESITE=Lax if the two ever move under one root domain.
-AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "None")
+# The app and this API now share one root domain (app.mooreskillup.com and
+# api.mooreskillup.com), so a refresh is a same-site request and Lax cookies
+# are sent normally. Lax is the safer setting: a SameSite=None cookie rides
+# along with requests from any site, which is what made the old split costly.
+#
+# This must stay None while an origin outside mooreskillup.com is still in use
+# — the old *.vercel.app address, for instance — so it remains overridable.
+AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "Lax")
 SECURE_SSL_REDIRECT = False  # Railway handles HTTPS, don't redirect
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
