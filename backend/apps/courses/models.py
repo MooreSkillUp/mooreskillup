@@ -125,11 +125,14 @@ class Course(UUIDPrimaryKeyModel, TimeStampedModel):
 
 
 class Section(UUIDPrimaryKeyModel, TimeStampedModel):
+    # description is optional: the studio creates "Section 1" the moment a course
+    # is started, before the teacher has written anything. Requiring it here made
+    # every brand-new course fail to save its first section.
     ACCESS_CHOICES = (("free", "Free"), ("paid", "Paid"))
 
     course = models.ForeignKey("courses.Course", on_delete=models.CASCADE, related_name="sections")
     title = models.CharField(max_length=255)
-    description = models.TextField()
+    description = models.TextField(blank=True)
     order = models.PositiveIntegerField()
     access_type = models.CharField(max_length=20, choices=ACCESS_CHOICES, default="free")
     is_published = models.BooleanField(default=True)
@@ -206,7 +209,7 @@ class Project(UUIDPrimaryKeyModel, TimeStampedModel):
 
     section = models.ForeignKey("courses.Section", on_delete=models.CASCADE, related_name="projects")
     title = models.CharField(max_length=255)
-    description = models.TextField()
+    description = models.TextField(blank=True)
     requirements = models.TextField(blank=True)
     deliverables = models.TextField(blank=True)
     submission_url = models.URLField(blank=True)
