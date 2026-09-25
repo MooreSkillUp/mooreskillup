@@ -858,6 +858,13 @@ export function useTeacherPlatform(
       const nextProjectIds = new Set<string>();
 
       for (const [lessonIndex, lesson] of section.lessons.entries()) {
+        // A lesson with no title is the placeholder the studio adds when a
+        // section is created, not something the teacher has written. Sending it
+        // fails validation and takes the whole save with it, so a draft could
+        // never be saved until every placeholder was filled in. It is kept in
+        // the editor, and the publish checklist still asks for its title.
+        if (!lesson.title.trim()) continue;
+
         const lessonPayload = {
           title: lesson.title,
           content_type: lesson.contentType,
@@ -893,6 +900,8 @@ export function useTeacherPlatform(
       }
 
       for (const task of section.tasks) {
+        if (!task.title.trim()) continue;
+
         const taskPayload = {
           title: task.title,
           instructions: task.instructions,
@@ -928,6 +937,8 @@ export function useTeacherPlatform(
       // Projects (only when the endpoint set supports them).
       if (endpoints.createProject && endpoints.projectDetail) {
         for (const project of section.projects) {
+          if (!project.title.trim()) continue;
+
           const projectPayload = {
             title: project.title,
             description: project.description,
