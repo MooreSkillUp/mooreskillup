@@ -298,6 +298,10 @@ export function TeacherCourseEditor({
   useEffect(() => {
     const interval = window.setInterval(() => {
       if (autosaveBusy.current) return;
+      // Nothing to save until the course has a title. Autosaving an empty one
+      // put "title: This field may not be blank" on screen seconds after the
+      // studio opened, before the teacher had typed anything.
+      if (!course.title.trim()) return;
       const startSnapshot = JSON.stringify(course);
       if (startSnapshot === lastSnapshot.current) return;
       autosaveBusy.current = true;
@@ -326,6 +330,21 @@ export function TeacherCourseEditor({
   const updateCourse = <K extends keyof TeacherCourse>(field: K, value: TeacherCourse[K]) => {
     setCourse((current) => ({ ...current, [field]: value }));
   };
+
+  /**
+   * A course that has no track adopts the teacher's, once the profile arrives.
+   *
+   * A new course is built the moment the studio opens, which can be before the
+   * teacher's profile has loaded. Its track was then set to an empty string and
+   * stayed there: the dropdown displayed the first assigned track anyway, so
+   * picking that same track changed nothing and fired no event. The course was
+   * unsaveable, and the only clue was "Basic information 3/4".
+   */
+  useEffect(() => {
+    if (course.track) return;
+    const assigned = profile.tracks.length ? profile.tracks : profile.track ? [profile.track] : [];
+    if (assigned.length) updateCourse("track", assigned[0]);
+  }, [course.track, profile.track, profile.tracks]);
 
   const handleBannerUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -861,7 +880,10 @@ export function TeacherCourseEditor({
                     : profile.track
                       ? [profile.track]
                       : [];
-                  const current = course.track || assigned[0] || "";
+                  // Not `course.track || assigned[0]`: showing a track the course
+                  // does not have makes it impossible to choose that track,
+                  // because selecting the value already displayed fires nothing.
+                  const current = course.track || "";
                   // A course reassigned to this teacher, or built before an admin
                   // changed their tracks, can sit in a track they aren't assigned.
                   // A <select> whose value isn't among its options silently shows
@@ -875,6 +897,7 @@ export function TeacherCourseEditor({
                         onChange={(event) => updateCourse("track", event.target.value)}
                         className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm"
                       >
+                        {!current && <option value="">Select a track</option>}
                         {outsideAssigned && (
                           <option value={current}>{current} (current track)</option>
                         )}
