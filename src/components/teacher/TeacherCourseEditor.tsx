@@ -268,10 +268,14 @@ export function TeacherCourseEditor({
       { id: "basics" as StudioStep, label: "Basic information", hint: "filled", done: basics, total: 4 },
       {
         id: "media" as StudioStep,
+        // Optional: a course with no image gets its programme's colour, which
+        // is what the catalog has always shown. Counting it as required meant
+        // Submit for review stayed disabled with no rule saying a banner was
+        // needed — the course was finished and the button simply would not move.
         label: "Course media",
-        hint: "added",
-        done: course.bannerImage ? 1 : 0,
-        total: 1,
+        hint: "",
+        done: 0,
+        total: 0,
       },
       {
         id: "curriculum" as StudioStep,
@@ -1001,7 +1005,8 @@ export function TeacherCourseEditor({
                       className="mt-2 block w-full text-sm text-muted-foreground file:mr-4 file:rounded-full file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary"
                     />
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Upload a hero image for the student course page and course cards. The file is saved with the course.
+                      Optional. Upload a hero image for the course page and course cards. Without
+                      one, the course uses its programme&apos;s colour, shown in the preview below.
                     </p>
                     {course.bannerImage && (
                       <button
