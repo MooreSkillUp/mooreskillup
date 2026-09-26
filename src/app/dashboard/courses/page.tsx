@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Compass, GraduationCap, Heart, Search, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
@@ -78,6 +78,8 @@ export default function StudentCoursesPage() {
   const { user, toggleWishlist } = useAuth();
   const { notifyError } = useFeedback();
   const [tab, setTab] = useState<TabKey>("my-courses");
+  // A tab chosen by hand stays chosen, even if it is empty.
+  const tabChosen = useRef(false);
 
   const isStudent = user?.role === "student";
   const { flags } = useFeatureFlags();
@@ -95,8 +97,21 @@ export default function StudentCoursesPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const requested = new URLSearchParams(window.location.search).get("tab");
-    if (isTabKey(requested)) setTab(requested);
+    if (isTabKey(requested)) {
+      tabChosen.current = true;
+      setTab(requested);
+    }
   }, []);
+
+  /**
+   * A brand-new student opens Courses and sees "You haven't enrolled in any
+   * course yet" — an empty room, on the screen right after signing up. Send
+   * them to the catalog instead, until they own something.
+   */
+  useEffect(() => {
+    if (tabChosen.current || myLoading) return;
+    if (tab === "my-courses" && enrollments.length === 0) setTab("browse");
+  }, [enrollments.length, myLoading, tab]);
 
   const selectTab = useCallback((key: TabKey) => {
     setTab(key);
