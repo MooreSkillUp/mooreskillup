@@ -22,12 +22,28 @@ const CODE_LIFETIME_SECONDS = 10 * 60;
 const MAX_SECONDARY_TRACKS = 2;
 
 /**
- * Survives a refresh mid-verification. Without this, closing the tab between
- * "we emailed you a code" and entering it stranded the person completely: the
- * account exists as a pending registration, but the browser has lost the id
- * needed to finish, and re-registering the same email fails.
+ * Survives leaving the page mid-verification.
+ *
+ * Without it, losing the tab between "we emailed you a code" and typing it in
+ * stranded the person: the pending registration exists on the server, the
+ * browser has lost the id needed to finish, and re-registering the same email
+ * fails. This used to live in sessionStorage, which dies with the tab — and
+ * the code arrives by **email**, so leaving the tab is exactly what people do.
+ * On a phone, the browser often discards the tab while they are reading it.
+ *
+ * It holds an id and an email address for ten minutes, never the code itself.
  */
 const PENDING_KEY = "mooreskillup.pendingRegistration";
+
+function pendingStore(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage;
+  } catch {
+    // Blocked storage: verification still works inside the open tab.
+    return null;
+  }
+}
 
 interface PendingVerification {
   pendingId: string;
@@ -38,13 +54,13 @@ interface PendingVerification {
 function readPending(): PendingVerification | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(PENDING_KEY);
+    const raw = pendingStore()?.getItem(PENDING_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PendingVerification;
     if (!parsed?.pendingId || !parsed?.email) return null;
     // A code older than its lifetime is useless — start clean.
     if (Date.now() - parsed.startedAt > CODE_LIFETIME_SECONDS * 1000) {
-      window.sessionStorage.removeItem(PENDING_KEY);
+      pendingStore()?.removeItem(PENDING_KEY);
       return null;
     }
     return parsed;
@@ -259,7 +275,7 @@ export default function AuthRegisterPage() {
     setPending(next);
     setResendIn(RESEND_COOLDOWN_SECONDS);
     try {
-      window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(next));
+      pendingStore()?.setItem(PENDING_KEY, JSON.stringify(next));
     } catch {
       // Private-browsing modes can refuse storage; verification still works in
       // this tab, it just won't survive a refresh.
@@ -271,7 +287,7 @@ export default function AuthRegisterPage() {
     setCode("");
     setError("");
     try {
-      window.sessionStorage.removeItem(PENDING_KEY);
+      pendingStore()?.removeItem(PENDING_KEY);
     } catch {
       /* nothing to clean up */
     }
@@ -350,7 +366,7 @@ export default function AuthRegisterPage() {
     try {
       await verifyRegister(pending.pendingId, code.trim());
       try {
-        window.sessionStorage.removeItem(PENDING_KEY);
+        pendingStore()?.removeItem(PENDING_KEY);
       } catch {
         /* nothing to clean up */
       }
