@@ -42,6 +42,9 @@ export const metadata: Metadata = {
     description: SITE_DESCRIPTION,
     url: "/",
     locale: "en_NG",
+    // The preview every shared link shows. It is the designer's artwork in
+    // public/og-default.png, not something generated at build time: replace
+    // that file to change it, keeping 1200x630.
     images: [
       {
         url: "/og-default.png",
