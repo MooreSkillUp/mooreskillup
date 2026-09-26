@@ -11,8 +11,8 @@ import io
 import json
 
 import pytest
-from PIL import Image
 from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.accounts.models import TeacherProfile, User
