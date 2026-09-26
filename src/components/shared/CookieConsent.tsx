@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Cookie } from "lucide-react";
 
 import { Button } from "@/components/ui-kit/Button";
+import { useEffect } from "react";
+
 import { useConsent, writeConsent } from "@/lib/consent";
 
 /** Analytics is only asked about when there is analytics to ask about. */
@@ -17,7 +19,26 @@ export const TRACKING_CONFIGURED = Boolean(
  */
 export function CookieBanner() {
   const consent = useConsent();
-  if (!TRACKING_CONFIGURED || consent !== null) return null;
+  const showing = TRACKING_CONFIGURED && consent === null;
+
+  /**
+   * Keep the page's own content clear of the banner.
+   *
+   * It is fixed to the bottom of the screen, and on a phone that put it over
+   * the end of the sign-up form: tapping "Create account" hit the banner
+   * instead, and nothing happened. A visitor could not sign up without first
+   * working out that the bar had to be dismissed.
+   */
+  useEffect(() => {
+    if (!showing || typeof document === "undefined") return;
+    const previous = document.body.style.paddingBottom;
+    document.body.style.paddingBottom = "9.5rem";
+    return () => {
+      document.body.style.paddingBottom = previous;
+    };
+  }, [showing]);
+
+  if (!showing) return null;
 
   return (
     <div
