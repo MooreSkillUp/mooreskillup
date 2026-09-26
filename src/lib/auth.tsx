@@ -20,7 +20,6 @@ import {
   getAccessToken,
   refreshAccessToken,
   setAccessToken,
-  storeFallbackRefreshToken,
 } from "./authenticated-api";
 import { writeAuthCookies, clearAuthCookies } from "./auth-cookies";
 
@@ -310,7 +309,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearAccessToken();
     // Also drop the cross-domain fallback token. Leaving it behind would let the
     // next launch quietly resurrect a session the student just signed out of.
-    storeFallbackRefreshToken(null);
     persistUser(null);
   }, [persistUser]);
 
@@ -422,9 +420,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setAccessToken(payload.access as string);
-      storeFallbackRefreshToken(
-        typeof payload.refresh === "string" ? payload.refresh : null,
-      );
       const nextUser = persistUser(payload.user);
       if (!nextUser) {
         throw new Error("Unable to load your account.");
@@ -448,9 +443,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(extractErrorMessage(payload, "That code was not accepted."));
       }
       setAccessToken(payload.access as string);
-      storeFallbackRefreshToken(
-        typeof payload.refresh === "string" ? payload.refresh : null,
-      );
       const nextUser = persistUser(payload.user);
       if (!nextUser) {
         throw new Error("Unable to load your account.");
@@ -507,9 +499,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setAccessToken(responsePayload.access as string);
-      storeFallbackRefreshToken(
-        typeof responsePayload.refresh === "string" ? responsePayload.refresh : null,
-      );
       const nextUser = persistUser(responsePayload.user);
       if (!nextUser) {
         throw new Error("Unable to load your account.");
@@ -579,9 +568,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setAccessToken(responsePayload.access as string);
-      storeFallbackRefreshToken(
-        typeof responsePayload.refresh === "string" ? responsePayload.refresh : null,
-      );
       const nextUser = persistUser(responsePayload.user);
       if (!nextUser) {
         throw new Error("Unable to load your account.");

@@ -151,64 +151,42 @@ export function handleSessionExpired() {
 }
 
 /**
- * Fallback refresh token, kept only while the API lives on a different domain
- * from the app.
+ * The refresh token used to be mirrored into localStorage.
  *
- * The session normally rides on an httpOnly cookie, which scripts cannot read.
- * But the frontend is on mooreskillup.vercel.app and the API on
- * azurecontainerapps.io — different registrable domains — so that cookie is
- * third-party. Safari blocks those outright and an installed PWA partitions
- * storage harder still, so it never comes back and every launch lands on the
- * sign-in screen.
+ * That was the cost of the app and the API sitting on different domains: the
+ * session cookie was third-party, Safari blocked it outright, and an installed
+ * PWA partitioned it away, so every launch landed on the sign-in screen. A
+ * token in localStorage is readable by any script on the page, and the comment
+ * here said to delete it the moment the two shared a domain.
  *
- * This is a deliberate, temporary trade-off: a token here is readable by any
- * script on the page. **Delete this the moment the API and the app share a
- * domain** — the cookie path already works, and the server side is one
- * environment variable (AUTH_RETURN_REFRESH_IN_BODY).
+ * They do now — app.mooreskillup.com and api.mooreskillup.com — so the cookie
+ * carries the session and nothing is stored where a script can read it. This
+ * clears the old value from browsers that still hold one.
  */
-const REFRESH_FALLBACK_KEY = "mooreskillup.refresh";
+const RETIRED_REFRESH_KEY = "mooreskillup.refresh";
 
-export function storeFallbackRefreshToken(token: string | null) {
+function forgetRetiredRefreshToken() {
   if (typeof window === "undefined") return;
   try {
-    if (token) window.localStorage.setItem(REFRESH_FALLBACK_KEY, token);
-    else window.localStorage.removeItem(REFRESH_FALLBACK_KEY);
+    window.localStorage.removeItem(RETIRED_REFRESH_KEY);
   } catch {
-    // Private mode, or storage full. The cookie may still carry the session.
+    // Private mode or blocked storage: nothing was stored to begin with.
   }
 }
 
-function readFallbackRefreshToken(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(REFRESH_FALLBACK_KEY);
-  } catch {
-    return null;
-  }
-}
+if (typeof window !== "undefined") forgetRetiredRefreshToken();
 
 async function refreshAccessTokenInternal() {
-  // The cookie is still preferred and is sent by `credentials: "include"`. The
-  // body is only a fallback for when the browser dropped it; the server reads
-  // the cookie first.
-  const fallback = readFallbackRefreshToken();
-
+  // The session cookie is httpOnly and same-site, and `credentials: "include"`
+  // is what sends it. Nothing else carries the session.
   const response = await fetch(buildApiUrl("/api/auth/refresh/"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: fallback ? JSON.stringify({ refresh: fallback }) : undefined,
   });
   const payload = await parseJsonSafely(response);
   if (!response.ok || !payload || typeof payload.access !== "string") {
-    storeFallbackRefreshToken(null);
     throw new Error(extractErrorMessage(payload, "Your session has expired. Please log in again."));
-  }
-
-  // Refresh tokens rotate, so the old one is dead the moment this succeeds.
-  // Missing this would give exactly one successful refresh per sign-in.
-  if (typeof payload.refresh === "string") {
-    storeFallbackRefreshToken(payload.refresh);
   }
 
   setAccessToken(payload.access as string);
