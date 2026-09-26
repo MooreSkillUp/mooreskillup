@@ -441,23 +441,47 @@ class CourseSerializer(serializers.ModelSerializer):
     reviewedAt = serializers.DateTimeField(source="reviewed_at", read_only=True)
     reviewedByName = serializers.CharField(source="reviewed_by.display_name", read_only=True)
     submittedAt = serializers.DateTimeField(source="submitted_at", read_only=True)
+    # Lists sent with a banner image: tags, tech stack, what you will learn.
+    _LIST_FIELDS = (
+        "tags",
+        "tech_stack",
+        "techStack",
+        "learning_outcomes",
+        "learningOutcomes",
+    )
+
     def to_internal_value(self, data):
+        """Read a course saved as a form, where every value arrives as text.
+
+        A save carrying a banner image is multipart, so the studio sends its
+        lists as JSON strings. Parsing them used to write the result back with
+        `setlist`, which stores each element separately — and a form field read
+        by name then gives back only the **last** one. A tech stack of
+        ["Python", "VS Code", "Pip", "Terminal", "JSON"] arrived as the string
+        "JSON", and the course refused to save with "tech stack: Value must be
+        valid JSON": a message that named the right field and told the teacher
+        nothing about what to change.
+        """
+        import contextlib
         import json
-        if hasattr(data, "_mutable") and not data._mutable:
+
+        if hasattr(data, "getlist"):
+            # A plain dict can hold a real list; a QueryDict cannot.
+            flattened = {}
+            for key in list(data):
+                values = data.getlist(key)
+                flattened[key] = values[0] if len(values) == 1 else values
+            data = flattened
+        elif hasattr(data, "_mutable") and not data._mutable:
             data = data.copy()
 
-        for key in ["tags", "tech_stack"]:
-            if key in data:
-                val = data[key]
-                if isinstance(val, str) and val.startswith("[") and val.endswith("]"):
-                    try:
-                        parsed = json.loads(val)
-                        if hasattr(data, "setlist"):
-                            data.setlist(key, parsed)
-                        else:
-                            data[key] = parsed
-                    except Exception:
-                        pass
+        for key in self._LIST_FIELDS:
+            value = data.get(key)
+            if isinstance(value, str) and value.startswith("[") and value.endswith("]"):
+                # Not JSON after all: leave it, and let the field say so.
+                with contextlib.suppress(ValueError):
+                    data[key] = json.loads(value)
+
         return super().to_internal_value(data)
 
     class Meta:
