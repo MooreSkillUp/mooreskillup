@@ -28,10 +28,14 @@ ZERO = Decimal("0.00")
 # Matches the published Refund Policy and the Teacher Agreement. Read from
 # settings so the three can never drift apart silently.
 DEFAULT_REFUND_WINDOW_DAYS = 14
-# Below this, a payout is carried into the next month rather than sent. Bank
-# charges and the effort of a transfer make a very small payment worse than
-# waiting, and the Teacher Agreement says it is never held more than twice.
-MINIMUM_PAYOUT = Decimal("5000.00")
+# Below this, a payout is carried into the next month rather than sent, and the
+# Teacher Agreement says it is never held more than twice.
+#
+# Set low on purpose. A ₦20,000 sale at 25% earns ₦4,900, so a ₦5,000 floor
+# would have held a founding teacher's first lone sale for being ₦100 short —
+# a bad first experience for someone who took a risk on us, and worth far more
+# than the bank charge it saves.
+MINIMUM_PAYOUT = Decimal("2000.00")
 MAX_CARRIES = 2
 
 

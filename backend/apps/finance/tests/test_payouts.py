@@ -283,10 +283,10 @@ class TestGeneratingPayouts:
         assert payouts[0].amount < MINIMUM_PAYOUT
         assert payouts[0].status == Payout.CARRIED
 
-    def test_a_single_sale_falls_under_the_minimum(self, db):
-        """Worth knowing before the first payout run: a ₦20,000 sale at 25%
-        earns ₦4,900, and the agreement's minimum is ₦5,000. A teacher with one
-        sale in their first month is carried, not paid."""
+    def test_a_teacher_s_first_lone_sale_is_paid_not_held(self, db):
+        """The reason the minimum is ₦2,000 rather than ₦5,000: a ₦20,000 sale
+        at 25% earns ₦4,900, and holding that for being ₦100 short would be a
+        poor first experience for someone who took a risk on us."""
         teacher = a_teacher()
         a_sale(a_course(teacher), days_ago=30)
         record_earnings()
@@ -294,7 +294,7 @@ class TestGeneratingPayouts:
         payouts = generate(EarningLine.objects.first().period)
 
         assert payouts[0].amount == Decimal("4900.00")
-        assert payouts[0].status == Payout.CARRIED
+        assert payouts[0].status == Payout.DRAFT
 
     def test_carried_money_appears_on_the_next_payout(self, db):
         teacher = a_teacher()
@@ -321,12 +321,7 @@ class TestGeneratingPayouts:
 
 class TestApprovingAndPaying:
     def _ready(self, verified=True, sales=2):
-        """Two sales, because one is not enough to be paid.
-
-        A ₦20,000 sale at 25% earns ₦4,900, which is below the ₦5,000 minimum
-        in the Teacher Agreement — so a teacher's first single sale is carried
-        rather than transferred. Real, and worth knowing.
-        """
+        """Two sales, so the payout is a normal one rather than an edge case."""
         teacher = a_teacher()
         with_bank(teacher, verified=verified)
         course = a_course(teacher)
