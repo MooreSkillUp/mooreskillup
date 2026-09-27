@@ -82,7 +82,13 @@ export type AdminResourceAction =
   | "ambassadors:view"
   | "ambassadors:manage"
   | "campaigns:view"
-  | "campaigns:manage";
+  | "campaigns:manage"
+  | "departments:view"
+  | "departments:manage"
+  | "team:view"
+  | "team:manage"
+  | "team:bank-details"
+  | "team:export";
 
 export interface AdminPermission {
   action: AdminResourceAction;
@@ -159,6 +165,12 @@ export const rolePermissionMap: RolePermissionMap = {
     "ambassadors:manage",
     "campaigns:view",
     "campaigns:manage",
+    "departments:view",
+    "departments:manage",
+    "team:view",
+    "team:manage",
+    "team:bank-details",
+    "team:export",
   ],
   admin: [
     "dashboard:view",
@@ -192,6 +204,8 @@ export const rolePermissionMap: RolePermissionMap = {
     "notifications:broadcast",
     "notifications:schedule",
     "payments:view",
+    "departments:view",
+    "team:view",
     "analytics:view",
     "analytics:export",
     "support:view",
@@ -280,6 +294,12 @@ export const allPermissions: AdminPermission[] = [
   { action: "ambassadors:manage", description: "Create, edit and retire ambassador links", resourceType: "settings" },
   { action: "campaigns:view", description: "See discount campaigns", resourceType: "settings" },
   { action: "campaigns:manage", description: "Create, edit and end discount campaigns", resourceType: "settings" },
+  { action: "departments:view", description: "See departments, their shares and caps", resourceType: "settings" },
+  { action: "departments:manage", description: "Create, edit and remove departments", resourceType: "settings" },
+  { action: "team:view", description: "See team members and which departments they are in", resourceType: "settings" },
+  { action: "team:manage", description: "Add, edit and remove team members", resourceType: "settings" },
+  { action: "team:bank-details", description: "Read and change where a team member is paid", resourceType: "settings" },
+  { action: "team:export", description: "Export the team structure as a CSV", resourceType: "settings" },
 ];
 
 // ── DISPLAY-ONLY checks against the default role map ──────────────────────────

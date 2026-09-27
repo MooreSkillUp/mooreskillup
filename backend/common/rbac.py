@@ -68,6 +68,8 @@ _ADMIN_PERMISSIONS = _MODERATOR_PERMISSIONS | frozenset(
         "notifications:broadcast",
         "notifications:schedule",
         "payments:view",
+        "departments:view",
+        "team:view",
         "analytics:view",
         "analytics:export",
         "support:assign",
@@ -102,6 +104,10 @@ _SUPER_ADMIN_PERMISSIONS = _ADMIN_PERMISSIONS | frozenset(
         "permissions:manage",
         "ambassadors:manage",
         "campaigns:manage",
+        "departments:manage",
+        "team:manage",
+        "team:bank-details",
+        "team:export",
     }
 )
 
