@@ -25,6 +25,7 @@ import {
   UserPlus,
   Users,
   Waves,
+  Wallet,
   X,
   type LucideIcon,
   Megaphone,
@@ -194,6 +195,12 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           permission: "campaigns:view",
         },
         {
+          href: "/admin/payouts",
+          label: "Payouts",
+          icon: Wallet,
+          permission: "payments:view",
+        },
+        {
           href: "/admin/organization",
           label: "Company structure",
           icon: Building2,
@@ -245,6 +252,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           icon: Bell,
           badge: platformNotifications.unreadCount,
         },
+        { href: "/teacher/earnings", label: "Earnings", icon: Wallet },
         { href: "/teacher/support", label: "Support", icon: LifeBuoy },
         { href: "/teacher/settings", label: "Settings", icon: Settings },
       ],
