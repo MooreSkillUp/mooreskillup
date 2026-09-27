@@ -232,6 +232,13 @@ def freeze_terms_for(course):
 
 # The monthly split lives in its own module for readability; Django needs the
 # models importable from here, and everything else imports them from here too.
+from .payout_models import (  # noqa: E402
+    EarningLine,
+    Payout,
+    PayoutAdjustment,
+    TeacherPayoutDetail,
+    TeacherPayoutDetailChange,
+)
 from .revenue_models import (  # noqa: E402
     CostEntry,
     DepartmentAllocation,
@@ -242,6 +249,11 @@ from .revenue_models import (  # noqa: E402
 
 __all__ = [
     "CostEntry",
+    "EarningLine",
+    "Payout",
+    "PayoutAdjustment",
+    "TeacherPayoutDetail",
+    "TeacherPayoutDetailChange",
     "CourseEarningTerm",
     "DepartmentAllocation",
     "RevenuePeriod",
