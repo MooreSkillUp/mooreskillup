@@ -37,6 +37,11 @@ class Payment(UUIDPrimaryKeyModel, TimeStampedModel):
     description = models.CharField(max_length=255)
     paid_at = models.DateTimeField(null=True, blank=True)
     mode = models.CharField(max_length=10, choices=MODE_CHOICES, default="live")
+    # What the payment processor kept. The teacher agreement pays a share of
+    # revenue *net of this fee*, so a statement that cannot show it cannot be
+    # checked. Paystack only reports it on the transaction, and never again —
+    # a sale fulfilled without recording it has its real fee lost for good.
+    processor_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     refunded_at = models.DateTimeField(null=True, blank=True)
     refunded_by = models.ForeignKey(
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"

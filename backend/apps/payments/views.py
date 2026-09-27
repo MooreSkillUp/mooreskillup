@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.db import transaction as db_transaction
 from django.utils import timezone
@@ -15,21 +16,61 @@ from .models import Payment, Transaction
 from .serializers import PaymentInitializeSerializer, PaymentSerializer
 
 
-def fulfill_payment(payment, transaction):
+def processor_fee_from(provider_data):
+    """The processor's cut, in naira, out of a Paystack payload.
+
+    Paystack reports `fees` in kobo on the transaction and nowhere else, so this
+    is the only chance to record it. A simulated or test payload has no fees at
+    all, which is not an error — it leaves the field null, and nothing with a
+    null fee can earn a teacher anything.
+    """
+    if not isinstance(provider_data, dict):
+        return None
+    fees_kobo = provider_data.get("fees")
+    if fees_kobo in (None, ""):
+        return None
+    try:
+        return (Decimal(str(fees_kobo)) / 100).quantize(Decimal("0.01"))
+    except (ArithmeticError, ValueError):
+        return None
+
+
+def fulfill_payment(payment, transaction, provider_data=None):
     """Mark a payment successful and grant access. Idempotent — safe to call from
-    both the verify endpoint and the webhook."""
+    both the verify endpoint and the webhook.
+
+    `provider_data` is Paystack's own record of the transaction. It is kept
+    whole, and the fee is lifted out of it, because both the verify call and the
+    webhook can arrive first and only one of them gets to be the first.
+    """
     with db_transaction.atomic():
         payment = Payment.objects.select_for_update().get(id=payment.id)
+        fee = processor_fee_from(provider_data)
+
         if payment.status == "successful":
+            # The other path got here first. Record the fee anyway if this is
+            # the call that happens to carry it: a missing fee cannot be
+            # recovered later, and an already-recorded one is not overwritten.
+            if fee is not None and payment.processor_fee is None:
+                payment.processor_fee = fee
+                payment.save(update_fields=["processor_fee", "updated_at"])
+                if provider_data and not transaction.gateway_response:
+                    transaction.gateway_response = provider_data
+                    transaction.save(update_fields=["gateway_response", "updated_at"])
             return payment
 
         transaction.provider_status = "success"
         transaction.verified_at = timezone.now()
-        transaction.save(update_fields=["provider_status", "verified_at", "updated_at"])
+        if provider_data:
+            transaction.gateway_response = provider_data
+        transaction.save(
+            update_fields=["provider_status", "verified_at", "gateway_response", "updated_at"]
+        )
 
         payment.status = "successful"
         payment.paid_at = timezone.now()
-        payment.save(update_fields=["status", "paid_at", "updated_at"])
+        payment.processor_fee = fee
+        payment.save(update_fields=["status", "paid_at", "processor_fee", "updated_at"])
 
         # update_or_create, not get_or_create: after a refund the revoked
         # enrolment is still there, and buying again has to reopen it.
@@ -187,7 +228,7 @@ class PaymentVerifyView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        fulfill_payment(payment, record)
+        fulfill_payment(payment, record, provider_data=result.get("raw"))
         return self._ok(payment, record)
 
     def _ok(self, payment, record):
@@ -227,7 +268,7 @@ class PaymentWebhookView(views.APIView):
                 .first()
             )
             if record and amount_matches(record.payment, data.get("amount")):
-                fulfill_payment(record.payment, record)
+                fulfill_payment(record.payment, record, provider_data=data)
 
         # Always 200 so Paystack stops retrying.
         return response.Response({"detail": "ok"})
