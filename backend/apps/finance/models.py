@@ -228,3 +228,26 @@ def freeze_terms_for(course):
         agreement_version=terms.agreement_version,
         needs_review=needs_review,
     )
+
+
+# The monthly split lives in its own module for readability; Django needs the
+# models importable from here, and everything else imports them from here too.
+from .revenue_models import (  # noqa: E402
+    CostEntry,
+    DepartmentAllocation,
+    RevenuePeriod,
+    SplitPolicy,
+    money,
+)
+
+__all__ = [
+    "CostEntry",
+    "CourseEarningTerm",
+    "DepartmentAllocation",
+    "RevenuePeriod",
+    "SplitPolicy",
+    "TeacherTerms",
+    "add_months",
+    "freeze_terms_for",
+    "money",
+]
