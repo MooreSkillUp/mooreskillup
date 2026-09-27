@@ -138,3 +138,53 @@ def send_broadcast_emails(broadcast, limit=EMAIL_BATCH):
     ).count()
     broadcast.save(update_fields=["emails_sent", "updated_at"])
     return sent, max(0, total_pending - sent)
+
+def broadcasts_awaiting_email():
+    """Sent broadcasts that asked for email and still have people to reach.
+
+    `emails_sent` is not the test: it counts delivered receipts, and a failed
+    address gets a receipt too. What matters is whether anybody in the audience
+    is still without one.
+    """
+    from .models import BroadcastNotification
+
+    return BroadcastNotification.objects.filter(status="sent", send_email=True).order_by(
+        "sent_at"
+    )
+
+
+def flush_broadcast_emails(max_batches=20):
+    """Work through the outstanding broadcast emails. Returns (sent, still waiting).
+
+    Scheduled broadcasts used to reach nobody by email at all. Releasing one
+    created the in-app notifications and marked it sent; the emails were a
+    separate step that only happened when an admin pressed a button, batch by
+    batch. A launch-day announcement set for 09:00 therefore appeared in the
+    app on time and went out by email never.
+
+    `max_batches` is a budget across all broadcasts, not per broadcast, so one
+    run cannot take an unbounded amount of time however many are waiting.
+    Anything left over is picked up by the next run, because receipts make
+    calling this again safe.
+    """
+    budget = max_batches
+    total_sent = 0
+    outstanding = 0
+
+    for broadcast in broadcasts_awaiting_email():
+        while True:
+            if budget <= 0:
+                # Out of budget: count what is left and stop cleanly.
+                outstanding += send_broadcast_emails(broadcast, limit=0)[1]
+                return total_sent, outstanding
+            sent, remaining = send_broadcast_emails(broadcast)
+            budget -= 1
+            total_sent += sent
+            if remaining == 0:
+                break
+            if sent == 0:
+                # Nothing went out but people remain: an empty batch would
+                # repeat forever. Leave it for the next run rather than spin.
+                outstanding += remaining
+                break
+    return total_sent, outstanding

@@ -1,3 +1,10 @@
+# Container App Jobs are located explicitly, unlike container apps, which
+# inherit their environment's region.
+variable "location" {
+  type        = string
+  description = "Azure region for resources that require it explicitly."
+}
+
 variable "name_prefix" {
   type = string
 }
