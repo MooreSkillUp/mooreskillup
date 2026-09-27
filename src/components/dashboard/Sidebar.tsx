@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Award,
   BarChart3,
+  Building2,
   Bell,
   BellRing,
   BookOpen,
@@ -191,6 +192,12 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           label: "Campaigns",
           icon: Tag,
           permission: "campaigns:view",
+        },
+        {
+          href: "/admin/organization",
+          label: "Company structure",
+          icon: Building2,
+          permission: "departments:view",
         },
         {
           href: "/admin/legal",
