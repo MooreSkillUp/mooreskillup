@@ -573,6 +573,24 @@ class AdminTeacherCreateSerializer(serializers.Serializer):
     password = serializers.CharField(required=False, allow_blank=True, min_length=8)
     status = serializers.ChoiceField(choices=("active", "inactive"), required=False, default="active")
 
+    # What they signed, captured while it is being agreed rather than
+    # reconstructed from memory in December. Optional, because a teacher can be
+    # created before the paperwork is back — but then their first course
+    # publishes at the standard rate and is flagged for review.
+    agreementType = serializers.ChoiceField(
+        choices=("founding", "standard", "custom"), required=False
+    )
+    premiumSharePercent = serializers.DecimalField(
+        max_digits=5, decimal_places=2, required=False
+    )
+    premiumCourseCount = serializers.IntegerField(required=False, min_value=0, max_value=20)
+    standardSharePercent = serializers.DecimalField(
+        max_digits=5, decimal_places=2, required=False
+    )
+    earningMonths = serializers.IntegerField(required=False, min_value=1, max_value=120)
+    agreementVersion = serializers.CharField(required=False, allow_blank=True)
+    signedOn = serializers.DateField(required=False, allow_null=True)
+
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
@@ -611,8 +629,35 @@ class AdminTeacherCreateSerializer(serializers.Serializer):
             status=status,
             must_change_password=True,
         )
+        self._record_terms(teacher_profile, validated_data)
         teacher_profile._generated_password = password
         return teacher_profile
+
+    def _record_terms(self, teacher_profile, data):
+        """Save the agreement alongside the account, if one was given."""
+        from apps.finance.models import TeacherTerms
+
+        agreement_type = data.get("agreementType")
+        if agreement_type is None:
+            return None
+
+        fields = TeacherTerms.defaults_for(agreement_type)
+        for key, attr in (
+            ("premiumSharePercent", "premium_share_percent"),
+            ("premiumCourseCount", "premium_course_count"),
+            ("standardSharePercent", "standard_share_percent"),
+            ("earningMonths", "earning_months"),
+        ):
+            if key in data and data[key] is not None:
+                fields[attr] = data[key]
+
+        return TeacherTerms.objects.create(
+            teacher=teacher_profile,
+            agreement_type=agreement_type,
+            agreement_version=data.get("agreementVersion", ""),
+            signed_on=data.get("signedOn"),
+            **fields,
+        )
 
 
 class LoginSerializer(serializers.Serializer):

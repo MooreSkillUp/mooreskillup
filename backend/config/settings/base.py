@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "apps.schedule",
     "apps.quizzes",
     "apps.organization",
+    "apps.finance",
     "anymail",
 ]
 
