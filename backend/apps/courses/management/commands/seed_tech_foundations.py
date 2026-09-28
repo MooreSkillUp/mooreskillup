@@ -19,6 +19,7 @@ from apps.categories.models import Category, Subcategory
 from apps.courses.content.tech_foundations import COURSE
 from apps.courses.models import Course, Lesson, Project, Section
 from apps.quizzes.models import Choice, Question, Quiz
+from common.sanitize import clean_lesson_html
 
 
 class Command(BaseCommand):
@@ -29,8 +30,10 @@ class Command(BaseCommand):
             "--teacher-email",
             default="",
             help=(
-                "Who the course is credited to. Defaults to the first Super Admin, because "
-                "MooreSkillUp itself wrote this one."
+                "Credit the course to a teacher. Left out, it is an admin-owned course — "
+                "one the platform itself owns, with no teacher attached, managed from "
+                "Admin \u2192 Owned courses. That is what MooreSkillUp writing its own "
+                "course actually is."
             ),
         )
         parser.add_argument(
@@ -67,7 +70,8 @@ class Command(BaseCommand):
         )
         self._tags(course)
 
-        self.stdout.write(f"{'Created' if created else 'Updated'} {course.title}")
+        owner = teacher.user.display_name if teacher else "MooreSkillUp (admin-owned)"
+        self.stdout.write(f"{'Created' if created else 'Updated'} {course.title} \u2014 {owner}")
 
         seen_sections = []
         for index, spec in enumerate(COURSE["sections"], start=1):
@@ -107,26 +111,27 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------ pieces
 
     def _teacher(self, email):
-        if email:
-            user = User.objects.filter(email=email).first()
-            if user is None:
-                raise SystemExit(f"No user with the email {email}.")
-        else:
-            user = User.objects.filter(role="admin", admin_role="super_admin").first()
-            if user is None:
-                raise SystemExit("No Super Admin to credit the course to. Pass --teacher-email.")
+        """Who the course belongs to, or nobody.
 
+        With no email this returns None, and a course with no teacher is what
+        the platform already calls an owned course: MooreSkillUp's own, managed
+        from Admin \u2192 Owned courses, with no teacher earning a share of it.
+        That is the honest description of a course the platform wrote itself,
+        and it avoids putting a teacher profile on somebody's admin account
+        purely to hang a course on.
+        """
+        if not email:
+            return None
+
+        user = User.objects.filter(email=email).first()
+        if user is None:
+            raise SystemExit(f"No user with the email {email}.")
         profile = TeacherProfile.objects.filter(user=user).first()
         if profile is None:
-            # The owner writing a course needs a teacher profile to hang it on;
-            # it does not change their admin role or their sign-in.
-            profile = TeacherProfile.objects.create(
-                user=user,
-                program="Tech Foundations",
-                track="Foundations",
-                bio="MooreSkillUp",
+            raise SystemExit(
+                f"{email} has no teacher profile. Create the teacher first, or leave "
+                "--teacher-email out to make it an admin-owned course."
             )
-            self.stdout.write(f"  created a teacher profile for {user.email}")
         return profile
 
     def _category(self, name):
@@ -176,7 +181,10 @@ class Command(BaseCommand):
                 title=spec["title"],
                 defaults={
                     "content_type": spec.get("content_type", "text"),
-                    "text_content": spec["html"].strip(),
+                    # Through the same cleaner the API uses, so the
+                    # allowlist is proved against real content and not
+                    # only against attacks.
+                    "text_content": clean_lesson_html(spec["html"].strip()),
                     "duration_minutes": spec.get("duration_minutes", 5),
                     "is_previewable": spec.get("is_previewable", False),
                     "is_published": True,
