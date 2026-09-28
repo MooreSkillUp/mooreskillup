@@ -537,6 +537,8 @@ export interface PlayerLesson {
   title: string;
   type: "video" | "text" | "resource";
   sectionTitle: string;
+  /** Minutes. Shown as "6 min read" above a text lesson. */
+  durationMinutes: number;
   videoUrl: string;
   embedUrl: string;
   /** Present only when the viewer is entitled to this lesson. */
