@@ -68,6 +68,7 @@ module "container_apps" {
   source                   = "./modules/container_apps"
   name_prefix              = local.name_prefix
   resource_group_name      = module.resource_group.name
+  location                 = module.resource_group.location
   environment_id           = module.container_app_environment.id
   registry_server          = module.acr.login_server
   registry_username        = module.acr.admin_username
