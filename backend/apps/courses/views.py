@@ -15,6 +15,7 @@ from .activity import prune_teacher_activity_logs
 from .models import Course, CourseReview, Lesson, Project, Section, Task, TeacherActivityLog
 from .ordering import OrderMismatch, apply_order, next_order
 from .serializers import (
+    CourseCardSerializer,
     CourseReviewSerializer,
     CourseSerializer,
     LessonSerializer,
@@ -127,6 +128,17 @@ def transition_course_or_error(course, next_status, next_visibility, request):
 class CourseViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CourseSerializer
     permission_classes = [permissions.AllowAny]
+
+    def get_serializer_class(self):
+        """The catalogue gets cards; only the detail view gets the curriculum.
+
+        A listing renders no lesson rows, so sending every lesson's text to
+        draw a grid of cards is paid for by the student's data bundle and
+        nobody's benefit.
+        """
+        if self.action == "list":
+            return CourseCardSerializer
+        return CourseSerializer
 
     def get_serializer_context(self):
         """Add the signed-in student's completed lessons, as one set.
