@@ -18,6 +18,7 @@ import { Button } from "@/components/ui-kit/Button";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/lib/feedback";
 import { MuxLessonPlayer } from "@/components/learn/MuxLessonPlayer";
+import { ReadingProgress, readingTime } from "@/components/learn/ReadingProgress";
 import { getVideoRenderMode } from "@/lib/video";
 import { CurriculumSidebar } from "@/components/course/CurriculumSidebar";
 import { saveLessonProgress, usePlayer } from "@/lib/student";
@@ -46,6 +47,9 @@ export default function LessonPage() {
   // Mux Player is a web component with its own media element, so the position
   // comes back through a ref it updates rather than from videoRef.
   const muxPositionRef = useRef(0);
+  // Reading progress is measured against the article, not the page, so the
+  // header and the navigation card do not count towards being finished.
+  const articleRef = useRef<HTMLDivElement | null>(null);
 
   // Record a "started" ping + resume video position.
   const progressStatus = data?.progress.status;
@@ -198,7 +202,15 @@ export default function LessonPage() {
               <h1 className="mt-1 font-display text-xl font-bold leading-tight sm:text-2xl">
                 {lesson.title || "Untitled lesson"}
               </h1>
-              <p className="mt-1 text-sm text-muted-foreground">{lesson.sectionTitle}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lesson.sectionTitle}
+                {lesson.type === "text" && readingTime(lesson.durationMinutes) && (
+                  <>
+                    <span className="mx-1.5 text-muted-foreground/50">·</span>
+                    {readingTime(lesson.durationMinutes)}
+                  </>
+                )}
+              </p>
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
@@ -296,9 +308,16 @@ export default function LessonPage() {
                   </div>
                 ) : (
                   <div
-                    className="prose prose-sm max-w-none rounded-[1.5rem] border border-border bg-background p-6 text-foreground dark:prose-invert"
-                    dangerouslySetInnerHTML={{ __html: lesson.textContent || "<p>No content yet.</p>" }}
-                  />
+                    ref={articleRef}
+                    className="prose max-w-none rounded-[1.5rem] border border-border bg-background p-6 text-foreground prose-headings:font-display prose-pre:overflow-x-auto dark:prose-invert"
+                  >
+                    <ReadingProgress targetRef={articleRef} />
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: lesson.textContent || "<p>No content yet.</p>",
+                      }}
+                    />
+                  </div>
                 )}
               </div>
             </div>

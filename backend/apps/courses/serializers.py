@@ -745,6 +745,30 @@ class TeacherActivitySerializer(serializers.ModelSerializer):
         fields = ("id", "message", "timestamp", "type", "created_at")
 
 
+class CourseCardSerializer(CourseSerializer):
+    """A course as the catalogue needs it: everything but the contents.
+
+    The catalogue used to send the full curriculum of every published course —
+    every section, every lesson, and every lesson's entire text. Nine courses
+    came to over 200 KB, and it grew with each lesson written: one course of
+    thirty-eight text lessons more than doubled it on its own.
+
+    Nothing on a course card reads any of that. The card shows a title, a
+    price, a level and a lesson count, and `totalLessons` is a count computed
+    here rather than something the client derives from the list. The detail
+    view still returns the full curriculum, which is where it is actually used.
+
+    This matters more than a normal payload saving: the students this is for
+    are on mobile data, and the course itself teaches that a page asking for
+    too much is a real failure rather than a slow server.
+    """
+
+    class Meta(CourseSerializer.Meta):
+        fields = tuple(
+            field for field in CourseSerializer.Meta.fields if field not in {"sections"}
+        )
+
+
 class CourseVersionSerializer(serializers.ModelSerializer):
     versionNumber = serializers.IntegerField(source="version_number", read_only=True)
     createdBy = serializers.CharField(source="created_by.display_name", read_only=True, default=None)

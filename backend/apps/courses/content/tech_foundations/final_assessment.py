@@ -67,26 +67,32 @@ FINAL_QUESTIONS = [
         ],
     },
     {
-        "text": "What is the difference between Git and GitHub?",
-        "explanation": "Git is the program that tracks versions. GitHub is one website that stores a copy.",
+        "text": "Your internet has been down all morning. Which of these can you still do?",
+        "explanation": (
+            "Git runs entirely on your machine, so committing needs no connection. Pushing "
+            "does, because that is the part that sends your work to GitHub."
+        ),
         "choices": [
-            ("Git tracks versions on your machine; GitHub stores a copy online", True),
-            ("They are the same thing", False),
-            ("Git is paid; GitHub is free", False),
-            ("Git is for websites; GitHub is for apps", False),
+            ("Commit your work, but not push it", True),
+            ("Push your work, but not commit it", False),
+            ("Neither — Git needs the internet", False),
+            ("Both — Git does not use the internet at all", False),
         ],
     },
     {
-        "text": "Which commit message is worth writing?",
+        "text": (
+            "Six months from now, something is broken and you are reading through old commits "
+            "to find when it started. What makes that possible?"
+        ),
         "explanation": (
-            "Say what the change does. In six months these are what you read to find when "
-            "something broke."
+            "Messages that say what each change did. That is the whole reason to write them "
+            "properly — not tidiness, but being able to find something later."
         ),
         "choices": [
-            ("Fix total showing as zero when quantity is empty", True),
-            ("update", False),
-            ("final version", False),
-            ("stuff", False),
+            ("Each commit message says what that change did", True),
+            ("The commits are all on one branch", False),
+            ("The repository is public", False),
+            ("Every commit was made on the same day", False),
         ],
     },
     {
