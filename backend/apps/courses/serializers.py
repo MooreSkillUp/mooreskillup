@@ -15,6 +15,7 @@ from .models import (
     Task,
     TeacherActivityLog,
 )
+from .mux import validate_playback_id
 from .video import build_embed_url, validate_video_url
 
 
@@ -43,6 +44,9 @@ class LessonSerializer(serializers.ModelSerializer):
     durationMinutes = serializers.IntegerField(source="duration_minutes", read_only=True)
     isPreviewable = serializers.BooleanField(source="is_previewable", read_only=True)
     completed = serializers.SerializerMethodField()
+    muxPlaybackId = serializers.CharField(
+        source="mux_playback_id", required=False, allow_blank=True
+    )
     # Position is written only on create and by the reorder endpoints (see ordering.py).
     order = serializers.IntegerField(read_only=True)
 
@@ -54,6 +58,8 @@ class LessonSerializer(serializers.ModelSerializer):
             "type",
             "content_type",
             "video_url",
+            "mux_playback_id",
+            "muxPlaybackId",
             "text_content",
             "resource_links",
             "resourceLinks",
@@ -108,13 +114,27 @@ class LessonSerializer(serializers.ModelSerializer):
         return "unlocked"
 
     def to_internal_value(self, data):
-        mutable = _apply_camel_aliases(data, {"resourceLinks": "resource_links"})
+        mutable = _apply_camel_aliases(
+            data, {"resourceLinks": "resource_links", "muxPlaybackId": "mux_playback_id"}
+        )
         return super().to_internal_value(mutable)
 
     def validate(self, attrs):
         content_type = attrs.get("content_type", getattr(self.instance, "content_type", None))
         video_url = attrs.get("video_url", getattr(self.instance, "video_url", ""))
-        if content_type == "video" and video_url:
+        playback = attrs.get(
+            "mux_playback_id", getattr(self.instance, "mux_playback_id", "")
+        )
+
+        if "mux_playback_id" in attrs:
+            # Accepts a bare id or a stream.mux.com link and stores the id.
+            attrs["mux_playback_id"] = validate_playback_id(attrs["mux_playback_id"])
+            playback = attrs["mux_playback_id"]
+
+        # A Mux lesson needs no video_url, so only check one when there is no
+        # playback id — otherwise the studio would demand a shareable link for
+        # a video whose whole point is that it is not shareable.
+        if content_type == "video" and video_url and not playback:
             validate_video_url(video_url)
         return attrs
 

@@ -167,6 +167,10 @@ class Lesson(UUIDPrimaryKeyModel, TimeStampedModel):
     title = models.CharField(max_length=255)
     content_type = models.CharField(max_length=20, choices=CONTENT_CHOICES)
     video_url = models.URLField(blank=True)
+    # A Mux playback id. When set it wins over video_url, because it is the one
+    # that cannot be shared: playback needs a token minted per viewer, after
+    # the same entitlement check that decides whether the lesson is visible.
+    mux_playback_id = models.CharField(max_length=120, blank=True)
     text_content = models.TextField(blank=True)
     # For resource lessons: list of {type, title, url}; type in
     # pdf/documentation/github/google_drive/zip/website.

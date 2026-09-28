@@ -523,6 +523,15 @@ export async function submitReview(courseId: string, rating: number, comment: st
   });
 }
 
+export interface MuxPlayback {
+  playbackId: string;
+  token: string;
+  streamUrl: string;
+  thumbnailUrl: string;
+  signed: boolean;
+  expiresIn: number;
+}
+
 export interface PlayerLesson {
   id: string;
   title: string;
@@ -530,6 +539,8 @@ export interface PlayerLesson {
   sectionTitle: string;
   videoUrl: string;
   embedUrl: string;
+  /** Present only when the viewer is entitled to this lesson. */
+  mux: MuxPlayback | null;
   textContent: string;
   resourceLinks: { type: string; title: string; url: string }[];
 }

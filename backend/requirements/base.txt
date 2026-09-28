@@ -6,3 +6,6 @@ psycopg[binary]>=3.2,<3.4
 Pillow>=10.4,<11.0
 python-dotenv>=1.0,<2.0
 django-anymail[brevo]>=15.0,<16.0
+# Signing Mux playback tokens ourselves. simplejwt already pulls PyJWT in,
+# but it signs with HMAC; Mux wants RS256, which needs the crypto extra.
+PyJWT[crypto]>=2.9,<3.0

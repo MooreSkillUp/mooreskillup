@@ -153,3 +153,19 @@ variable "sentry_dsn" {
   sensitive   = true
   default     = ""
 }
+
+# Signed video playback. Without these the API falls back to the plain
+# video_url handling, which works but is shareable: a paying student can copy
+# the link out of the page and send it on.
+variable "mux_signing_key_id" {
+  type        = string
+  default     = ""
+  description = "Mux signing key ID, for minting playback tokens."
+}
+
+variable "mux_signing_key_private" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Mux signing private key, PEM or the base64 Mux hands out."
+}

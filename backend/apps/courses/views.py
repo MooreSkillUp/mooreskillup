@@ -803,6 +803,7 @@ class StudentLessonView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, lesson_id):
+        from .mux import playback_payload
         from .video import build_embed_url
 
         lesson = get_object_or_404(
@@ -919,6 +920,9 @@ class StudentLessonView(APIView):
                 "sectionTitle": section.title,
                 "videoUrl": lesson.video_url if can_access else "",
                 "embedUrl": build_embed_url(lesson.video_url) if can_access else "",
+                # Minted here and nowhere else, so a playback token can only
+                # exist for somebody the entitlement check has already let in.
+                "mux": playback_payload(lesson.mux_playback_id) if can_access else None,
                 "textContent": lesson.text_content if can_access else "",
                 "resourceLinks": lesson.resource_links if can_access else [],
             },

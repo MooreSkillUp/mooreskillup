@@ -160,3 +160,16 @@ variable "sentry_dsn" {
   sensitive   = true
   default     = ""
 }
+
+variable "mux_signing_key_id" {
+  type        = string
+  default     = ""
+  description = "Mux signing key ID, for signed video playback."
+}
+
+variable "mux_signing_key_private" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Mux signing private key for signed video playback."
+}

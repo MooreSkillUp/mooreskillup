@@ -203,3 +203,10 @@ EMAIL_BACKEND = choose_email_backend(
 # Whether mail actually leaves the building — surfaced so the admin screen can
 # say so out loud instead of everyone assuming it works.
 EMAIL_IS_DELIVERED = backend_delivers(EMAIL_BACKEND)
+
+
+# Signed video playback. Without these the platform falls back to the plain
+# video_url handling, which works but is shareable — a paying student can copy
+# the link out of the page and send it to anybody.
+MUX_SIGNING_KEY_ID = os.getenv("MUX_SIGNING_KEY_ID", "")
+MUX_SIGNING_KEY_PRIVATE = os.getenv("MUX_SIGNING_KEY_PRIVATE", "")
