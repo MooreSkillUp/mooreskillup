@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from apps.enrollments.models import Enrollment, Watchlist
 from apps.progress.models import LessonProgress
+from common.sanitize import clean_lesson_html
 
 from .models import (
     Course,
@@ -122,6 +123,12 @@ class LessonSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         content_type = attrs.get("content_type", getattr(self.instance, "content_type", None))
         video_url = attrs.get("video_url", getattr(self.instance, "video_url", ""))
+
+        # A text lesson is rendered as real HTML in every student's browser, so
+        # whatever is written here runs in the reader's page with the reader's
+        # session. Formatting survives; anything that can execute does not.
+        if "text_content" in attrs:
+            attrs["text_content"] = clean_lesson_html(attrs["text_content"])
         playback = attrs.get(
             "mux_playback_id", getattr(self.instance, "mux_playback_id", "")
         )

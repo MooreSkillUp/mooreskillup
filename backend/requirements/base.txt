@@ -9,3 +9,6 @@ django-anymail[brevo]>=15.0,<16.0
 # Signing Mux playback tokens ourselves. simplejwt already pulls PyJWT in,
 # but it signs with HMAC; Mux wants RS256, which needs the crypto extra.
 PyJWT[crypto]>=2.9,<3.0
+# Cleaning lesson HTML on save. A text lesson renders as real HTML in a
+# student's browser, so whatever a teacher writes runs in the reader's page.
+nh3>=0.2,<1.0
