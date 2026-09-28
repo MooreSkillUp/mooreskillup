@@ -134,6 +134,16 @@ resource "azurerm_container_app" "api" {
         name  = "ADMIN_REGISTRATION_TOKEN"
         value = var.admin_registration_token
       }
+      # Without these, paid video falls back to a plain URL that any student
+      # who has paid can copy and pass on.
+      env {
+        name  = "MUX_SIGNING_KEY_ID"
+        value = var.mux_signing_key_id
+      }
+      env {
+        name  = "MUX_SIGNING_KEY_PRIVATE"
+        value = var.mux_signing_key_private
+      }
     }
   }
 }

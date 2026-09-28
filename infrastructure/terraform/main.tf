@@ -85,6 +85,8 @@ module "container_apps" {
   postgres_admin_username  = var.db_admin_username
   postgres_admin_password  = var.db_admin_password
   sentry_dsn               = var.sentry_dsn
+  mux_signing_key_id       = var.mux_signing_key_id
+  mux_signing_key_private  = var.mux_signing_key_private
   storage_account_name     = module.storage.name
   storage_account_key      = module.storage.primary_access_key
   brevo_api_key            = var.brevo_api_key

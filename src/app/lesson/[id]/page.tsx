@@ -17,6 +17,7 @@ import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { useAuth } from "@/lib/auth";
 import { useFeedback } from "@/lib/feedback";
+import { MuxLessonPlayer } from "@/components/learn/MuxLessonPlayer";
 import { getVideoRenderMode } from "@/lib/video";
 import { CurriculumSidebar } from "@/components/course/CurriculumSidebar";
 import { saveLessonProgress, usePlayer } from "@/lib/student";
@@ -42,6 +43,9 @@ export default function LessonPage() {
 
   const [completing, setCompleting] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Mux Player is a web component with its own media element, so the position
+  // comes back through a ref it updates rather than from videoRef.
+  const muxPositionRef = useRef(0);
 
   // Record a "started" ping + resume video position.
   const progressStatus = data?.progress.status;
@@ -127,7 +131,9 @@ export default function LessonPage() {
   const markComplete = async () => {
     try {
       setCompleting(true);
-      const pos = videoRef.current ? Math.floor(videoRef.current.currentTime) : 0;
+      const pos = videoRef.current
+        ? Math.floor(videoRef.current.currentTime)
+        : muxPositionRef.current;
       await saveLessonProgress(lessonId, { status: "completed", position_seconds: pos });
       notifySuccess("Lesson completed");
       if (nextLessonId) {
@@ -146,6 +152,12 @@ export default function LessonPage() {
   const saveVideoPosition = () => {
     if (!isEnrolled || !videoRef.current) return;
     void saveLessonProgress(lessonId, { position_seconds: Math.floor(videoRef.current.currentTime) });
+  };
+
+  /** Mux Player reports its own position, so it hands the seconds over. */
+  const savePosition = (positionSeconds: number) => {
+    if (!isEnrolled) return;
+    void saveLessonProgress(lessonId, { position_seconds: positionSeconds });
   };
 
   if (!canAccess) {
@@ -217,7 +229,21 @@ export default function LessonPage() {
             <div className="overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm">
               <div className="p-5">
                 {lesson.type === "video" ? (
-                  lesson.embedUrl && getVideoRenderMode(lesson.videoUrl) === "iframe" ? (
+                  // A Mux lesson wins over a plain URL: it is the one that
+                  // cannot be passed on, because playback needs a token minted
+                  // for this viewer and it expires.
+                  lesson.mux ? (
+                    <div className="aspect-video w-full overflow-hidden rounded-[1.5rem] border border-border bg-black">
+                      <MuxLessonPlayer
+                        playback={lesson.mux}
+                        title={lesson.title}
+                        startAt={lastPositionSeconds}
+                        positionRef={muxPositionRef}
+                        onPause={savePosition}
+                        onEnded={savePosition}
+                      />
+                    </div>
+                  ) : lesson.embedUrl && getVideoRenderMode(lesson.videoUrl) === "iframe" ? (
                     <div className="aspect-video w-full overflow-hidden rounded-[1.5rem] border border-border bg-black">
                       <iframe
                         src={lesson.embedUrl}

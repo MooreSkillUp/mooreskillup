@@ -157,6 +157,8 @@ jobs:
             -var="paystack_public_key=${{ secrets.PAYSTACK_PUBLIC_KEY || vars.PAYSTACK_PUBLIC_KEY }}" \
             -var="admin_registration_token=${{ secrets.ADMIN_REGISTRATION_TOKEN }}" \
             -var="sentry_dsn=${{ secrets.SENTRY_DSN || vars.SENTRY_DSN }}" \
+            -var="mux_signing_key_id=${{ secrets.MUX_SIGNING_KEY_ID }}" \
+            -var="mux_signing_key_private=${{ secrets.MUX_SIGNING_KEY_PRIVATE }}" \
             -var="api_image=${{ env.ACR_NAME }}.azurecr.io/api:${{ github.sha }}"
 
       - name: Read the API URL
