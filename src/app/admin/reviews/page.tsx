@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Eye, PencilLine, RotateCcw, XCircle } from "lucide-react";
 import { AdminPermissionGate } from "@/components/admin/AdminPermissionGate";
+import { ReviewChecklist } from "@/components/admin/ReviewChecklist";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { Button } from "@/components/ui-kit/Button";
 import { Textarea } from "@/components/ui/textarea";
@@ -328,6 +329,7 @@ function ReviewCard({
       )}
 
       <ReviewFacts summary={course.reviewSummary} certificateEnabled={course.certificateEnabled} />
+      <ReviewChecklist courseId={course.id} />
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Link href={`/admin/owned-courses/${course.id}/preview`}>

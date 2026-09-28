@@ -45,6 +45,7 @@ import {
   type TeacherCourseVersion,
   type TeacherTaskSubmissionType,
 } from "@/lib/teacher-platform";
+import { VideoStandard } from "@/components/teacher/VideoStandard";
 import { getEmbeddedVideoUrl, getVideoRenderMode } from "@/lib/video";
 
 const LEVEL_OPTIONS: { value: TeacherCourseLevel; label: string }[] = [
@@ -1333,8 +1334,13 @@ export function TeacherCourseEditor({
                                       // and is not: the link is in the lesson payload and an
                                       // unlisted video is public to anyone holding the URL. A
                                       // teacher chooses where to host based on this sentence.
-                                      hint="Paste a YouTube, Vimeo, or direct video link. Anyone with the link can open it outside MooreSkillUp, so use Vimeo's privacy settings for anything you need kept private."
+                                      // Teachers send raw files and we upload them, so this
+                                      // field is usually filled in by us. The hint says so
+                                      // rather than leaving a teacher hunting for a link
+                                      // they were never meant to find.
+                                      hint="Usually left empty — send us the raw file and we add the video for you. If you were given a link, paste it here."
                                     />
+                                    <VideoStandard />
                                     {lesson.videoUrl.trim() && (
                                       <details className="group rounded-2xl border border-border bg-card p-4">
                                         <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-primary">
