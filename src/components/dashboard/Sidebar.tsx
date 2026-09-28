@@ -17,6 +17,7 @@ import {
   LifeBuoy,
   LogOut,
   Medal,
+  PieChart,
   Settings,
   Shield,
   ShoppingBag,
@@ -193,6 +194,12 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           label: "Campaigns",
           icon: Tag,
           permission: "campaigns:view",
+        },
+        {
+          href: "/admin/revenue",
+          label: "Revenue split",
+          icon: PieChart,
+          permission: "payments:view",
         },
         {
           href: "/admin/payouts",
