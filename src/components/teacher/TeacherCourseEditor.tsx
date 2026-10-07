@@ -115,6 +115,7 @@ function buildLesson(): TeacherLesson {
     title: "",
     contentType: "video",
     videoUrl: "",
+    muxPlaybackId: "",
     durationMinutes: null,
     textContent: "",
     resourceLinks: [],
@@ -235,7 +236,9 @@ export function TeacherCourseEditor({
             !section.lessons.length ||
             section.lessons.some((lesson) => {
               if (!lesson.title.trim()) return true;
-              if (lesson.contentType === "video") return !lesson.videoUrl.trim();
+              if (lesson.contentType === "video") {
+                return !lesson.videoUrl.trim() && !lesson.muxPlaybackId.trim();
+              }
               if (lesson.contentType === "resource") {
                 return !lesson.resourceLinks.some((link) => link.url.trim());
               }
@@ -1333,7 +1336,24 @@ export function TeacherCourseEditor({
                                       // and is not: the link is in the lesson payload and an
                                       // unlisted video is public to anyone holding the URL. A
                                       // teacher chooses where to host based on this sentence.
-                                      hint="Paste a YouTube, Vimeo, or direct video link. Anyone with the link can open it outside MooreSkillUp, so use Vimeo's privacy settings for anything you need kept private."
+                                      hint="Paste a YouTube, Vimeo, or direct video link. Anyone with the link can open it outside MooreSkillUp, so use Vimeo's privacy settings for anything you need kept private. Leave it empty if you are using a Mux playback ID below."
+                                    />
+                                    <Input
+                                      label="Mux playback ID (optional)"
+                                      value={lesson.muxPlaybackId}
+                                      onChange={(event) =>
+                                        updateLesson(
+                                          section.id,
+                                          lesson.id,
+                                          { muxPlaybackId: event.target.value },
+                                          setCourse,
+                                        )
+                                      }
+                                      // The one route that is actually private.
+                                      // A signed playback token is minted per
+                                      // viewer and expires, so the video cannot
+                                      // be passed around the way a link can.
+                                      hint="For video MooreSkillUp hosts. Paste the playback ID from the Mux dashboard, or the stream.mux.com link. When this is set it is used instead of the video URL above, and the video cannot be played outside MooreSkillUp."
                                     />
                                     {lesson.videoUrl.trim() && (
                                       <details className="group rounded-2xl border border-border bg-card p-4">
