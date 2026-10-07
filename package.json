@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint . --ext .js,.ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "artwork:certificate": "node scripts/certificate-artwork.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
