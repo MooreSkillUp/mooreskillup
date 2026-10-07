@@ -61,6 +61,10 @@ export interface TeacherLesson {
   title: string;
   contentType: TeacherLessonContentType;
   videoUrl: string;
+  /** A Mux playback id, for video we host ourselves. When set it wins over
+   *  `videoUrl`, because it is the one that cannot be shared: playback needs a
+   *  token minted per viewer. Mirrors Lesson.mux_playback_id. */
+  muxPlaybackId: string;
   textContent: string;
   resourceLinks: TeacherResourceLink[];
   tags: string[];
@@ -282,6 +286,9 @@ function normalizeCourse(raw: Record<string, unknown>): TeacherCourse {
                 title: String(typedLesson.title ?? ""),
                 contentType: (String(typedLesson.content_type ?? typedLesson.type ?? "video") as TeacherLessonContentType),
                 videoUrl: String(typedLesson.video_url ?? typedLesson.videoUrl ?? ""),
+                muxPlaybackId: String(
+                  typedLesson.mux_playback_id ?? typedLesson.muxPlaybackId ?? "",
+                ),
                 durationMinutes:
                   typedLesson.duration_minutes ?? typedLesson.durationMinutes
                     ? Number(typedLesson.duration_minutes ?? typedLesson.durationMinutes)
@@ -605,6 +612,7 @@ export function useTeacherPlatform(
               title: "",
               contentType: "video",
               videoUrl: "",
+              muxPlaybackId: "",
               durationMinutes: null,
               textContent: "",
               resourceLinks: [],
@@ -727,8 +735,14 @@ export function useTeacherPlatform(
         if (!lesson.title.trim()) {
           issues.push(`Lesson ${lessonIndex + 1} in section ${sectionIndex + 1} needs a title.`);
         }
-        if (lesson.contentType === "video" && !lesson.videoUrl.trim()) {
-          issues.push(`Video lesson ${lessonIndex + 1} in section ${sectionIndex + 1} needs a video URL.`);
+        if (
+          lesson.contentType === "video" &&
+          !lesson.videoUrl.trim() &&
+          !lesson.muxPlaybackId.trim()
+        ) {
+          issues.push(
+            `Video lesson ${lessonIndex + 1} in section ${sectionIndex + 1} needs a video URL or a Mux playback ID.`,
+          );
         }
         if (lesson.contentType === "video" && lesson.videoUrl.trim() && !isSupportedEmbeddedVideoUrl(lesson.videoUrl)) {
           issues.push(
@@ -870,6 +884,7 @@ export function useTeacherPlatform(
           content_type: lesson.contentType,
           duration_minutes: lesson.durationMinutes,
           video_url: lesson.contentType === "video" ? lesson.videoUrl : "",
+          muxPlaybackId: lesson.contentType === "video" ? lesson.muxPlaybackId : "",
           text_content: lesson.contentType === "text" ? lesson.textContent : "",
           resourceLinks: lesson.contentType === "resource" ? lesson.resourceLinks : [],
           tags: lesson.tags,

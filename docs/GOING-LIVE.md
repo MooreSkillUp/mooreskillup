@@ -9,13 +9,17 @@ one.
 
 | | |
 |---|---|
-| Frontend | https://mooreskillup.vercel.app |
-| API | `https://mooreskillup-prod-api.…azurecontainerapps.io` (GitHub variable `NEXT_PUBLIC_API_URL`) |
+| Frontend | https://app.mooreskillup.com (Vercel) |
+| API | https://api.mooreskillup.com (GitHub variable `NEXT_PUBLIC_API_URL`) |
 | Deploy | merge to `main`, or Actions → Deploy → Run workflow |
+
+Steps 1 to 4 have been done once already: the admin exists, Tech Foundations is
+published, and the demo accounts are seeded. `python manage.py seed_demo --wipe`
+removes the demo data when you want the site clean for real students.
 
 ---
 
-## 1. Set the four environment variables
+## 1. Set the environment variables
 
 Repository → Settings → Secrets and variables → Actions.
 
@@ -25,6 +29,8 @@ Repository → Settings → Secrets and variables → Actions.
 |---|---|
 | `BREVO_API_KEY` | Brevo → SMTP & API → API keys → Create a new API key (v3) |
 | `PAYSTACK_SECRET_KEY` | Paystack → Settings → API Keys & Webhooks → **Secret key** |
+| `MUX_SIGNING_KEY_ID` | Mux → Settings → Signing Keys → the key's ID |
+| `MUX_SIGNING_KEY_PRIVATE` | The private key from the same place. Shown **once**, so save it then. Paste the base64 blob Mux gives you, or the `-----BEGIN…` PEM — either is accepted |
 | `ADMIN_REGISTRATION_TOKEN` | Optional. A long random string you invent. See step 2 |
 
 **Variables** (visible):
@@ -87,6 +93,47 @@ says `console`, the key didn't reach the container: check the secret name and re
 
 Then: **Actions → Deploy → Run workflow.** The variables are applied to the running
 container by that deploy, not before.
+
+### Mux: video nobody can re-share
+
+What the two Mux values do, and what they do not:
+
+- **They do** turn on signed playback. The lesson page asks the API for a token
+  minted for that one viewer, good for four hours, and only after the same
+  entitlement check that decides whether the lesson is visible at all. A link
+  copied into a group chat is dead before anybody clicks it.
+- **They do not** give anyone an upload button. Video gets into Mux through the
+  Mux dashboard; what comes back into the lesson is a playback ID.
+
+In the Mux dashboard:
+
+1. **Settings → Signing Keys → Generate new key.** Copy the key ID and the
+   private key into the two secrets above. The private key is shown once.
+2. Upload each asset with its **playback policy set to `signed`**, not `public`.
+   A public playback ID plays without a token, which is the thing we are
+   avoiding. An asset that is already public gets a signed playback ID added to
+   it rather than being converted.
+3. Worth doing: a **playback restriction** limiting the referrer to
+   `app.mooreskillup.com`, so a token that does leak still only plays on our
+   own site.
+
+If the keys are missing the backend hands back the unsigned stream URL, so a
+**signed** playback ID quietly fails to play. That is the symptom to look for:
+the lesson page loads, the player does not start.
+
+### Getting a video into a lesson
+
+1. Upload it in Mux with playback policy `signed`.
+2. Copy the **playback ID** from the asset.
+3. In the course editor open the lesson, set its type to Video, and paste into
+   **Mux playback ID**. The bare ID, a `stream.mux.com/<id>.m3u8` link and the
+   player URL all work.
+4. Leave **Video URL** empty. When both are set the Mux ID wins, but an
+   unused URL left behind only confuses whoever edits the lesson next.
+
+Teachers do not upload to Mux themselves. They send us the file, we upload it
+and paste the playback ID back. Per-teacher direct upload is a decision for
+after launch.
 
 ### Tell Paystack where to call back
 
@@ -191,9 +238,11 @@ Fix what comes back before step 5.
 - **Activity log retention** is applied when an admin first opens Activity logs each day.
   If you'd rather it ran on a schedule, `python manage.py prune_audit_logs` is the command
   to give a nightly job.
-- **Scheduled broadcasts** go out when someone loads the app after their due time.
-  `python manage.py send_due_broadcasts` does the same on a schedule if you want them
-  punctual.
+- **Scheduled broadcasts** are punctual: a Container Apps job runs
+  `send_due_broadcasts` every five minutes
+  (`infrastructure/terraform/modules/container_apps/scheduled_jobs.tf`). They also
+  go out when someone loads the app after their due time, so the job failing
+  delays them rather than losing them.
 
 ---
 
